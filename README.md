@@ -28,8 +28,10 @@ See [Command-line use](COMMAND-LINE.md) for details.
 ## Installation
 
 1. Ensure Exact Audio Copy is not running.
-2. If you downloaded a release, place EACEnhancements.dll next to EAC.exe.
-If you're building from source, run `Scripts\Install EAC Enhancements.cmd`.
+2. If you downloaded a release, extract the complete ZIP and run
+`Install EAC Enhancements.cmd`. The installer automatically locates EAC
+and copies the plugin into its proper location.
+If you built from source, run `Scripts\Install EAC Enhancements.cmd`.
 3. On first run, start EAC normally so the options file can be created.
 Alternatively, you can manually create your own EACEnhancements.ini based
 on the example provided in this repo and place it next to EAC.exe.
@@ -108,6 +110,15 @@ without changing the saved option.
 
 If installation reports that the DLL is in use, close every EAC window and run
 the installer again.
+
+If you copied a downloaded DLL manually and EAC refuses to load it, Windows may
+have marked it as coming from the internet. Either use the release installer,
+select **Unblock** in the DLL's Properties window, or run the following from an
+elevated PowerShell window:
+
+```powershell
+Unblock-File -LiteralPath 'C:\Program Files (x86)\Exact Audio Copy\EACEnhancements.dll'
+```
 
 If EAC Enhancements reports that it cannot create or update
 `EACEnhancements.ini`, the current Windows account probably cannot write to the

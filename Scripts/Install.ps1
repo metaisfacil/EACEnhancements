@@ -21,7 +21,13 @@ if (-not $isAdministrator) {
     return
 }
 
-$source = Join-Path $repositoryRoot 'Artifacts\EACEnhancements.dll'
+$sourceCandidates = @(
+    (Join-Path $PSScriptRoot 'EACEnhancements.dll'),
+    (Join-Path $repositoryRoot 'Artifacts\EACEnhancements.dll')
+)
+$source = $sourceCandidates |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
 $destination = Join-Path $root 'EACEnhancements.dll'
 $log = Join-Path $root 'EACEnhancements.log'
 
@@ -34,11 +40,23 @@ if ($existing) {
     throw "Close every EAC window before installing. Still running: $processList"
 }
 
-if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-    throw "Build output not found: $source"
+if ([string]::IsNullOrWhiteSpace($source)) {
+    throw "EACEnhancements.dll was not found beside the installer or in the repository's Artifacts folder."
 }
 
+try {
+    Unblock-File -LiteralPath $source -ErrorAction Stop
+}
+catch {
+    throw "Windows could not unblock the downloaded DLL at '$source'. $($_.Exception.Message)"
+}
 Copy-Item -LiteralPath $source -Destination $destination -Force
+try {
+    Unblock-File -LiteralPath $destination -ErrorAction Stop
+}
+catch {
+    throw "The DLL was copied, but Windows could not unblock '$destination'. $($_.Exception.Message)"
+}
 Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
 
 $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
@@ -49,5 +67,6 @@ if ($sourceHash -ne $installedHash) {
 
 Write-Host "Installed: $destination"
 Write-Host "SHA256:   $installedHash"
+Write-Host 'Windows download blocking has been removed from the installed DLL.'
 Write-Host 'You may now start EAC normally.'
 Read-Host 'Press Enter to close'

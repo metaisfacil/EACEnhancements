@@ -32,10 +32,14 @@ jobs:
           .\Scripts\Test.ps1
           -InteropPath Artifacts\Reference\Interop.HelperFunctionsLib.dll
 
-      - name: Upload binary
+      - name: Package installable build
+        shell: powershell
+        run: .\Scripts\Package.ps1
+
+      - name: Upload installable build
         uses: actions/upload-artifact@v4
         with:
           name: EACEnhancements-${{ github.sha }}
-          path: Artifacts/EACEnhancements.dll
+          path: Artifacts/Package/EACEnhancements
           if-no-files-found: error
           retention-days: 30

@@ -48,12 +48,16 @@ jobs:
           .\Scripts\Test.ps1
           -InteropPath Artifacts\Reference\Interop.HelperFunctionsLib.dll
 
+      - name: Package release
+        shell: powershell
+        run: .\Scripts\Package.ps1
+
       - name: Create checksum
         shell: powershell
         run: |
-          $hash = (Get-FileHash -LiteralPath .\Artifacts\EACEnhancements.dll `
+          $hash = (Get-FileHash -LiteralPath .\Artifacts\EACEnhancements.zip `
             -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *EACEnhancements.dll" | Set-Content `
+          "$hash *EACEnhancements.zip" | Set-Content `
             -LiteralPath .\Artifacts\EACEnhancements.sha256 `
             -Encoding Ascii
 
@@ -72,7 +76,7 @@ jobs:
           }
           $arguments = @(
             'release', 'create', $env:RELEASE_TAG,
-            '.\Artifacts\EACEnhancements.dll',
+            '.\Artifacts\EACEnhancements.zip',
             '.\Artifacts\EACEnhancements.sha256',
             '--repo', $env:GITHUB_REPOSITORY,
             '--target', $env:GITHUB_SHA,
