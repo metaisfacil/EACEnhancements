@@ -247,7 +247,10 @@ namespace AudioDataPlugIn
                 }
                 InitializeLoggingPreference();
                 if (settingsFileError != null)
+                {
                     Log("Default settings file could not be created: " + settingsFileError);
+                    ShowSettingsFileError("create", settingsFileError);
+                }
 
                 InitializeCommandLine();
                 commandCompletionAddress = Add(imageBase, layout.CommandCompletionRva);

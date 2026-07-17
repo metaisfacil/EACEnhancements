@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -163,6 +164,49 @@ namespace AudioDataPlugIn
 		return true;
 	}
 
+	private static void ShowSettingsFileError(string operation, Exception error)
+	{
+		try
+		{
+			MessageBox.Show(
+				FormatSettingsFileError(GetSettingsFilePath(), operation, error),
+				"EAC Enhancements - Settings File Unavailable",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Warning);
+		}
+		catch
+		{
+			// Reporting a configuration error must not stop EAC from starting.
+		}
+	}
+
+	internal static string FormatSettingsFileError(
+		string iniPath,
+		string operation,
+		Exception error)
+	{
+		string action = String.Equals(operation, "create", StringComparison.OrdinalIgnoreCase)
+			? "create"
+			: "update";
+		string reason = error == null || String.IsNullOrWhiteSpace(error.Message)
+			? "Windows did not provide an error description."
+			: error.Message.Trim();
+		return
+			"EAC Enhancements could not " + action + " its settings file:" +
+			Environment.NewLine + Environment.NewLine + iniPath +
+			Environment.NewLine + Environment.NewLine +
+			"Windows reported: " + reason +
+			Environment.NewLine + Environment.NewLine +
+			"Existing settings (or built-in defaults if no file exists) will remain " +
+			"active, but changes cannot be saved." +
+			Environment.NewLine + Environment.NewLine +
+			"This commonly means your Windows account does not have write access to " +
+			"the EAC folder. Close EAC, then have an administrator grant your account " +
+			"Modify permission to that folder, or install EAC in a folder your account " +
+			"can write to. Running EAC as administrator can help confirm a permissions " +
+			"problem, but should not be necessary after the folder permissions are fixed.";
+	}
+
 	private static string SingleLineIniValue(string value)
 	{
 		return (value ?? String.Empty).Replace("\r", String.Empty).Replace("\n", String.Empty);
@@ -289,7 +333,13 @@ namespace AudioDataPlugIn
 				settings.EnableLogging ? "1" : "0",
 				text4))
 		{
-			throw new InvalidOperationException("Windows could not update " + text4 + " (error " + Marshal.GetLastWin32Error() + ").");
+			int errorCode = Marshal.GetLastWin32Error();
+			Exception error = errorCode == 0
+				? new IOException("Windows did not report why the write failed.")
+				: (Exception)new Win32Exception(errorCode);
+			throw new IOException(
+				FormatSettingsFileError(text4, "update", error),
+				error);
 		}
 		UpdateLoggingPreference(settings.EnableLogging);
 		string[] array = new string[4] { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };

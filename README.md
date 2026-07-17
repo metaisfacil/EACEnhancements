@@ -1,9 +1,13 @@
 # EAC Enhancements
 
+> [!IMPORTANT]
+> This is experimental and proof-of-concept software that relies on memory hacking.
+> It has not yet been extensively battle-tested. Proceed at your own risk.
+
 EAC Enhancements is an experimental/proof-of-concept third-party plugin for
 Exact Audio Copy that adds a number of quality-of-life features:
 
-- Automated Test & Copy workflow for producing 100% logs
+- Automated 100% log + cue test & copy workflow
 - Read-only verification of EAC's required 100% log settings
 - Optional alerts after rips highlighting errors
 - Auto-generated album folders with dynamic naming
@@ -11,8 +15,8 @@ Exact Audio Copy that adds a number of quality-of-life features:
 
 Exact Audio Copy 1.6 and 1.8 are supported. No patches or launcher needed.
 
-EAC can also be launched with metadata and told to begin the 100% log workflow
-automatically. See [Command-line use](COMMAND-LINE.md).
+The plugin can also begin the 100% log workflow automatically with metadata.
+See [Command-line use](COMMAND-LINE.md) for details.
 
 ## Repository layout
 
@@ -24,8 +28,11 @@ automatically. See [Command-line use](COMMAND-LINE.md).
 ## Installation
 
 1. Ensure Exact Audio Copy is not running.
-2. Run `Scripts\Install EAC Enhancements.cmd` from the EAC Enhancements folder.
-3. Start EAC normally.
+2. If you downloaded a release, place EACEnhancements.dll next to EAC.exe.
+If you're building from source, run `Scripts\Install EAC Enhancements.cmd`.
+3. On first run, start EAC normally so the options file can be created.
+Alternatively, you can manually create your own EACEnhancements.ini based
+on the example provided in this repo and place it next to EAC.exe.
 
 The installer locates registered EAC installations automatically. 
 You can also run `.\Scripts\Install.ps1 -EacDirectory "path to EAC"`.
@@ -101,3 +108,10 @@ without changing the saved option.
 
 If installation reports that the DLL is in use, close every EAC window and run
 the installer again.
+
+If EAC Enhancements reports that it cannot create or update
+`EACEnhancements.ini`, the current Windows account probably cannot write to the
+EAC installation folder. Close EAC and have an administrator grant that account
+Modify permission to the folder, or install EAC somewhere the account can write
+to. The plugin continues with existing settings or built-in defaults, but it
+cannot persist option changes until write access is corrected.

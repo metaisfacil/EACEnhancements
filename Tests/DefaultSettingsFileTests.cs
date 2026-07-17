@@ -41,6 +41,17 @@ namespace AudioDataPlugIn
                     File.ReadAllText(iniPath, Encoding.Unicode),
                     sentinel,
                     "preserved existing INI");
+
+                string message = EnhancementRuntime.FormatSettingsFileError(
+                    iniPath,
+                    "create",
+                    new UnauthorizedAccessException("Access to the path is denied."));
+                AssertContains(message, iniPath);
+                AssertContains(message, "could not create");
+                AssertContains(message, "Access to the path is denied.");
+                AssertContains(message, "built-in defaults");
+                AssertContains(message, "Modify permission");
+                AssertContains(message, "administrator");
             }
             finally
             {
@@ -57,7 +68,7 @@ namespace AudioDataPlugIn
         private static void AssertContains(string value, string expected)
         {
             if (value.IndexOf(expected, StringComparison.Ordinal) < 0)
-                throw new Exception("Default INI is missing '" + expected + "'.");
+                throw new Exception("Expected text is missing '" + expected + "'.");
         }
 
         private static void AssertEqual(string actual, string expected, string description)
