@@ -122,7 +122,8 @@ Unblock-File -LiteralPath 'C:\Program Files (x86)\Exact Audio Copy\EACEnhancemen
 
 If EAC Enhancements reports that it cannot create or update
 `EACEnhancements.ini`, the current Windows account probably cannot write to the
-EAC installation folder. Close EAC and have an administrator grant that account
-Modify permission to the folder, or install EAC somewhere the account can write
-to. The plugin continues with existing settings or built-in defaults, but it
-cannot persist option changes until write access is corrected.
+EAC installation folder. First, try running EAC as administrator. If that fails, 
+have an administrator grant your user account Modify permission to the folder, or
+install EAC somewhere the account can write to. The plugin continues with existing
+settings or built-in defaults, but it cannot persist option changes until write
+access is granted.
