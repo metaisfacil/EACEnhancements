@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Build EAC interop reference
+        shell: powershell
+        run: .\Scripts\BuildInteropReference.ps1
+
+      - name: Build plugin
+        shell: powershell
+        run: >-
+          .\Scripts\Build.ps1
+          -InteropPath Artifacts\Reference\Interop.HelperFunctionsLib.dll
+
+      - name: Run tests
+        shell: powershell
+        run: >-
+          .\Scripts\Test.ps1
+          -InteropPath Artifacts\Reference\Interop.HelperFunctionsLib.dll
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: EACEnhancements-${{ github.sha }}
+          path: Artifacts/EACEnhancements.dll
+          if-no-files-found: error
+          retention-days: 30

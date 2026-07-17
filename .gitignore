@@ -1,0 +1,23 @@
+# Build outputs
+/Artifacts/
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+*.pdb
+*.exe
+
+# Visual Studio and IDE state
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.cache
+~$*
