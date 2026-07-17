@@ -42,10 +42,15 @@ namespace AudioDataPlugIn
         public AudioDataTransfer()
         {
             // PluginHandler silently ignores assemblies whose constructor
-            // throws. Never allow initialization diagnostics to escape.
+            // throws. Reject unsupported EAC versions explicitly, but never
+            // allow other initialization diagnostics to escape.
             try
             {
                 EnhancementRuntime.Initialize();
+            }
+            catch (NotSupportedException)
+            {
+                throw;
             }
             catch (Exception error)
             {
@@ -140,6 +145,7 @@ namespace AudioDataPlugIn
             { 0x55, 0x89, 0xE5, 0x83, 0xEC, 0x04 };
 
         private static bool initialized;
+        private static NotSupportedException unsupportedEacError;
         private static volatile bool loggingEnabled;
         private static bool loggingForcedForProcess;
         private static bool hookInstalled;
@@ -190,26 +196,15 @@ namespace AudioDataPlugIn
 
         internal static void Initialize()
         {
-            Exception settingsFileError = null;
-            try
-            {
-                EnsureDefaultSettingsFile();
-            }
-            catch (Exception error)
-            {
-                // A read-only installation must not prevent the plugin from loading.
-                settingsFileError = error;
-            }
-            InitializeLoggingPreference();
-            if (settingsFileError != null)
-                Log("Default settings file could not be created: " + settingsFileError);
             lock (InitializationLock)
             {
+                if (unsupportedEacError != null)
+                    throw new NotSupportedException(
+                        unsupportedEacError.Message,
+                        unsupportedEacError);
                 if (initialized)
                     return;
 
-                initialized = true;
-                InitializeCommandLine();
                 Process process = Process.GetCurrentProcess();
                 ProcessModule mainModule = process.MainModule;
                 if (mainModule == null)
@@ -218,12 +213,43 @@ namespace AudioDataPlugIn
                 string executableName = Path.GetFileName(mainModule.FileName);
                 if (executableName.IndexOf("EAC", StringComparison.OrdinalIgnoreCase) < 0)
                 {
+                    initialized = true;
                     hookStatus = "inactive outside EAC";
+                    workflowStatus = hookStatus;
                     return;
                 }
 
                 imageBase = mainModule.BaseAddress;
-                layout = EacVersionLayout.Detect(mainModule, imageBase);
+                try
+                {
+                    // This must remain the first EAC-specific operation. Detect
+                    // accepts only the known 1.6 and 1.8 executable layouts.
+                    layout = EacVersionLayout.Detect(mainModule, imageBase);
+                }
+                catch (NotSupportedException error)
+                {
+                    unsupportedEacError = error;
+                    hookStatus = "inactive: " + error.Message;
+                    workflowStatus = hookStatus;
+                    throw;
+                }
+
+                initialized = true;
+                Exception settingsFileError = null;
+                try
+                {
+                    EnsureDefaultSettingsFile();
+                }
+                catch (Exception error)
+                {
+                    // A read-only installation must not prevent the plugin from loading.
+                    settingsFileError = error;
+                }
+                InitializeLoggingPreference();
+                if (settingsFileError != null)
+                    Log("Default settings file could not be created: " + settingsFileError);
+
+                InitializeCommandLine();
                 commandCompletionAddress = Add(imageBase, layout.CommandCompletionRva);
                 Log(
                     "Plugin loaded into " + executableName + " as " + layout.Name +

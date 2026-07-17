@@ -19,6 +19,12 @@ namespace MetadataPlugIn
                 AudioDataPlugIn.EnhancementRuntime.Initialize();
                 AudioDataPlugIn.EnhancementRuntime.Log("Command-line metadata provider loaded.");
             }
+            catch (NotSupportedException)
+            {
+                // Match the audio-transfer entry point: EAC ignores a plugin
+                // whose constructor rejects an unsupported host version.
+                throw;
+            }
             catch (Exception error)
             {
                 AudioDataPlugIn.EnhancementRuntime.Log(
