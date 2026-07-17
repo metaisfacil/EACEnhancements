@@ -80,6 +80,13 @@ Use EAC's usual percent-style tokens in folder templates. For example:
 %albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%comment%}}}
 ```
 
+Forward slashes and backslashes create nested folders. Both separator styles
+are supported and may be mixed; for example,
+`%albumartist%/%year%/%albumtitle%` creates an artist folder containing a year
+folder containing the album folder. Audio, cue sheets, logs, playlists, and
+other rip outputs remain directed to the resolved deepest folder until EAC has
+finished its post-rip output.
+
 Triple parentheses include the year and its parentheses only when a year is
 present. Triple curly braces do the same for the comment and its braces.
 

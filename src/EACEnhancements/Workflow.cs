@@ -615,6 +615,7 @@ namespace AudioDataPlugIn
 		if (!suppressWorkflowFolderTemplate)
 			return;
 		suppressWorkflowFolderTemplate = false;
+		workflowOutputDirectory = null;
 		try
 		{
 			OutputTemplateSettings settings = LoadOutputTemplateSettings();
@@ -641,6 +642,7 @@ namespace AudioDataPlugIn
 	{
 		string normalized = Path.GetFullPath(destination);
 		Directory.CreateDirectory(normalized);
+		workflowOutputDirectory = normalized;
 		suppressWorkflowFolderTemplate = true;
 		ApplyTrackOnlyNamingSchemes();
 		WriteEacPathBuffer(layout.StandardDirectoryPathVa, normalized);
@@ -667,6 +669,7 @@ namespace AudioDataPlugIn
 		// EAC derives CUE, playlist, and log paths directly from these live
 		// buffers. Point every output at the one concrete destination and keep
 		// the filename convention track-only to avoid nesting it twice.
+		workflowOutputDirectory = destination;
 		suppressWorkflowFolderTemplate = true;
 		ApplyTrackOnlyNamingSchemes();
 		WriteEacPathBuffer(layout.StandardDirectoryPathVa, destination);

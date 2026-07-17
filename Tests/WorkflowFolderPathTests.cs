@@ -44,6 +44,26 @@ namespace AudioDataPlugIn
                     metadata,
                     true),
                 Path.Combine(root, "GULLET - Hide & Sick"));
+            metadata["year"] = "2004";
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist%/%year%/%albumtitle%",
+                    metadata),
+                "GULLET\\2004\\Hide & Sick");
+            AssertEqual(
+                WorkflowFolderPath.ResolveDestination(
+                    root,
+                    "%albumartist%\\%year%/%albumtitle%",
+                    metadata,
+                    true),
+                Path.Combine(root, "GULLET", "2004", "Hide & Sick"));
+
+            metadata["albumtitle"] = "Hide / Sick\\Deluxe";
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist%/%year%/%albumtitle%",
+                    metadata),
+                "GULLET\\2004\\Hide _ Sick_Deluxe");
 
             Console.WriteLine("Workflow folder path tests passed.");
             return 0;

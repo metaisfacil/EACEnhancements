@@ -23,21 +23,23 @@ namespace AudioDataPlugIn
                     percentTemplate,
                     HasValue(metadata, "year")),
                 HasValue(metadata, "comment"));
-            string expanded = Token.Replace(conditionalTemplate, delegate(Match match)
-            {
-                string value;
-                if (!metadata.TryGetValue(match.Groups[1].Value, out value))
-                    throw new ArgumentException(
-                        "The folder template token " + match.Value +
-                        " cannot be resolved before extraction begins.");
-                return value ?? String.Empty;
-            });
-
-            string[] components = expanded.Replace('/', '\\').Split('\\');
+            // Split only separators authored in the template. Metadata values
+            // are expanded afterward so a slash in an album title is sanitized
+            // as part of that folder name rather than becoming another level.
+            string[] components = conditionalTemplate.Replace('/', '\\').Split('\\');
             List<string> clean = new List<string>();
             foreach (string component in components)
             {
-                string sanitized = SanitizeComponent(component);
+                string expanded = Token.Replace(component, delegate(Match match)
+                {
+                    string value;
+                    if (!metadata.TryGetValue(match.Groups[1].Value, out value))
+                        throw new ArgumentException(
+                            "The folder template token " + match.Value +
+                            " cannot be resolved before extraction begins.");
+                    return value ?? String.Empty;
+                });
+                string sanitized = SanitizeComponent(expanded);
                 if (sanitized.Length == 0)
                     throw new ArgumentException("The folder template produced an empty folder name.");
                 clean.Add(sanitized);

@@ -47,32 +47,60 @@ namespace AudioDataPlugIn
 	internal static void EndRipSession()
 	{
 		ripSessionActive = false;
-		RequestWorkflowFolderTemplateRestore();
 		DateTime startedUtc = ripSessionStartedUtc;
 		int generation = Interlocked.CompareExchange(ref ripSessionGeneration, 0, 0);
 		int suspiciousCount = Interlocked.CompareExchange(ref ripSessionSuspiciousCount, 0, 0);
+		bool restoreWorkflowDestination = suppressWorkflowFolderTemplate;
+		string preferredOutputDirectory = workflowOutputDirectory;
 		Log("Rip session ended after " + assistedPumpCount + " assisted message pumps.");
-		if (!IsRipErrorAlertEnabled())
+		bool reportErrors = IsRipErrorAlertEnabled();
+		if (!reportErrors)
 		{
 			Log("Rip error alert skipped because it is disabled in EAC Enhancements options.");
-			return;
+			if (!restoreWorkflowDestination)
+				return;
 		}
-		StartRipErrorReporter(startedUtc, generation, suspiciousCount);
+		StartRipCompletionWatcher(
+			startedUtc,
+			generation,
+			suspiciousCount,
+			reportErrors,
+			restoreWorkflowDestination,
+			preferredOutputDirectory);
 	}
 
-	private static void StartRipErrorReporter(DateTime startedUtc, int generation, int suspiciousCount)
+	private static void StartRipCompletionWatcher(
+		DateTime startedUtc,
+		int generation,
+		int suspiciousCount,
+		bool reportErrors,
+		bool restoreWorkflowDestination,
+		string preferredOutputDirectory)
 	{
 		Thread thread = new Thread((ThreadStart)delegate
 		{
-			ReportRipErrorsAfterDialogCloses(startedUtc, generation, suspiciousCount);
+			ReportRipErrorsAfterDialogCloses(
+				startedUtc,
+				generation,
+				suspiciousCount,
+				reportErrors,
+				restoreWorkflowDestination,
+				preferredOutputDirectory);
 		});
 		thread.IsBackground = true;
-		thread.Name = "EAC Enhancements rip error reporter";
+		thread.Name = "EAC Enhancements rip completion watcher";
 		thread.Start();
 	}
 
-	private static void ReportRipErrorsAfterDialogCloses(DateTime startedUtc, int generation, int suspiciousCount)
+	private static void ReportRipErrorsAfterDialogCloses(
+		DateTime startedUtc,
+		int generation,
+		int suspiciousCount,
+		bool reportErrors,
+		bool restoreWorkflowDestination,
+		string preferredOutputDirectory)
 	{
+		bool restorationRequested = false;
 		try
 		{
 			IntPtr intPtr = IntPtr.Zero;
@@ -109,21 +137,27 @@ namespace AudioDataPlugIn
 				return;
 			}
 			Thread.Sleep(500);
+			// EndOfSession can precede EAC's cue/log/playlist finalization. Keep
+			// the concrete workflow destination active until EAC's completion
+			// popup is gone, then restore before the user can begin another rip.
+			restorationRequested = RequestWorkflowRestoreForGeneration(
+				generation,
+				restoreWorkflowDestination);
+			if (!reportErrors)
+				return;
 			FileInfo fileInfo = null;
 			string text = null;
 			DateTime dateTime2 = DateTime.UtcNow.AddSeconds(15.0);
 			while (DateTime.UtcNow < dateTime2)
 			{
-				fileInfo = FindMostRecentRipLog(startedUtc);
+				fileInfo = FindMostRecentRipLog(startedUtc, preferredOutputDirectory);
 				if (fileInfo != null)
 				{
 					try
 					{
 						text = File.ReadAllText(fileInfo.FullName);
 						if (RipLogErrorParser.IsLatestReportComplete(text))
-						{
 							break;
-						}
 					}
 					catch
 					{
@@ -157,13 +191,32 @@ namespace AudioDataPlugIn
 		{
 			Log("Rip error reporter failed: " + ex);
 		}
+		finally
+		{
+			if (!restorationRequested)
+				RequestWorkflowRestoreForGeneration(generation, restoreWorkflowDestination);
+		}
 	}
 
-	private static FileInfo FindMostRecentRipLog(DateTime startedUtc)
+	private static bool RequestWorkflowRestoreForGeneration(
+		int generation,
+		bool restoreWorkflowDestination)
+	{
+		if (!restoreWorkflowDestination ||
+			generation != Interlocked.CompareExchange(ref ripSessionGeneration, 0, 0))
+			return false;
+		RequestWorkflowFolderTemplateRestore();
+		return true;
+	}
+
+	internal static FileInfo FindMostRecentRipLog(
+		DateTime startedUtc,
+		string preferredOutputDirectory)
 	{
 		DateTime dateTime = startedUtc.AddSeconds(-5.0);
 		FileInfo fileInfo = null;
-		foreach (string configuredOutputDirectory in GetConfiguredOutputDirectories())
+		foreach (string configuredOutputDirectory in GetConfiguredOutputDirectories(
+			preferredOutputDirectory))
 		{
 			foreach (string item in EnumerateLogFilesBounded(configuredOutputDirectory, 2))
 			{
@@ -183,11 +236,13 @@ namespace AudioDataPlugIn
 		return fileInfo;
 	}
 
-	private static IEnumerable<string> GetConfiguredOutputDirectories()
+	private static IEnumerable<string> GetConfiguredOutputDirectories(
+		string preferredOutputDirectory)
 	{
 		HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		try
 		{
+			AddOutputDirectory(hashSet, preferredOutputDirectory);
 			using (RegistryKey registryKey = Registry.CurrentUser.OpenSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
 			{
 				if (registryKey != null)

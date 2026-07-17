@@ -171,6 +171,7 @@ namespace AudioDataPlugIn
         private static int outputSettingsDialogActive;
         private static int workflowDestinationDialogActive;
         private static volatile bool suppressWorkflowFolderTemplate;
+        private static volatile string workflowOutputDirectory;
         private static volatile bool ripSessionActive;
         private static int ripSessionThreadId;
         private static int lastPumpTick;
