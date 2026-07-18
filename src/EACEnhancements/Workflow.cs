@@ -12,6 +12,12 @@ namespace AudioDataPlugIn
 {
     internal static partial class EnhancementRuntime
     {
+		internal const string WorkflowSetupWarningText =
+			"Warning!\r\n\r\nAlthough you are trying to use the 100% log rip workflow, your EAC does not appear to be configured to use it correctly.\r\n" +
+			"EAC must be set up with the correct configuration in order to produce rips which adhere to best practices. " +
+			"If you continue anyway, your rips may not qualify as 'perfect' in certain communities.\r\n\r\n" +
+			"It is strongly advised you first open Action > EAC Enhancement Options... > Check 100% Log Setup... and change your settings accordingly.\r\n\r\n" +
+			"Are you sure you want to proceed?";
 	internal const int EacPathBufferCapacity = 256;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
 		Hex("55 89 E5 89 84 24 00 F0 FF FF 81 EC 48 18 00 00");
@@ -583,6 +589,8 @@ namespace AudioDataPlugIn
 		{
 			if (Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa)) != 0 || ripSessionActive)
 				return;
+			if (!ConfirmWorkflowSetup(mainWindow))
+				return;
 
 			bool askEveryTime =
 				Marshal.ReadInt32(AddressFromStaticVa(layout.OutputPathModeVa)) == 1;
@@ -654,6 +662,42 @@ namespace AudioDataPlugIn
 		{
 			Interlocked.Exchange(ref workflowDestinationDialogActive, 0);
 		}
+	}
+
+	private static bool ConfirmWorkflowSetup(IntPtr mainWindow)
+	{
+		EacSetupAuditResult audit = null;
+		try
+		{
+			audit = EacSetupAudit.Run(mainWindow);
+			if (!WorkflowSetupNeedsConfirmation(audit))
+				return true;
+			Log("100% log setup warning shown for " + audit.Issues.Count + " audit issue(s).");
+		}
+		catch (Exception ex)
+		{
+			Log("100% log setup could not be verified before workflow start: " + ex);
+		}
+
+		DialogResult result = MessageBox.Show(
+			new WindowHandleOwner(mainWindow),
+			WorkflowSetupWarningText,
+			"100% Log Setup Warning",
+			MessageBoxButtons.YesNo,
+			MessageBoxIcon.Warning,
+			MessageBoxDefaultButton.Button2);
+		if (result != DialogResult.Yes)
+		{
+			Log("100% log workflow cancelled at the setup warning.");
+			return false;
+		}
+		Log("100% log workflow continuing despite an incomplete setup audit.");
+		return true;
+	}
+
+	internal static bool WorkflowSetupNeedsConfirmation(EacSetupAuditResult audit)
+	{
+		return audit == null || !audit.IsCompliant;
 	}
 
 	private static bool IsGapDetectionTocReady()

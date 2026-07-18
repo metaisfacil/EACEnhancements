@@ -29,6 +29,7 @@ namespace AudioDataPlugIn
                 }
                 AssertClickNotificationFiltering();
                 AssertWorkflowInvocationGate();
+                AssertWorkflowSetupConfirmationPolicy();
                 Console.WriteLine("Workflow button image tests passed.");
                 return 0;
             }
@@ -124,6 +125,31 @@ namespace AudioDataPlugIn
                         "A disabled or unavailable EAC reference-rip command passed " +
                         "the workflow invocation gate.");
                 }
+            }
+        }
+
+        private static void AssertWorkflowSetupConfirmationPolicy()
+        {
+            const string expectedWarning =
+                "Warning! Although you are trying to use the 100% log rip workflow, your EAC does not appear to be configured to use it correctly. " +
+                "EAC must be set up with the correct configuration in order to produce rips which adhere to best practices. " +
+                "If you continue anyway, your rips may not qualify as 'perfect' in certain communities. " +
+                "It is strongly advised you first open Action > EAC Enhancement Options... > Check 100% Log Setup... and change your settings accordingly.\r\n\r\n" +
+                "Are you sure you want to proceed?";
+            if (EnhancementRuntime.WorkflowSetupWarningText != expectedWarning)
+                throw new InvalidOperationException("The 100% log setup warning text is incorrect.");
+
+            EacSetupAuditResult compliant = new EacSetupAuditResult();
+            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(compliant))
+                throw new InvalidOperationException("A compliant EAC setup requires confirmation.");
+
+            EacSetupAuditResult noncompliant = new EacSetupAuditResult();
+            noncompliant.Add("Test", "Setting", "Off", "On");
+            if (!EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant) ||
+                !EnhancementRuntime.WorkflowSetupNeedsConfirmation(null))
+            {
+                throw new InvalidOperationException(
+                    "An incomplete or unavailable EAC setup audit bypassed confirmation.");
             }
         }
     }
