@@ -50,7 +50,8 @@ Their generated executables are written under `Artifacts\Tests`.
 
 ## Using the 100% log workflow
 
-Select the tracks to rip, then choose **Action > Test & Copy + Cue (100% Log)**.
+Select the tracks to rip, then click the golden "100%" button on the left
+side of EAC or choose **Action > Test & Copy + Cue (100% Log)**. 
 EAC Enhancements will ask for a destination, if applicable, before beginning
 the preparation and extraction process.
 
