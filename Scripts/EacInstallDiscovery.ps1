@@ -89,3 +89,26 @@ function Resolve-EacDirectory {
 
     throw "Exact Audio Copy could not be located. Pass its folder with -EacDirectory or set EAC_DIRECTORY."
 }
+
+function Get-MissingEacEnhancementsDllMessage {
+    param(
+        [string]$ScriptDirectory,
+        [string]$RepositoryRoot
+    )
+
+    $sourceDirectory = Join-Path $RepositoryRoot 'src\EACEnhancements'
+    $buildScript = Join-Path $ScriptDirectory 'Build.ps1'
+    if ((Test-Path -LiteralPath $sourceDirectory -PathType Container) -and
+        (Test-Path -LiteralPath $buildScript -PathType Leaf)) {
+        return @(
+            'This appears to be a source checkout or GitHub source-code archive, which does not include a compiled EACEnhancements.dll.'
+            ''
+            'For a normal installation, download EACEnhancements.zip from the Releases page and extract the complete archive:'
+            'https://github.com/metaisfacil/EACEnhancements/releases'
+            ''
+            'Do not download GitHub''s automatically generated "Source code" ZIP. To install from source instead, run Scripts\Build.ps1 first.'
+        ) -join [Environment]::NewLine
+    }
+
+    return 'EACEnhancements.dll was not found beside the installer or in the repository''s Artifacts folder.'
+}

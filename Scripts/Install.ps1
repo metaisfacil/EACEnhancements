@@ -157,7 +157,9 @@ try {
     }
 
     if ([string]::IsNullOrWhiteSpace($source)) {
-        throw 'EACEnhancements.dll was not found beside the installer or in the repository''s Artifacts folder.'
+        throw (Get-MissingEacEnhancementsDllMessage `
+            -ScriptDirectory $PSScriptRoot `
+            -RepositoryRoot $repositoryRoot)
     }
     Write-InstallerLog "Source DLL: $source"
     Write-InstallerLog "Destination DLL: $destination"
