@@ -123,10 +123,14 @@ namespace AudioDataPlugIn
         private const uint WorkflowDestinationCommand = 0xA313;
         private const uint StartPreparedWorkflowCommand = 0xA314;
         private const uint RestoreWorkflowFolderCommand = 0xA315;
+        private const uint InstallWorkflowButtonCommand = 0xA316;
+        private const uint RefreshWorkflowButtonCommand = 0xA317;
+        internal const int WorkflowButtonControlId = 0xA318;
         private const uint OutputSettingsCommand = 0xA312;
         private const uint RefreshOutputSettingsCommand = 0x0314;
         private const uint ReferenceRipCommand = 0x0303;
         private const string CustomWorkflowMenuText = "&Test && Copy + Cue (100% Log)";
+        internal const string WorkflowButtonTooltipText = "Test & Copy + Cue (100% Log)";
         private const string OutputSettingsMenuText = "EAC Enhancements &Options...";
         private const string OutputTemplateIniName = "EACEnhancements.ini";
         private const string OutputTemplateSection = "OutputTemplate";
@@ -139,6 +143,7 @@ namespace AudioDataPlugIn
         private static readonly object InitializationLock = new object();
         private static readonly object LogLock = new object();
         private static readonly object WorkflowHookLock = new object();
+        private static readonly object WorkflowButtonLock = new object();
         private static readonly HashSet<uint> WorkflowHookedThreads = new HashSet<uint>();
         private static readonly List<IntPtr> WorkflowMessageHooks = new List<IntPtr>();
         private static readonly byte[] ExpectedCommandCompletionPrologue =
@@ -159,7 +164,16 @@ namespace AudioDataPlugIn
         private static CallWndProcHookDelegate workflowCallWndProcHookDelegate;
         private static CallWndProcHookDelegate workflowGetMessageHookDelegate;
         private static MainWindowSubclassDelegate mainWindowSubclassDelegate;
+        private static MainWindowSubclassDelegate workflowButtonSubclassDelegate;
+        private static MainWindowSubclassDelegate workflowButtonTooltipSubclassDelegate;
         private static int mainWindowSubclassInstalled;
+        private static IntPtr workflowButton;
+        private static IntPtr workflowButtonTooltip;
+        private static Bitmap workflowButtonEnabledImage;
+        private static Bitmap workflowButtonDisabledImage;
+        private static bool workflowButtonHovered;
+        private static int workflowButtonInstallRequested;
+        private static int workflowButtonRequestedEnabled = -1;
         private static int workflowMessageTraceCount;
         private static int lastWorkflowHookRefreshTick;
         private static IntPtr imageBase;

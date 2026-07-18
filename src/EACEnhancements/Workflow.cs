@@ -195,7 +195,7 @@ namespace AudioDataPlugIn
 			}
 			if (!flag)
 			{
-				Log("100% log menu was not installed: EAC main menu was not ready.");
+				Log("100% log UI was not installed: EAC main window was not ready.");
 			}
 			else
 			{
@@ -252,7 +252,7 @@ namespace AudioDataPlugIn
 		{
 			NativeMethods.DrawMenuBar(mainWindow);
 		}
-		return true;
+		return RequestWorkflowButtonInstallation(mainWindow);
 	}
 
 	private static IntPtr FindActionMenu(IntPtr menu)
@@ -317,6 +317,7 @@ namespace AudioDataPlugIn
 			menuState = NativeMethods.GetMenuState(intPtr2, 771u, 0u);
 		}
 		bool flag = (menuState & 3) == 0;
+		RequestWorkflowButtonState(mainWindow, flag);
 		uint menuState2 = NativeMethods.GetMenuState(intPtr, 786u, 0u);
 		if (menuState2 != uint.MaxValue)
 		{
@@ -480,12 +481,47 @@ namespace AudioDataPlugIn
 		try
 		{
 			int command = (int)wParam.ToInt64() & 0xFFFF;
+			if (message == NativeMethods.WM_DRAWITEM &&
+				command == WorkflowButtonControlId &&
+				DrawWorkflowButton(lParam))
+			{
+				return new IntPtr(1);
+			}
+			if (message == NativeMethods.WM_COMMAND &&
+				lParam != IntPtr.Zero &&
+				lParam == workflowButton &&
+				command == WorkflowButtonControlId)
+			{
+				// SS_NOTIFY also reports enable/disable transitions. Only a
+				// genuine STN_CLICKED notification should begin the workflow.
+				if (IsWorkflowButtonClickNotification(message, wParam, lParam, workflowButton))
+					ShowWorkflowDestinationDialog(hwnd);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND && command == (int)InstallWorkflowButtonCommand)
+			{
+				try
+				{
+					InstallWorkflowButtonOnUiThread(hwnd);
+				}
+				finally
+				{
+					Interlocked.Exchange(ref workflowButtonInstallRequested, 0);
+				}
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND && command == (int)RefreshWorkflowButtonCommand)
+			{
+				ApplyWorkflowButtonState();
+				return IntPtr.Zero;
+			}
 			if (message == 273 && command == 41746)
 			{
 				ShowOutputSettingsDialog();
 				return IntPtr.Zero;
 			}
 			if (message == 273 &&
+				lParam == IntPtr.Zero &&
 				(command == (int)CustomWorkflowCommand ||
 				 command == (int)WorkflowDestinationCommand))
 			{

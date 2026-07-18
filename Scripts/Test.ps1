@@ -23,6 +23,10 @@ else {
 $sources = @(Get-ChildItem -LiteralPath $sourceDirectory -Filter '*.cs' -File |
     Sort-Object Name |
     ForEach-Object { $_.FullName })
+$resourceArguments = @(
+    "/resource:$sourceDirectory\Resources\100log_active.bmp,AudioDataPlugIn.Resources.100log_active.bmp",
+    "/resource:$sourceDirectory\Resources\100log_disabled.bmp,AudioDataPlugIn.Resources.100log_disabled.bmp"
+)
 $tests = @(Get-ChildItem -LiteralPath $testDirectory -Filter '*.cs' -File |
     Sort-Object Name)
 
@@ -47,7 +51,7 @@ foreach ($test in $tests) {
     & $compiler /nologo /target:exe /platform:x86 /optimize+ /warn:4 `
         /reference:$interop /reference:System.Drawing.dll `
         /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll `
-        /out:$output $sources $test.FullName
+        /out:$output $resourceArguments $sources $test.FullName
     if ($LASTEXITCODE -ne 0) {
         throw "Compiling $($test.Name) failed with exit code $LASTEXITCODE."
     }
