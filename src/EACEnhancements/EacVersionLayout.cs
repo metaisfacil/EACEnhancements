@@ -17,6 +17,7 @@ namespace AudioDataPlugIn
         internal readonly uint MainWindowGlobalVa;
         internal readonly uint ChainFlagVa;
         internal readonly uint TrackSelectionArrayVa;
+        internal readonly uint FirstTocTrackNumberVa;
         internal readonly uint CueSaveHookVa;
         internal readonly uint CueSaveDefaultVa;
         internal readonly uint CueSavePromptVa;
@@ -64,6 +65,7 @@ namespace AudioDataPlugIn
             uint mainWindowGlobalVa,
             uint chainFlagVa,
             uint trackSelectionArrayVa,
+            uint firstTocTrackNumberVa,
             uint cueSaveHookVa,
             uint cueSaveDefaultVa,
             uint cueSavePromptVa,
@@ -106,6 +108,7 @@ namespace AudioDataPlugIn
             MainWindowGlobalVa = mainWindowGlobalVa;
             ChainFlagVa = chainFlagVa;
             TrackSelectionArrayVa = trackSelectionArrayVa;
+            FirstTocTrackNumberVa = firstTocTrackNumberVa;
             CueSaveHookVa = cueSaveHookVa;
             CueSaveDefaultVa = cueSaveDefaultVa;
             CueSavePromptVa = cueSavePromptVa;
@@ -223,6 +226,7 @@ namespace AudioDataPlugIn
             0x007F8FC8,
             0x00D260F9,
             0x007F9014,
+            0x007EEE0A,
             0x0040B255,
             0x0040B25E,
             0x0040B2DA,
@@ -268,6 +272,7 @@ namespace AudioDataPlugIn
             0x00774FB8,
             0x00A8691F,
             0x00775004,
+            0x0076ADFA,
             0x0040B071,
             0x0040B07A,
             0x0040B0F6,

@@ -559,6 +559,23 @@ namespace AudioDataPlugIn
 
 	private static void ShowWorkflowDestinationDialog(IntPtr mainWindow)
 	{
+		// Detect Gaps accepts a negative first-track sentinel as an immediate no-op,
+		// but a zero first-track value reaches its "detection mode not possible"
+		// alert. Match that inner TOC-presence prerequisite before starting either
+		// workflow trigger, then retain command 0x303 as a secondary fail-safe.
+		if (!IsGapDetectionTocReady())
+		{
+			RequestWorkflowButtonState(mainWindow, false);
+			Log("100% log invocation ignored because EAC has no loaded audio-CD TOC.");
+			return;
+		}
+		if (!IsReferenceRipCommandEnabled(mainWindow))
+		{
+			RequestWorkflowButtonState(mainWindow, false);
+			Log("100% log invocation ignored because EAC command 0x303 is disabled or unavailable.");
+			return;
+		}
+
 		if (Interlocked.CompareExchange(ref workflowDestinationDialogActive, 1, 0) != 0)
 			return;
 
@@ -637,6 +654,26 @@ namespace AudioDataPlugIn
 		{
 			Interlocked.Exchange(ref workflowDestinationDialogActive, 0);
 		}
+	}
+
+	private static bool IsGapDetectionTocReady()
+	{
+		try
+		{
+			int firstTrackNumber = Marshal.ReadInt32(
+				AddressFromStaticVa(layout.FirstTocTrackNumberVa));
+			return IsGapDetectionTocReady(firstTrackNumber);
+		}
+		catch (Exception ex)
+		{
+			Log("Could not read EAC's gap-detection TOC state: " + ex.Message);
+			return false;
+		}
+	}
+
+	internal static bool IsGapDetectionTocReady(int firstTrackNumber)
+	{
+		return firstTrackNumber > 0;
 	}
 
 	private static void RequestWorkflowFolderTemplateRestore()

@@ -28,6 +28,7 @@ namespace AudioDataPlugIn
                         "The workflow-button tooltip text is incorrect.");
                 }
                 AssertClickNotificationFiltering();
+                AssertWorkflowInvocationGate();
                 Console.WriteLine("Workflow button image tests passed.");
                 return 0;
             }
@@ -82,6 +83,47 @@ namespace AudioDataPlugIn
             {
                 throw new InvalidOperationException(
                     "A menu command was mistaken for a workflow-button click.");
+            }
+        }
+
+        private static void AssertWorkflowInvocationGate()
+        {
+            if (!EnhancementRuntime.IsGapDetectionTocReady(1) ||
+                !EnhancementRuntime.IsGapDetectionTocReady(99))
+            {
+                throw new InvalidOperationException(
+                    "A valid EAC audio-CD TOC was rejected.");
+            }
+
+            int[] unavailableTocStates = { Int32.MinValue, -1, 0 };
+            foreach (int firstTrackNumber in unavailableTocStates)
+            {
+                if (EnhancementRuntime.IsGapDetectionTocReady(firstTrackNumber))
+                {
+                    throw new InvalidOperationException(
+                        "An unavailable EAC gap-detection TOC passed the workflow gate.");
+                }
+            }
+
+            if (!EnhancementRuntime.IsReferenceRipCommandStateEnabled(0))
+                throw new InvalidOperationException(
+                    "An enabled EAC reference-rip command was rejected.");
+
+            uint[] blockedStates =
+            {
+                NativeMethods.MF_DISABLED,
+                NativeMethods.MF_GRAYED,
+                NativeMethods.MF_DISABLED | NativeMethods.MF_GRAYED,
+                UInt32.MaxValue
+            };
+            foreach (uint state in blockedStates)
+            {
+                if (EnhancementRuntime.IsReferenceRipCommandStateEnabled(state))
+                {
+                    throw new InvalidOperationException(
+                        "A disabled or unavailable EAC reference-rip command passed " +
+                        "the workflow invocation gate.");
+                }
             }
         }
     }

@@ -438,7 +438,13 @@ namespace AudioDataPlugIn
             if (owner == IntPtr.Zero)
                 return false;
             uint state = NativeMethods.GetMenuState(owner, ReferenceRipCommand, NativeMethods.MF_BYCOMMAND);
-            return state != UInt32.MaxValue && (state & (NativeMethods.MF_DISABLED | NativeMethods.MF_GRAYED)) == 0;
+            return IsReferenceRipCommandStateEnabled(state);
+        }
+
+        internal static bool IsReferenceRipCommandStateEnabled(uint state)
+        {
+            return state != UInt32.MaxValue &&
+                (state & (NativeMethods.MF_DISABLED | NativeMethods.MF_GRAYED)) == 0;
         }
 
         private static void StartCommandLineMetadataLookup(IntPtr mainWindow)
