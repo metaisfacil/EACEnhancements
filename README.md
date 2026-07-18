@@ -32,7 +32,7 @@ See [Command-line use](COMMAND-LINE.md) for details.
 `Install EAC Enhancements.cmd`. The installer automatically locates EAC
 and copies the plugin into its proper location.
 If you built from source, run `Scripts\Install EAC Enhancements.cmd`.
-3. On first run, start EAC normally so the options file can be created.
+3. After first install, run EAC as admin so the options file can be created.
 Alternatively, you can manually create your own EACEnhancements.ini based
 on the example provided in this repo and place it next to EAC.exe.
 
