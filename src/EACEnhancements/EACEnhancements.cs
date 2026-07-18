@@ -13,7 +13,7 @@ using Microsoft.Win32;
 using HelperFunctionsLib;
 
 [assembly: AssemblyTitle("EAC Enhancements")]
-[assembly: AssemblyDescription("Responsive secure-rip UI and workflow enhancements for Exact Audio Copy")]
+[assembly: AssemblyDescription("Exact Audio Copy plugin for one-click perfect logs and other creature comforts")]
 [assembly: AssemblyCompany("metaisfacil")]
 [assembly: AssemblyProduct("EAC Enhancements")]
 [assembly: AssemblyVersion("0.13.2.0")]
