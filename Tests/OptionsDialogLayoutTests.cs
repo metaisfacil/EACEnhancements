@@ -36,6 +36,11 @@ namespace AudioDataPlugIn
                 Button save = FindButton(dialog, "Save");
                 Button cancel = FindButton(dialog, "Cancel");
                 Button setupCheck = FindButton(dialog, "Check 100% Log Setup...");
+                Button updateCheck = FindButton(dialog, "Check for Updates...");
+                if (updateCheck == null)
+                    throw new Exception("The manual update-check button is missing.");
+                if (setupCheck == null || updateCheck.Left - setupCheck.Right != 8)
+                    throw new Exception("The setup/update-check gap is not eight pixels.");
                 if (save == null || cancel == null || cancel.Left - save.Right != 8)
                     throw new Exception("The Save/Cancel gap is not eight pixels.");
                 int setupTop = setupCheck == null
@@ -46,6 +51,9 @@ namespace AudioDataPlugIn
                     throw new Exception(
                         "The setup-check button is not aligned with Save and Cancel " +
                         "(setup=" + setupTop + ", save=" + saveTop + ").");
+                int updateTop = updateCheck.PointToScreen(System.Drawing.Point.Empty).Y;
+                if (updateTop != saveTop)
+                    throw new Exception("The update-check button is not aligned with the bottom row.");
                 dialog.Close();
             }
 

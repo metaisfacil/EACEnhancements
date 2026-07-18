@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -60,6 +62,10 @@ internal sealed class OutputTemplateDialog : Form
 	private readonly CheckBox loggingCheckBox;
 
 	private readonly ToolTip createWorkflowFoldersToolTip;
+
+	private readonly Button updateCheckButton;
+
+	private BackgroundWorker updateCheckWorker;
 
 	internal OutputTemplateSettings Settings { get; private set; }
 
@@ -206,11 +212,20 @@ internal sealed class OutputTemplateDialog : Form
 		{
 			Anchor = AnchorStyles.Left | AnchorStyles.Top,
 			Margin = Padding.Empty,
-			Size = new Size(194, 28),
+			Size = new Size(164, 28),
 			Text = "Check 100% Log Setup...",
 			UseVisualStyleBackColor = true
 		};
 		setupCheckButton.Click += SetupCheckClicked;
+		updateCheckButton = new Button
+		{
+			Anchor = AnchorStyles.Left | AnchorStyles.Top,
+			Margin = new Padding(8, 0, 0, 0),
+			Size = new Size(130, 28),
+			Text = "Check for Updates...",
+			UseVisualStyleBackColor = true
+		};
+		updateCheckButton.Click += UpdateCheckClicked;
 
 		Button saveButton = new Button
 		{
@@ -235,22 +250,114 @@ internal sealed class OutputTemplateDialog : Form
 			Dock = DockStyle.Fill,
 			Margin = Padding.Empty,
 			Padding = Padding.Empty,
-			ColumnCount = 4,
+			ColumnCount = 5,
 			RowCount = 1
 		};
-		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 194F));
+		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 164F));
+		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138F));
 		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 83F));
 		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 75F));
 		bottomRow.Controls.Add(setupCheckButton, 0, 0);
-		bottomRow.Controls.Add(saveButton, 2, 0);
-		bottomRow.Controls.Add(cancelButton, 3, 0);
+		bottomRow.Controls.Add(updateCheckButton, 1, 0);
+		bottomRow.Controls.Add(saveButton, 3, 0);
+		bottomRow.Controls.Add(cancelButton, 4, 0);
 		layout.Controls.Add(bottomRow, 0, 8);
 		layout.SetColumnSpan(bottomRow, 3);
 
 		base.Controls.Add(layout);
 		base.AcceptButton = saveButton;
 		base.CancelButton = cancelButton;
+	}
+
+	private void UpdateCheckClicked(object sender, EventArgs eventArgs)
+	{
+		if (updateCheckWorker != null)
+			return;
+
+		updateCheckButton.Enabled = false;
+		updateCheckButton.Text = "Checking...";
+		BackgroundWorker worker = new BackgroundWorker();
+		updateCheckWorker = worker;
+		worker.DoWork += delegate(object workerSender, DoWorkEventArgs workerEventArgs)
+		{
+			workerEventArgs.Result = UpdateChecker.GetLatestRelease();
+		};
+		worker.RunWorkerCompleted += UpdateCheckCompleted;
+		worker.RunWorkerAsync();
+	}
+
+	private void UpdateCheckCompleted(object sender, RunWorkerCompletedEventArgs eventArgs)
+	{
+		BackgroundWorker worker = sender as BackgroundWorker;
+		if (worker != null)
+			worker.Dispose();
+		updateCheckWorker = null;
+
+		if (base.IsDisposed || base.Disposing)
+			return;
+		updateCheckButton.Enabled = true;
+		updateCheckButton.Text = "Check for Updates...";
+
+		if (eventArgs.Error != null)
+		{
+			MessageBox.Show(
+				this,
+				"The update check could not be completed.\r\n\r\n" + eventArgs.Error.Message,
+				"EAC Enhancements",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Error);
+			return;
+		}
+
+		GitHubReleaseInfo release = eventArgs.Result as GitHubReleaseInfo;
+		Version installed = typeof(AudioDataTransfer).Assembly.GetName().Version;
+		if (release == null)
+		{
+			MessageBox.Show(
+				this,
+				"The update check returned no release information.",
+				"EAC Enhancements",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Error);
+			return;
+		}
+
+		if (!UpdateChecker.IsNewer(release.Version, installed))
+		{
+			MessageBox.Show(
+				this,
+				"You already have the latest available version (" +
+					UpdateChecker.FormatVersion(installed) + ").",
+				"EAC Enhancements",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Information);
+			return;
+		}
+
+		DialogResult result = MessageBox.Show(
+			this,
+			"A newer version (" + release.VersionText + ") is available. Open in browser?",
+			"EAC Enhancements",
+			MessageBoxButtons.YesNo,
+			MessageBoxIcon.Information,
+			MessageBoxDefaultButton.Button1);
+		if (result == DialogResult.Yes)
+		{
+			try
+			{
+				Process.Start(release.PageUrl);
+			}
+			catch (Exception ex)
+			{
+				MessageBox.Show(
+					this,
+					"The release page could not be opened.\r\n\r\n" + ex.Message,
+					"EAC Enhancements",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Error);
+			}
+		}
 	}
 
 	private void SetupCheckClicked(object sender, EventArgs eventArgs)
