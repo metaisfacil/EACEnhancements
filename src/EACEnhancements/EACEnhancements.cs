@@ -14,7 +14,7 @@ using HelperFunctionsLib;
 
 [assembly: AssemblyTitle("EAC Enhancements")]
 [assembly: AssemblyDescription("Responsive secure-rip UI and workflow enhancements for Exact Audio Copy")]
-[assembly: AssemblyCompany("EAC community enhancement")]
+[assembly: AssemblyCompany("metaisfacil")]
 [assembly: AssemblyProduct("EAC Enhancements")]
 [assembly: AssemblyVersion("0.13.2.0")]
 [assembly: AssemblyFileVersion("0.13.2.0")]
