@@ -12,6 +12,10 @@ namespace AudioDataPlugIn
 {
     internal static partial class EnhancementRuntime
     {
+	internal const int EacPathBufferCapacity = 256;
+	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
+		Hex("55 89 E5 89 84 24 00 F0 FF FF 81 EC 48 18 00 00");
+
 	private static void InstallWorkflowHooks()
 	{
 		byte[] array = ReadBytes(layout.DispatchHookVa, 7);
@@ -28,6 +32,10 @@ namespace AudioDataPlugIn
 		RequireBytes(layout.CueSaveHookVa, layout.ExpectedCueSaveDecision, "CUE path decision");
 		RequireBytes(layout.WaveformSaveHookVa, layout.ExpectedWaveformDecision, "waveform path decision");
 		RequireBytes(layout.RipCompleteHookVa, layout.ExpectedRipComplete, "completion dialog");
+		RequireBytes(
+			layout.LiveSettingsRefreshVa,
+			ExpectedLiveSettingsRefreshPrologue,
+			"live settings refresh");
 		workflowCode = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(4096u), 12288u, 64u);
 		workflowData = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(256u), 12288u, 4u);
 		if (workflowCode == IntPtr.Zero || workflowData == IntPtr.Zero)
@@ -723,11 +731,10 @@ namespace AudioDataPlugIn
 
 	private static void WriteEacPathBuffer(uint staticVa, string path)
 	{
-		const int Capacity = 512;
 		string normalized = Path.GetFullPath(path).TrimEnd('\\') + "\\";
-		if (normalized.Length >= Capacity)
+		if (normalized.Length >= EacPathBufferCapacity)
 			throw new PathTooLongException("The generated extraction path is too long for EAC.");
-		char[] buffer = new char[Capacity];
+		char[] buffer = new char[EacPathBufferCapacity];
 		normalized.CopyTo(0, buffer, 0, normalized.Length);
 		Marshal.Copy(buffer, 0, AddressFromStaticVa(staticVa), buffer.Length);
 	}

@@ -243,7 +243,9 @@ namespace AudioDataPlugIn
             0x009940A4,
             0x009948AC,
             0x009A1534,
-            0x005D0840,
+            // Reloads EAC's live settings from the registry. 0x005D0840 is
+            // the inverse save routine and must never be used as a refresh.
+            0x005DFC30,
             0x009B52DC,
             0x007D01F8,
             0x007D01FC,
@@ -286,7 +288,9 @@ namespace AudioDataPlugIn
             0x00830F14,
             0x0083171C,
             0x0083E3A4,
-            0x005CC8C0,
+            // Reloads EAC's live settings from the registry. 0x005CC8C0 is
+            // the inverse save routine and must never be used as a refresh.
+            0x005DBCB0,
             0x0085214C,
             0x0074C1E8,
             0x0074C1EC,

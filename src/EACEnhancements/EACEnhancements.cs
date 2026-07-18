@@ -16,8 +16,8 @@ using HelperFunctionsLib;
 [assembly: AssemblyDescription("Responsive secure-rip UI and workflow enhancements for Exact Audio Copy")]
 [assembly: AssemblyCompany("EAC community enhancement")]
 [assembly: AssemblyProduct("EAC Enhancements")]
-[assembly: AssemblyVersion("0.13.1.0")]
-[assembly: AssemblyFileVersion("0.13.1.0")]
+[assembly: AssemblyVersion("0.13.2.0")]
+[assembly: AssemblyFileVersion("0.13.2.0")]
 
 namespace AudioDataPlugIn
 {
