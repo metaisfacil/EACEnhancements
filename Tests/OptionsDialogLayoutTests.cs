@@ -29,7 +29,7 @@ namespace AudioDataPlugIn
                     throw new Exception("The folder-creation option is not enabled by default.");
                 CheckBox setupAlertOption = FindCheckBox(
                     dialog,
-                    "Show alert if EAC is misconfigured before starting 100% log workflow");
+                    "Show an alert if EAC is misconfigured before starting 100% log workflow");
                 if (setupAlertOption == null || !setupAlertOption.Checked)
                     throw new Exception("The workflow setup alert is not enabled by default.");
                 CheckBox loggingOption = FindCheckBox(

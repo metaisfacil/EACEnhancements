@@ -191,7 +191,7 @@ internal sealed class OutputTemplateDialog : Form
 			AutoSize = true,
 			Anchor = AnchorStyles.Left,
 			Margin = Padding.Empty,
-			Text = "Show alert if EAC is misconfigured before starting 100% log workflow",
+			Text = "Show an alert if EAC is misconfigured before starting 100% log workflow",
 			Checked = settings.ShowWorkflowSetupAlert,
 			UseVisualStyleBackColor = true
 		};
