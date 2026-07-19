@@ -123,6 +123,13 @@ namespace AudioDataPlugIn
             bytes.Add(value);
         }
 
+        internal void EmitIncrementDwordAbsolute(uint address)
+        {
+            bytes.Add(0xFF);
+            bytes.Add(0x05);
+            EmitUInt32(address);
+        }
+
         internal void EmitCopyBytesPreservingRegisters(uint source, uint destination, int count)
         {
             bytes.Add(0x60);                              // PUSHAD

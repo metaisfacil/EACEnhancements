@@ -54,6 +54,9 @@ namespace AudioDataPlugIn
 		RequireBytes(layout.RangeDialogHookVa, layout.ExpectedRangeDialogHook, "Copy Range dialog decision");
 		RequireBytes(layout.RangeSaveHookVa, layout.ExpectedRangeSaveHook, "Copy Range output selection");
 		RequireBytes(layout.RangeSaveAcceptedHookVa, layout.ExpectedRangeSaveAcceptedHook, "Copy Range selected output path");
+		RequireBytes(layout.RangeEjectHook1Va, layout.ExpectedRangeEjectDecision, "Copy Range eject decision 1");
+		RequireBytes(layout.RangeEjectHook2Va, layout.ExpectedRangeEjectDecision, "Copy Range eject decision 2");
+		RequireBytes(layout.RangeEjectHook3Va, layout.ExpectedRangeEjectDecision, "Copy Range nested eject decision");
 		RequireBytes(
 			layout.LiveSettingsRefreshVa,
 			ExpectedLiveSettingsRefreshPrologue,
@@ -67,10 +70,12 @@ namespace AudioDataPlugIn
 		uint num = Pointer32(workflowData);
 		uint address = num + 100;
 		uint htoaStateAddress = num + 101;
+		uint htoaEjectCountersAddress = num + 104;
 		uint htoaOutputPathAddress = num + 256;
 		workflowSelectionBackupAddress = num;
 		workflowAutoCloseFlagAddress = address;
 		htoaWorkflowStateAddress = htoaStateAddress;
+		htoaEjectCounterAddress = htoaEjectCountersAddress;
 		X86CodeBuilder x86CodeBuilder = new X86CodeBuilder(workflowCode);
 		int offset = x86CodeBuilder.Offset;
 		x86CodeBuilder.Emit(Hex("3D 14 03 00 00"));
@@ -191,7 +196,7 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeDialogResumeVa));
 		x86CodeBuilder.PatchBranch(regularRangeDialogBranch, x86CodeBuilder.AddressOf(regularRangeDialog));
 		int rangeSaveHook = x86CodeBuilder.Offset;
-		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 2);
+		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 3);
 		int reuseHtoaOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.Emit(Hex("68 FF 0F 00 00"));
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveResumeVa));
@@ -219,6 +224,24 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.PatchBranch(
 			captureHtoaOutputPathBranch,
 			x86CodeBuilder.AddressOf(captureHtoaOutputPath));
+		int rangeEjectHook1 = EmitRangeEjectHook(
+			x86CodeBuilder,
+			htoaStateAddress,
+			htoaEjectCountersAddress,
+			layout.RangeEjectResume1Va,
+			layout.RangeEjectSkip1Va);
+		int rangeEjectHook2 = EmitRangeEjectHook(
+			x86CodeBuilder,
+			htoaStateAddress,
+			htoaEjectCountersAddress + 4,
+			layout.RangeEjectResume2Va,
+			layout.RangeEjectSkip2Va);
+		int rangeEjectHook3 = EmitRangeEjectHook(
+			x86CodeBuilder,
+			htoaStateAddress,
+			htoaEjectCountersAddress + 8,
+			layout.RangeEjectResume3Va,
+			layout.RangeEjectSkip3Va);
 		byte[] array2 = x86CodeBuilder.ToArray();
 		Marshal.Copy(array2, 0, workflowCode, array2.Length);
 		NativeMethods.FlushInstructionCache(NativeMethods.GetCurrentProcess(), workflowCode, new UIntPtr((uint)array2.Length));
@@ -226,6 +249,9 @@ namespace AudioDataPlugIn
 		WriteJumpPatch(layout.RangeDialogHookVa, x86CodeBuilder.AddressOf(rangeDialogHook), 7);
 		WriteJumpPatch(layout.RangeSaveHookVa, x86CodeBuilder.AddressOf(rangeSaveHook), 5);
 		WriteJumpPatch(layout.RangeSaveAcceptedHookVa, x86CodeBuilder.AddressOf(rangeSaveAcceptedHook), 5);
+		WriteJumpPatch(layout.RangeEjectHook1Va, x86CodeBuilder.AddressOf(rangeEjectHook1), 7);
+		WriteJumpPatch(layout.RangeEjectHook2Va, x86CodeBuilder.AddressOf(rangeEjectHook2), 7);
+		WriteJumpPatch(layout.RangeEjectHook3Va, x86CodeBuilder.AddressOf(rangeEjectHook3), 7);
 		WriteJumpPatch(layout.WaveformSaveHookVa, x86CodeBuilder.AddressOf(offset13), 9);
 		WriteJumpPatch(layout.CueSaveHookVa, x86CodeBuilder.AddressOf(offset12), 9);
 		WriteJumpPatch(layout.CueChainHookVa, x86CodeBuilder.AddressOf(offset9), 23);
@@ -235,6 +261,28 @@ namespace AudioDataPlugIn
 		workflowInstalled = true;
 		workflowStatus = "active; payload=0x" + Pointer32(workflowCode).ToString("X8") + ", state=0x" + num.ToString("X8");
 		Log("100% log workflow " + workflowStatus + ".");
+	}
+
+	private static int EmitRangeEjectHook(
+		X86CodeBuilder code,
+		uint htoaStateAddress,
+		uint counterAddress,
+		uint normalResumeVa,
+		uint suppressEjectVa)
+	{
+		int hook = code.Offset;
+		code.EmitCmpByteAbsolute(htoaStateAddress, 1);
+		int suppressDuringPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
+		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(RuntimeVa(layout.EjectWhenDoneVa), 0);
+		code.EmitJmp(RuntimeVa(normalResumeVa));
+		int suppress = code.Offset;
+		code.EmitIncrementDwordAbsolute(counterAddress);
+		code.EmitJmp(RuntimeVa(suppressEjectVa));
+		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
+		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		return hook;
 	}
 
 	private static void EmitPostCommand(X86CodeBuilder code, uint command)
@@ -725,6 +773,9 @@ namespace AudioDataPlugIn
 			htoaRangeEndLow = unchecked((uint)rangeEnd);
 			htoaRangeEndHigh = unchecked((uint)(rangeEnd >> 32));
 			WriteHtoaRange(htoaRangeEndLow, htoaRangeEndHigh);
+			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress), 0);
+			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress + 4), 0);
+			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress + 8), 0);
 			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 1);
 			NativeMethods.PostMessageW(
 				mainWindow,
@@ -753,7 +804,15 @@ namespace AudioDataPlugIn
 			return;
 		try
 		{
+			Log(
+				"HTOA pass 1 eject branches suppressed: controller-a=" +
+				Marshal.ReadInt32(new IntPtr((int)htoaEjectCounterAddress)) +
+				", controller-b=" +
+				Marshal.ReadInt32(new IntPtr((int)htoaEjectCounterAddress + 4)) +
+				", nested=" +
+				Marshal.ReadInt32(new IntPtr((int)htoaEjectCounterAddress + 8)) + ".");
 			WriteHtoaRange(htoaRangeEndLow, htoaRangeEndHigh);
+			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 3);
 			NativeMethods.PostMessageW(
 				mainWindow,
 				NativeMethods.WM_COMMAND,
@@ -1195,7 +1254,7 @@ namespace AudioDataPlugIn
 		byte htoaState = htoaWorkflowStateAddress == 0
 			? (byte)0
 			: Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress));
-		bool htoaActive = htoaState == 1 || htoaState == 2;
+		bool htoaActive = htoaState == 1 || htoaState == 2 || htoaState == 3;
 		bool preparationActive = b == 2 || b == 3;
 		bool outputSelectionPending =
 			!preparationActive &&

@@ -35,6 +35,16 @@ namespace AudioDataPlugIn
         internal readonly uint RangeOutputPathVa;
         internal readonly uint RangeSaveAcceptedHookVa;
         internal readonly uint RangeSaveAcceptedResumeVa;
+        internal readonly uint EjectWhenDoneVa;
+        internal readonly uint RangeEjectHook1Va;
+        internal readonly uint RangeEjectResume1Va;
+        internal readonly uint RangeEjectSkip1Va;
+        internal readonly uint RangeEjectHook2Va;
+        internal readonly uint RangeEjectResume2Va;
+        internal readonly uint RangeEjectSkip2Va;
+        internal readonly uint RangeEjectHook3Va;
+        internal readonly uint RangeEjectResume3Va;
+        internal readonly uint RangeEjectSkip3Va;
         internal readonly uint CueSaveHookVa;
         internal readonly uint CueSaveDefaultVa;
         internal readonly uint CueSavePromptVa;
@@ -71,6 +81,7 @@ namespace AudioDataPlugIn
         internal readonly byte[] ExpectedRangeDialogHook;
         internal readonly byte[] ExpectedRangeSaveHook;
         internal readonly byte[] ExpectedRangeSaveAcceptedHook;
+        internal readonly byte[] ExpectedRangeEjectDecision;
 
         private static readonly byte[] CommandCompletionPrologue =
             Hex("55 89 E5 83 EC 04");
@@ -103,6 +114,16 @@ namespace AudioDataPlugIn
             uint rangeOutputPathVa,
             uint rangeSaveAcceptedHookVa,
             uint rangeSaveAcceptedResumeVa,
+            uint ejectWhenDoneVa,
+            uint rangeEjectHook1Va,
+            uint rangeEjectResume1Va,
+            uint rangeEjectSkip1Va,
+            uint rangeEjectHook2Va,
+            uint rangeEjectResume2Va,
+            uint rangeEjectSkip2Va,
+            uint rangeEjectHook3Va,
+            uint rangeEjectResume3Va,
+            uint rangeEjectSkip3Va,
             uint cueSaveHookVa,
             uint cueSaveDefaultVa,
             uint cueSavePromptVa,
@@ -163,6 +184,16 @@ namespace AudioDataPlugIn
             RangeOutputPathVa = rangeOutputPathVa;
             RangeSaveAcceptedHookVa = rangeSaveAcceptedHookVa;
             RangeSaveAcceptedResumeVa = rangeSaveAcceptedResumeVa;
+            EjectWhenDoneVa = ejectWhenDoneVa;
+            RangeEjectHook1Va = rangeEjectHook1Va;
+            RangeEjectResume1Va = rangeEjectResume1Va;
+            RangeEjectSkip1Va = rangeEjectSkip1Va;
+            RangeEjectHook2Va = rangeEjectHook2Va;
+            RangeEjectResume2Va = rangeEjectResume2Va;
+            RangeEjectSkip2Va = rangeEjectSkip2Va;
+            RangeEjectHook3Va = rangeEjectHook3Va;
+            RangeEjectResume3Va = rangeEjectResume3Va;
+            RangeEjectSkip3Va = rangeEjectSkip3Va;
             CueSaveHookVa = cueSaveHookVa;
             CueSaveDefaultVa = cueSaveDefaultVa;
             CueSavePromptVa = cueSavePromptVa;
@@ -199,6 +230,7 @@ namespace AudioDataPlugIn
             ExpectedRangeDialogHook = Hex("C6 05 " + LittleEndian(rangeDialogAcceptedFlagVa) + " 00");
             ExpectedRangeSaveHook = Hex("68 FF 0F 00 00");
             ExpectedRangeSaveAcceptedHook = Hex("68 FF 0F 00 00");
+            ExpectedRangeEjectDecision = Hex("80 3D " + LittleEndian(ejectWhenDoneVa) + " 00");
         }
 
         internal static EacVersionLayout Detect(ProcessModule module, IntPtr imageBase)
@@ -307,6 +339,16 @@ namespace AudioDataPlugIn
             0x00C9B4F4,
             0x00409EDF,
             0x00409EE4,
+            0x009B3DD5,
+            0x0062E75A,
+            0x0062E761,
+            0x0062E7C0,
+            0x006333F4,
+            0x006333FB,
+            0x0063345A,
+            0x006276A3,
+            0x006276AA,
+            0x00627709,
             0x0040B255,
             0x0040B25E,
             0x0040B2DA,
@@ -370,6 +412,16 @@ namespace AudioDataPlugIn
             0x009FBD1C,
             0x00409CFB,
             0x00409D00,
+            0x00850C45,
+            0x0062B08A,
+            0x0062B091,
+            0x0062B0F0,
+            0x0062FD24,
+            0x0062FD2B,
+            0x0062FD8A,
+            0x00623FD3,
+            0x00623FDA,
+            0x00624039,
             0x0040B071,
             0x0040B07A,
             0x0040B0F6,
