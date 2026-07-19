@@ -69,9 +69,9 @@ The destination works as follows:
 Open **Action > EAC Enhancements Options...** to choose the extraction root,
 folder template, new-folder behavior, rip-error alerts, and diagnostic logging.
 
-The **Check 100% Log Setup...** button reports any required EAC settings that
-are incorrect and tells you what they should be. It does not change any
-settings or complain about optional recommendations.
+The **Check Rip Configuration...** button reports both EAC settings that can
+affect 100% log score and additional configuration changes that are strongly
+recommended. It does not change any settings.
 
 ### Conditional folder components
 

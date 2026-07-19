@@ -16,7 +16,7 @@ namespace AudioDataPlugIn
 			"Warning!\r\n\r\nAlthough you are trying to use the 100% log rip workflow, your EAC does not appear to be configured to use it correctly.\r\n" +
 			"EAC must be set up with the correct configuration in order to produce rips which adhere to best practices. " +
 			"If you continue anyway, your rips may not qualify as 'perfect' in certain communities.\r\n\r\n" +
-			"It is strongly advised you first open Action > EAC Enhancement Options... > Check 100% Log Setup... and change your settings accordingly.\r\n\r\n" +
+			"It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and change your settings accordingly.\r\n\r\n" +
 			"Are you sure you want to proceed?";
 	internal const int EacPathBufferCapacity = 256;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
@@ -680,7 +680,7 @@ namespace AudioDataPlugIn
 			audit = EacSetupAudit.Run(mainWindow);
 			if (!WorkflowSetupNeedsConfirmation(audit, showAlert))
 				return true;
-			Log("100% log setup warning shown for " + audit.Issues.Count + " audit issue(s).");
+			Log("100% log setup warning shown for " + audit.LogScoreIssues.Count + " log-score issue(s).");
 		}
 		catch (Exception ex)
 		{
@@ -707,7 +707,7 @@ namespace AudioDataPlugIn
 		EacSetupAuditResult audit,
 		bool showAlert)
 	{
-		return showAlert && (audit == null || !audit.IsCompliant);
+		return showAlert && (audit == null || !audit.Is100PercentLogCompliant);
 	}
 
 	private static bool IsGapDetectionTocReady()

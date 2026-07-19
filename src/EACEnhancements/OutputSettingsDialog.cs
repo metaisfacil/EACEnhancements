@@ -231,8 +231,8 @@ internal sealed class OutputTemplateDialog : Form
 		{
 			Anchor = AnchorStyles.Left | AnchorStyles.Top,
 			Margin = Padding.Empty,
-			Size = new Size(164, 28),
-			Text = "Check 100% Log Setup...",
+			Size = new Size(176, 28),
+			Text = "Check Rip Configuration...",
 			UseVisualStyleBackColor = true
 		};
 		setupCheckButton.Click += SetupCheckClicked;
@@ -272,7 +272,7 @@ internal sealed class OutputTemplateDialog : Form
 			ColumnCount = 5,
 			RowCount = 1
 		};
-		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 164F));
+		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 176F));
 		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138F));
 		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 		bottomRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 83F));
@@ -393,7 +393,7 @@ internal sealed class OutputTemplateDialog : Form
 		{
 			MessageBox.Show(
 				this,
-				"The 100% log setup check could not be completed.\r\n\r\n" + ex.Message,
+				"The rip configuration check could not be completed.\r\n\r\n" + ex.Message,
 				"EAC Enhancements",
 				MessageBoxButtons.OK,
 				MessageBoxIcon.Error);

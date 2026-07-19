@@ -26,21 +26,42 @@ namespace AudioDataPlugIn
 
     internal sealed class EacSetupAuditResult
     {
-        private readonly List<EacSetupAuditIssue> issues = new List<EacSetupAuditIssue>();
+        private readonly List<EacSetupAuditIssue> logScoreIssues =
+            new List<EacSetupAuditIssue>();
+        private readonly List<EacSetupAuditIssue> recommendations =
+            new List<EacSetupAuditIssue>();
 
-        internal IList<EacSetupAuditIssue> Issues
+        internal IList<EacSetupAuditIssue> LogScoreIssues
         {
-            get { return issues.AsReadOnly(); }
+            get { return logScoreIssues.AsReadOnly(); }
         }
 
-        internal bool IsCompliant
+        internal IList<EacSetupAuditIssue> Recommendations
         {
-            get { return issues.Count == 0; }
+            get { return recommendations.AsReadOnly(); }
         }
 
-        internal void Add(string section, string setting, string current, string required)
+        internal bool Is100PercentLogCompliant
         {
-            issues.Add(new EacSetupAuditIssue(section, setting, current, required));
+            get { return logScoreIssues.Count == 0; }
+        }
+
+        internal void AddLogScoreIssue(
+            string section,
+            string setting,
+            string current,
+            string required)
+        {
+            logScoreIssues.Add(new EacSetupAuditIssue(section, setting, current, required));
+        }
+
+        internal void AddRecommendation(
+            string section,
+            string setting,
+            string current,
+            string required)
+        {
+            recommendations.Add(new EacSetupAuditIssue(section, setting, current, required));
         }
     }
 
@@ -48,28 +69,37 @@ namespace AudioDataPlugIn
     {
         private const string EacRoot = @"Software\AWSoftware\EACU";
 
+        private enum IssueCategory
+        {
+            LogScore,
+            Recommendation
+        }
+
         internal static EacSetupAuditResult Run(IntPtr mainWindow)
         {
+            // Base LogScore issues on the Orpheus/OPS deductions implemented by
+            // Cambia, plus settings required to produce the log at all.
+            // Recommendations remain useful guidance but do not gate the workflow.
             EacSetupAuditResult result = new EacSetupAuditResult();
             using (RegistryKey extraction = Registry.CurrentUser.OpenSubKey(EacRoot + @"\Extraction Options"))
             using (RegistryKey startup = Registry.CurrentUser.OpenSubKey(EacRoot + @"\StartUp Options"))
             using (RegistryKey compression = Registry.CurrentUser.OpenSubKey(EacRoot + @"\Compression Options"))
             {
-                CheckEnabled(result, extraction, "EAC Options > Extraction", "Fill up missing offset samples with silence", "FillUpMissingSamples", true);
-                CheckEnabled(result, extraction, "EAC Options > Extraction", "Synchronize between tracks", "SyncTrackJunctions", true);
-                CheckEnabled(result, extraction, "EAC Options > Extraction", "Delete leading and trailing silent blocks", "RemoveSilence", false);
-                CheckInteger(result, extraction, "EAC Options > Extraction", "Error recovery quality", "NumberReads", 5, "High");
+                CheckEnabled(result, extraction, "EAC Options > Extraction", "Fill up missing offset samples with silence", "FillUpMissingSamples", true, IssueCategory.LogScore);
+                CheckEnabled(result, extraction, "EAC Options > Extraction", "Synchronize between tracks", "SyncTrackJunctions", true, IssueCategory.Recommendation);
+                CheckEnabled(result, extraction, "EAC Options > Extraction", "Delete leading and trailing silent blocks", "RemoveSilence", false, IssueCategory.LogScore);
+                CheckInteger(result, extraction, "EAC Options > Extraction", "Error recovery quality", "NumberReads", 5, "High", IssueCategory.Recommendation);
 
-                CheckEnabled(result, extraction, "EAC Options > General", "Automatically access online metadata for unknown CDs", "RetrieveCDDBOnUnknownCD", true);
-                CheckEnabled(result, startup, "EAC Options > General", "Create log files in English", "CreateEnglishLogFile", true);
+                CheckEnabled(result, extraction, "EAC Options > General", "Automatically access online metadata for unknown CDs", "RetrieveCDDBOnUnknownCD", true, IssueCategory.Recommendation);
+                CheckEnabled(result, startup, "EAC Options > General", "Create log files in English", "CreateEnglishLogFile", true, IssueCategory.Recommendation);
 
-                CheckEnabled(result, extraction, "EAC Options > Tools", "Automatically write status report after extraction", "AutoSaveStatus", true);
-                CheckEnabled(result, extraction, "EAC Options > Tools", "Append checksum to status report", "AddChecksumLogFile", true);
-                CheckEnabled(result, extraction, "EAC Options > Tools", "Start external compressors queued in the background", "BackgroundExternalCompression", false);
-                CheckEnabled(result, startup, "EAC Options > Tools", "Beginner mode", "EasyGUI", false);
+                CheckEnabled(result, extraction, "EAC Options > Tools", "Automatically write status report after extraction", "AutoSaveStatus", true, IssueCategory.LogScore);
+                CheckEnabled(result, extraction, "EAC Options > Tools", "Append checksum to status report", "AddChecksumLogFile", true, IssueCategory.Recommendation);
+                CheckEnabled(result, extraction, "EAC Options > Tools", "Start external compressors queued in the background", "BackgroundExternalCompression", false, IssueCategory.Recommendation);
+                CheckEnabled(result, startup, "EAC Options > Tools", "Beginner mode", "EasyGUI", false, IssueCategory.Recommendation);
 
-                CheckEnabled(result, extraction, "EAC Options > Normalize", "Normalize", "Normalize", false);
-                CheckEnabled(result, extraction, "EAC Options > Filename", "Use Various Artist naming scheme", "UseVariousFileNamingConvention", true);
+                CheckEnabled(result, extraction, "EAC Options > Normalize", "Normalize", "Normalize", false, IssueCategory.LogScore);
+                CheckEnabled(result, extraction, "EAC Options > Filename", "Use Various Artist naming scheme", "UseVariousFileNamingConvention", true, IssueCategory.Recommendation);
 
                 CheckCompression(result, compression);
             }
@@ -81,28 +111,39 @@ namespace AudioDataPlugIn
         private static void CheckCompression(EacSetupAuditResult result, RegistryKey key)
         {
             const string section = "Compression Options > External Compression";
-            CheckEnabled(result, key, section, "Use external program for compression", "UseExternalEncoder", true);
-            CheckInteger(result, key, section, "Parameter passing scheme", "ExternalEncoderType", 20, "User Defined Encoder");
+            CheckEnabled(result, key, section, "Use external program for compression", "UseExternalEncoder", true, IssueCategory.Recommendation);
+            CheckInteger(result, key, section, "Parameter passing scheme", "ExternalEncoderType", 20, "User Defined Encoder", IssueCategory.Recommendation);
 
             string extension = ReadString(key, "ExternalEncoderExtension");
-            if (!String.Equals((extension ?? String.Empty).Trim().TrimStart('.'), "flac", StringComparison.OrdinalIgnoreCase))
-                result.Add(section, "File extension", DisplayString(extension), ".flac");
+            string normalizedExtension = (extension ?? String.Empty).Trim().TrimStart('.');
+            if (!IsOrpheusAcceptedExtension(normalizedExtension))
+            {
+                result.AddLogScoreIssue(
+                    section,
+                    "File extension",
+                    DisplayString(extension),
+                    "A score-verifiable lossless extension: .flac, .wav, or .ape");
+            }
+            else if (!String.Equals(normalizedExtension, "flac", StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddRecommendation(section, "File extension", DisplayString(extension), ".flac");
+            }
 
             string encoder = ReadString(key, "ExternalEncoderProgram");
             if (!HasExecutableExtension(encoder))
-                result.Add(section, "External compressor", DisplayString(encoder), "A command-line compressor ending in .exe");
+                result.AddRecommendation(section, "External compressor", DisplayString(encoder), "A command-line compressor ending in .exe");
 
-            CheckEnabled(result, key, section, "Delete WAV after compression", "ExternalEncoderDeleteSource", true);
-            CheckEnabled(result, key, section, "Use CRC check", "ExternalEncoderCreateCRC", true);
-            CheckEnabled(result, key, section, "Add ID3 tag", "ExternalEncoderID3Tag", false);
-            CheckEnabled(result, key, section, "Check external program return code", "ExternalEncoderCheckReturnCode", true);
+            CheckEnabled(result, key, section, "Delete WAV after compression", "ExternalEncoderDeleteSource", true, IssueCategory.Recommendation);
+            CheckEnabled(result, key, section, "Use CRC check", "ExternalEncoderCreateCRC", true, IssueCategory.Recommendation);
+            CheckEnabled(result, key, section, "Add ID3 tag", "ExternalEncoderID3Tag", false, IssueCategory.LogScore);
+            CheckEnabled(result, key, section, "Check external program return code", "ExternalEncoderCheckReturnCode", true, IssueCategory.Recommendation);
 
             const string tagSection = "Compression Options > ID3 Tag";
-            CheckEnabled(result, key, tagSection, "ID3 v1.1 tags", "UseID3V11", false);
-            CheckEnabled(result, key, tagSection, "ID3 v2 tags", "UseID3V2", false);
-            CheckEnabled(result, key, tagSection, "Write ID3 v1 tags", "WriteV1Tags", false);
-            CheckEnabled(result, key, tagSection, "Add cover to ID3 tag", "AddCoverToID3V2", false);
-            CheckEnabled(result, key, tagSection, "Write cover image into extraction folder", "WriteCoverToFolder", true);
+            CheckEnabled(result, key, tagSection, "ID3 v1.1 tags", "UseID3V11", false, IssueCategory.Recommendation);
+            CheckEnabled(result, key, tagSection, "ID3 v2 tags", "UseID3V2", false, IssueCategory.Recommendation);
+            CheckEnabled(result, key, tagSection, "Write ID3 v1 tags", "WriteV1Tags", false, IssueCategory.Recommendation);
+            CheckEnabled(result, key, tagSection, "Add cover to ID3 tag", "AddCoverToID3V2", false, IssueCategory.Recommendation);
+            CheckEnabled(result, key, tagSection, "Write cover image into extraction folder", "WriteCoverToFolder", true, IssueCategory.Recommendation);
         }
 
         private static void CheckSelectedDrive(EacSetupAuditResult result, IntPtr mainWindow)
@@ -113,7 +154,7 @@ namespace AudioDataPlugIn
                 string driveKeyName = MatchDriveKey(drives, displayedDrive);
                 if (driveKeyName == null)
                 {
-                    result.Add(
+                    result.AddLogScoreIssue(
                         "Drive Options",
                         "Selected drive",
                         String.IsNullOrWhiteSpace(displayedDrive) ? "Could not identify the selected drive" : displayedDrive,
@@ -124,21 +165,21 @@ namespace AudioDataPlugIn
                 using (RegistryKey drive = drives.OpenSubKey(driveKeyName))
                 {
                     string section = "Drive Options (" + NormalizeWhitespace(driveKeyName) + ")";
-                    CheckInteger(result, drive, section + " > Extraction Method", "Extraction mode", "ExtractionMode", 5, "Secure mode");
-                    CheckInteger(result, drive, section + " > Extraction Method", "Accurate Stream and drive-cache features", "SecureMode", 3, "Both enabled");
-                    CheckEnabled(result, drive, section + " > Extraction Method", "Use C2 error information", "UseC2Correction", false);
+                    CheckInteger(result, drive, section + " > Extraction Method", "Extraction mode", "ExtractionMode", 5, "Secure mode", IssueCategory.LogScore);
+                    CheckInteger(result, drive, section + " > Extraction Method", "Accurate Stream and drive-cache features", "SecureMode", 3, "Both enabled", IssueCategory.LogScore);
+                    CheckEnabled(result, drive, section + " > Extraction Method", "Use C2 error information", "UseC2Correction", false, IssueCategory.LogScore);
 
                     int? command = ReadInteger(drive, "ExtractionCommandSet");
                     if (!command.HasValue || command.Value == 0)
-                        result.Add(
+                        result.AddRecommendation(
                             section + " > Drive",
                             "Read command",
                             DisplayReadCommand(command),
                             "Autodetected for this drive");
 
-                    CheckInteger(result, drive, section + " > Offset/Speed", "Speed selection", "SpeedSelection", -1, "Current");
-                    CheckEnabled(result, drive, section + " > Offset/Speed", "Allow speed reduction during extraction", "SpeedReduction", true);
-                    CheckEnabled(result, drive, section + " > Offset/Speed", "Use AccurateRip with this drive", "UseAccurateRip", true);
+                    CheckInteger(result, drive, section + " > Offset/Speed", "Speed selection", "SpeedSelection", -1, "Current", IssueCategory.Recommendation);
+                    CheckEnabled(result, drive, section + " > Offset/Speed", "Allow speed reduction during extraction", "SpeedReduction", true, IssueCategory.Recommendation);
+                    CheckEnabled(result, drive, section + " > Offset/Speed", "Use AccurateRip with this drive", "UseAccurateRip", true, IssueCategory.Recommendation);
                     CheckIntegerRange(
                         result,
                         drive,
@@ -147,11 +188,12 @@ namespace AudioDataPlugIn
                         "GapDetectionMode",
                         0,
                         2,
-                        "Detection Method A, B, or C (start with A)");
+                        "Detection Method A, B, or C (start with A)",
+                        IssueCategory.Recommendation);
                     int? gapAccuracy = ReadInteger(drive, "GapDetectionAccuracy");
                     if (!gapAccuracy.HasValue || gapAccuracy.Value < 1 || gapAccuracy.Value > 2)
                     {
-                        result.Add(
+                        result.AddRecommendation(
                             section + " > Gap Detection",
                             "Detection accuracy",
                             DisplayGapDetectionAccuracy(gapAccuracy),
@@ -223,12 +265,13 @@ namespace AudioDataPlugIn
             string section,
             string label,
             string valueName,
-            bool expected)
+            bool expected,
+            IssueCategory category)
         {
             int? value = ReadInteger(key, valueName);
             bool? actual = value.HasValue ? (bool?)(value.Value != 0) : null;
             if (!actual.HasValue || actual.Value != expected)
-                result.Add(section, label, DisplayBoolean(actual), expected ? "Enabled" : "Disabled");
+                AddIssue(result, category, section, label, DisplayBoolean(actual), expected ? "Enabled" : "Disabled");
         }
 
         private static void CheckInteger(
@@ -238,11 +281,12 @@ namespace AudioDataPlugIn
             string label,
             string valueName,
             int expected,
-            string expectedDisplay)
+            string expectedDisplay,
+            IssueCategory category)
         {
             int? value = ReadInteger(key, valueName);
             if (!value.HasValue || value.Value != expected)
-                result.Add(section, label, DisplayInteger(value), expectedDisplay);
+                AddIssue(result, category, section, label, DisplayInteger(value), expectedDisplay);
         }
 
         private static void CheckIntegerRange(
@@ -253,11 +297,26 @@ namespace AudioDataPlugIn
             string valueName,
             int minimum,
             int maximum,
-            string expectedDisplay)
+            string expectedDisplay,
+            IssueCategory category)
         {
             int? value = ReadInteger(key, valueName);
             if (!value.HasValue || value.Value < minimum || value.Value > maximum)
-                result.Add(section, label, DisplayInteger(value), expectedDisplay);
+                AddIssue(result, category, section, label, DisplayInteger(value), expectedDisplay);
+        }
+
+        private static void AddIssue(
+            EacSetupAuditResult result,
+            IssueCategory category,
+            string section,
+            string setting,
+            string current,
+            string required)
+        {
+            if (category == IssueCategory.LogScore)
+                result.AddLogScoreIssue(section, setting, current, required);
+            else
+                result.AddRecommendation(section, setting, current, required);
         }
 
         private static int? ReadInteger(RegistryKey key, string name)
@@ -330,6 +389,14 @@ namespace AudioDataPlugIn
                 value.Trim().EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
         }
 
+        internal static bool IsOrpheusAcceptedExtension(string value)
+        {
+            string extension = (value ?? String.Empty).Trim().TrimStart('.');
+            return String.Equals(extension, "flac", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(extension, "wav", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(extension, "ape", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string NormalizeWhitespace(string value)
         {
             return Regex.Replace((value ?? String.Empty).Trim(), "\\s+", " ");
@@ -340,67 +407,125 @@ namespace AudioDataPlugIn
     {
         internal EacSetupAuditDialog(EacSetupAuditResult result)
         {
-            Text = "100% Log Setup Check";
+            Text = "Rip Configuration Check";
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.Sizable;
             MinimizeBox = false;
             ShowIcon = false;
             ShowInTaskbar = false;
-            MinimumSize = new Size(680, 420);
-            ClientSize = new Size(760, 540);
+            MinimumSize = new Size(680, 520);
+            ClientSize = new Size(780, 640);
             Font = SystemFonts.MessageBoxFont;
 
-            Label heading = new Label
+            TableLayoutPanel layout = new TableLayoutPanel
             {
-                AutoSize = false,
-                Location = new Point(16, 16),
-                Size = new Size(728, 42),
+                Dock = DockStyle.Fill,
+                Padding = new Padding(16),
+                ColumnCount = 1,
+                RowCount = 6
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+
+            Label logScoreHeading = new Label
+            {
+                Dock = DockStyle.Fill,
+                Margin = Padding.Empty,
+                TextAlign = ContentAlignment.TopLeft,
                 Font = new Font(SystemFonts.MessageBoxFont, FontStyle.Bold),
-                Text = result.IsCompliant
-                    ? "All required settings checked by EAC Enhancements are configured correctly."
+                Text = result.Is100PercentLogCompliant
+                    ? "All checked settings that influence 100% log score are configured correctly."
                     : "The following required settings do not match the 100% log guide:"
             };
 
-            TextBox report = new TextBox
+            TextBox logScoreReport = CreateReportTextBox(
+                FormatReport(result.LogScoreIssues, "No 100% log problems were found."),
+                1);
+            logScoreReport.Margin = new Padding(0, 0, 0, 12);
+
+            Label recommendationHeading = new Label
             {
-                Location = new Point(16, 64),
-                Size = new Size(728, 424),
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Both,
-                WordWrap = true,
-                TabIndex = 1,
-                Text = FormatReport(result)
+                Dock = DockStyle.Fill,
+                Margin = Padding.Empty,
+                TextAlign = ContentAlignment.TopLeft,
+                Font = new Font(SystemFonts.MessageBoxFont, FontStyle.Bold),
+                Text = "The following settings do not influence log score, but changing them is highly recommended:"
+            };
+
+            TextBox recommendationReport = CreateReportTextBox(
+                FormatReport(result.Recommendations, "No additional recommendations were found."),
+                2);
+            recommendationReport.Margin = new Padding(0, 0, 0, 8);
+
+            Label footer = new Label
+            {
+                Dock = DockStyle.Fill,
+                Margin = Padding.Empty,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Text = "No settings were changed."
             };
 
             Button close = new Button
             {
-                Location = new Point(669, 500),
                 Size = new Size(75, 28),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                Margin = Padding.Empty,
                 Text = "Close",
                 DialogResult = DialogResult.OK,
                 TabIndex = 0,
                 UseVisualStyleBackColor = true
             };
 
-            Controls.Add(heading);
-            Controls.Add(report);
-            Controls.Add(close);
+            FlowLayoutPanel buttonRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+                FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false
+            };
+            buttonRow.Controls.Add(close);
+
+            layout.Controls.Add(logScoreHeading, 0, 0);
+            layout.Controls.Add(logScoreReport, 0, 1);
+            layout.Controls.Add(recommendationHeading, 0, 2);
+            layout.Controls.Add(recommendationReport, 0, 3);
+            layout.Controls.Add(footer, 0, 4);
+            layout.Controls.Add(buttonRow, 0, 5);
+            Controls.Add(layout);
             AcceptButton = close;
             CancelButton = close;
             ActiveControl = close;
         }
 
-        private static string FormatReport(EacSetupAuditResult result)
+        private static TextBox CreateReportTextBox(string text, int tabIndex)
         {
-            if (result.IsCompliant)
-                return "No problems were found.";
+            return new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Both,
+                WordWrap = true,
+                TabIndex = tabIndex,
+                Text = text
+            };
+        }
+
+        private static string FormatReport(
+            IList<EacSetupAuditIssue> issues,
+            string emptyMessage)
+        {
+            if (issues.Count == 0)
+                return emptyMessage;
 
             StringBuilder text = new StringBuilder();
             string section = null;
-            foreach (EacSetupAuditIssue issue in result.Issues)
+            foreach (EacSetupAuditIssue issue in issues)
             {
                 if (!String.Equals(section, issue.Section, StringComparison.Ordinal))
                 {
@@ -413,9 +538,7 @@ namespace AudioDataPlugIn
                 text.AppendLine("    Current:  " + issue.Current);
                 text.AppendLine("    Required: " + issue.Required);
             }
-            text.AppendLine();
-            text.Append("No settings were changed.");
-            return text.ToString();
+            return text.ToString().TrimEnd();
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Forms;
 
 namespace AudioDataPlugIn
@@ -41,7 +42,7 @@ namespace AudioDataPlugIn
                 Application.DoEvents();
                 Button save = FindButton(dialog, "Save");
                 Button cancel = FindButton(dialog, "Cancel");
-                Button setupCheck = FindButton(dialog, "Check 100% Log Setup...");
+                Button setupCheck = FindButton(dialog, "Check Rip Configuration...");
                 Button updateCheck = FindButton(dialog, "Check for Updates...");
                 if (updateCheck == null)
                     throw new Exception("The manual update-check button is missing.");
@@ -63,17 +64,53 @@ namespace AudioDataPlugIn
                 dialog.Close();
             }
 
-            using (EacSetupAuditDialog dialog = new EacSetupAuditDialog(new EacSetupAuditResult()))
+            EacSetupAuditResult auditResult = new EacSetupAuditResult();
+            auditResult.AddLogScoreIssue("Score section", "Score setting", "Off", "On");
+            auditResult.AddRecommendation(
+                "Recommendation section",
+                "Recommended setting",
+                "Off",
+                "On");
+            using (EacSetupAuditDialog dialog = new EacSetupAuditDialog(auditResult))
             {
+                if (dialog.Text != "Rip Configuration Check")
+                    throw new Exception("The configuration report has the old title.");
                 if (dialog.ShowIcon)
                     throw new Exception("The setup report displays a default title-bar icon.");
                 dialog.Show();
                 Application.DoEvents();
                 if (!(dialog.ActiveControl is Button))
                     throw new Exception("The setup report textbox receives initial focus.");
-                TextBox report = FindTextBox(dialog);
-                if (report == null || !report.ReadOnly || !report.TabStop)
-                    throw new Exception("The setup report is not selectable and copyable.");
+                Label scoreHeading = FindLabel(
+                    dialog,
+                    "The following required settings do not match the 100% log guide:");
+                Label recommendationHeading = FindLabel(
+                    dialog,
+                    "The following settings do not influence log score, but changing them is highly recommended:");
+                if (scoreHeading == null || recommendationHeading == null)
+                    throw new Exception("The configuration report category captions are missing.");
+
+                List<TextBox> reports = FindTextBoxes(dialog);
+                reports.Sort(delegate(TextBox left, TextBox right)
+                {
+                    return left.PointToScreen(System.Drawing.Point.Empty).Y.CompareTo(
+                        right.PointToScreen(System.Drawing.Point.Empty).Y);
+                });
+                if (reports.Count != 2 ||
+                    !reports[0].ReadOnly || !reports[0].TabStop ||
+                    !reports[1].ReadOnly || !reports[1].TabStop)
+                {
+                    throw new Exception("The two configuration reports are not selectable and copyable.");
+                }
+                if (reports[0].Text.IndexOf("Score setting", StringComparison.Ordinal) < 0 ||
+                    reports[0].Text.IndexOf("Recommended setting", StringComparison.Ordinal) >= 0 ||
+                    reports[1].Text.IndexOf("Recommended setting", StringComparison.Ordinal) < 0 ||
+                    reports[1].Text.IndexOf("Score setting", StringComparison.Ordinal) >= 0)
+                {
+                    throw new Exception("Configuration issues were placed in the wrong report category.");
+                }
+                if (reports[1].Top <= reports[0].Top)
+                    throw new Exception("The recommendations report is not below the log-score report.");
                 dialog.Close();
             }
             Console.WriteLine("Dialog layout and focus tests passed.");
@@ -93,14 +130,27 @@ namespace AudioDataPlugIn
             return null;
         }
 
-        private static TextBox FindTextBox(Control parent)
+        private static List<TextBox> FindTextBoxes(Control parent)
         {
+            List<TextBox> textBoxes = new List<TextBox>();
             foreach (Control child in parent.Controls)
             {
                 TextBox textBox = child as TextBox;
                 if (textBox != null)
-                    return textBox;
-                TextBox nested = FindTextBox(child);
+                    textBoxes.Add(textBox);
+                textBoxes.AddRange(FindTextBoxes(child));
+            }
+            return textBoxes;
+        }
+
+        private static Label FindLabel(Control parent, string text)
+        {
+            foreach (Control child in parent.Controls)
+            {
+                Label label = child as Label;
+                if (label != null && label.Text == text)
+                    return label;
+                Label nested = FindLabel(child, text);
                 if (nested != null)
                     return nested;
             }

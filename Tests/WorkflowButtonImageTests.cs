@@ -138,7 +138,7 @@ namespace AudioDataPlugIn
                 "EAC must be set up with the correct configuration in order to produce rips which adhere to best practices. " +
                     "If you continue anyway, your rips may not qualify as 'perfect' in certain communities.",
                 String.Empty,
-                "It is strongly advised you first open Action > EAC Enhancement Options... > Check 100% Log Setup... and change your settings accordingly.",
+                "It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and change your settings accordingly.",
                 String.Empty,
                 "Are you sure you want to proceed?"
             });
@@ -149,8 +149,16 @@ namespace AudioDataPlugIn
             if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(compliant, true))
                 throw new InvalidOperationException("A compliant EAC setup requires confirmation.");
 
+            EacSetupAuditResult recommendationOnly = new EacSetupAuditResult();
+            recommendationOnly.AddRecommendation("Test", "Recommended setting", "Off", "On");
+            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(recommendationOnly, true))
+            {
+                throw new InvalidOperationException(
+                    "A recommendation that does not affect log score requires confirmation.");
+            }
+
             EacSetupAuditResult noncompliant = new EacSetupAuditResult();
-            noncompliant.Add("Test", "Setting", "Off", "On");
+            noncompliant.AddLogScoreIssue("Test", "Score setting", "Off", "On");
             if (!EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant, true) ||
                 !EnhancementRuntime.WorkflowSetupNeedsConfirmation(null, true))
             {

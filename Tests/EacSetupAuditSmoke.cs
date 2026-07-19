@@ -19,6 +19,16 @@ namespace AudioDataPlugIn
                 return 1;
             }
 
+            if (!EacSetupAudit.IsOrpheusAcceptedExtension("flac") ||
+                !EacSetupAudit.IsOrpheusAcceptedExtension(".WAV") ||
+                !EacSetupAudit.IsOrpheusAcceptedExtension(" ape ") ||
+                EacSetupAudit.IsOrpheusAcceptedExtension("mp3") ||
+                EacSetupAudit.IsOrpheusAcceptedExtension(null))
+            {
+                Console.Error.WriteLine("The Orpheus extension audit accepted an unverifiable format.");
+                return 1;
+            }
+
             if (EacSetupAudit.DisplayReadCommand(null) != "Not configured" ||
                 EacSetupAudit.DisplayReadCommand(0) != "Not autodetected" ||
                 EacSetupAudit.DisplayReadCommand(7) != "Command set 7" ||
@@ -36,19 +46,26 @@ namespace AudioDataPlugIn
                 ? IntPtr.Zero
                 : Process.GetProcessById(Int32.Parse(arguments[0])).MainWindowHandle;
             EacSetupAuditResult result = EacSetupAudit.Run(mainWindow);
-            foreach (EacSetupAuditIssue issue in result.Issues)
+            foreach (EacSetupAuditIssue issue in result.LogScoreIssues)
             {
                 Console.WriteLine(
                     issue.Section + " | " + issue.Setting +
                     " | current=" + issue.Current +
                     " | required=" + issue.Required);
             }
+            foreach (EacSetupAuditIssue issue in result.Recommendations)
+            {
+                Console.WriteLine(
+                    issue.Section + " | " + issue.Setting +
+                    " | current=" + issue.Current +
+                    " | recommended=" + issue.Required);
+            }
 
             if (mainWindow != IntPtr.Zero)
                 return 0;
 
             // With no EAC window supplied, drive detection must fail cleanly.
-            foreach (EacSetupAuditIssue issue in result.Issues)
+            foreach (EacSetupAuditIssue issue in result.LogScoreIssues)
             {
                 if (issue.Section == "Drive Options" && issue.Setting == "Selected drive")
                     return 0;
