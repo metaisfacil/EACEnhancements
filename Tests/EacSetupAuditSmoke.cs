@@ -7,6 +7,18 @@ namespace AudioDataPlugIn
     {
         private static int Main(string[] arguments)
         {
+            if (!EacSetupAudit.HasExecutableExtension(@"C:\Program Files\FLAC\flac.exe") ||
+                !EacSetupAudit.HasExecutableExtension(@"C:\Encoders\CUSTOM.EXE  ") ||
+                EacSetupAudit.HasExecutableExtension(@"C:\Encoders\flac") ||
+                EacSetupAudit.HasExecutableExtension(@"C:\Encoders\flac.exe.bak") ||
+                EacSetupAudit.HasExecutableExtension(null) ||
+                EacSetupAudit.HasExecutableExtension(String.Empty))
+            {
+                Console.Error.WriteLine(
+                    "The command-line compressor audit did not enforce a case-insensitive .exe suffix.");
+                return 1;
+            }
+
             IntPtr mainWindow = arguments.Length == 0
                 ? IntPtr.Zero
                 : Process.GetProcessById(Int32.Parse(arguments[0])).MainWindowHandle;

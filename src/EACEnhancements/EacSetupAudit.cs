@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
@@ -48,22 +47,6 @@ namespace AudioDataPlugIn
     internal static class EacSetupAudit
     {
         private const string EacRoot = @"Software\AWSoftware\EACU";
-        private const string FlacOptionsWithLyrics =
-            "-8 -V -T \"ARTIST=%artist%\" -T \"TITLE=%title%\" -T \"ALBUM=%albumtitle%\" " +
-            "-T \"DATE=%year%\" -T \"TRACKNUMBER=%tracknr%\" -T \"GENRE=%genre%\" " +
-            "-T \"PERFORMER=%albuminterpret%\" -T \"COMPOSER=%composer%\" " +
-            "%haslyrics%--tag-from-file=LYRICS=\"%lyricsfile%\"%haslyrics% " +
-            "-T \"ALBUMARTIST=%albumartist%\" -T \"DISCNUMBER=%cdnumber%\" " +
-            "-T \"TOTALDISCS=%totalcds%\" -T \"TOTALTRACKS=%numtracks%\" " +
-            "-T \"COMMENT=%comment%\" %source% -o %dest%";
-
-        private const string FlacOptionsWithoutLyrics =
-            "-8 -V -T \"ARTIST=%artist%\" -T \"TITLE=%title%\" -T \"ALBUM=%albumtitle%\" " +
-            "-T \"DATE=%year%\" -T \"TRACKNUMBER=%tracknr%\" -T \"GENRE=%genre%\" " +
-            "-T \"PERFORMER=%albuminterpret%\" -T \"COMPOSER=%composer%\" " +
-            "-T \"ALBUMARTIST=%albumartist%\" -T \"DISCNUMBER=%cdnumber%\" " +
-            "-T \"TOTALDISCS=%totalcds%\" -T \"TOTALTRACKS=%numtracks%\" " +
-            "-T \"COMMENT=%comment%\" %source% -o %dest%";
 
         internal static EacSetupAuditResult Run(IntPtr mainWindow)
         {
@@ -106,19 +89,8 @@ namespace AudioDataPlugIn
                 result.Add(section, "File extension", DisplayString(extension), ".flac");
 
             string encoder = ReadString(key, "ExternalEncoderProgram");
-            bool encoderValid = !String.IsNullOrWhiteSpace(encoder) &&
-                String.Equals(Path.GetFileName(encoder), "flac.exe", StringComparison.OrdinalIgnoreCase) &&
-                File.Exists(encoder);
-            if (!encoderValid)
-                result.Add(section, "External compressor", DisplayString(encoder), "A valid path to flac.exe");
-
-            string options = ReadString(key, "ExternalEncoderOptions");
-            string normalizedOptions = NormalizeCommandLine(options);
-            if (!String.Equals(normalizedOptions, NormalizeCommandLine(FlacOptionsWithLyrics), StringComparison.Ordinal) &&
-                !String.Equals(normalizedOptions, NormalizeCommandLine(FlacOptionsWithoutLyrics), StringComparison.Ordinal))
-            {
-                result.Add(section, "Additional command-line options", DisplayString(options), FlacOptionsWithLyrics);
-            }
+            if (!HasExecutableExtension(encoder))
+                result.Add(section, "External compressor", DisplayString(encoder), "A command-line compressor ending in .exe");
 
             CheckEnabled(result, key, section, "Delete WAV after compression", "ExternalEncoderDeleteSource", true);
             CheckEnabled(result, key, section, "Use CRC check", "ExternalEncoderCreateCRC", true);
@@ -321,9 +293,10 @@ namespace AudioDataPlugIn
             return String.IsNullOrWhiteSpace(value) ? "Not configured" : value;
         }
 
-        private static string NormalizeCommandLine(string value)
+        internal static bool HasExecutableExtension(string value)
         {
-            return Regex.Replace((value ?? String.Empty).Trim(), "\\s+", " ");
+            return !String.IsNullOrWhiteSpace(value) &&
+                value.Trim().EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string NormalizeWhitespace(string value)
