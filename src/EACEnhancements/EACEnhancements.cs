@@ -120,6 +120,9 @@ namespace AudioDataPlugIn
         private const uint StaticImageBase = 0x00400000;
         private const int TrackSelectionCount = 100;
         private const uint CustomWorkflowCommand = 0x0312;
+        private const uint HtoaWorkflowCommand = 0xA319;
+        private const uint StartHtoaSecondPassCommand = 0xA31A;
+        private const uint CompressedCopyRangeCommand = 0x0304;
         private const uint WorkflowDestinationCommand = 0xA313;
         private const uint StartPreparedWorkflowCommand = 0xA314;
         private const uint RestoreWorkflowFolderCommand = 0xA315;
@@ -130,6 +133,7 @@ namespace AudioDataPlugIn
         private const uint RefreshOutputSettingsCommand = 0x0314;
         private const uint ReferenceRipCommand = 0x0303;
         private const string CustomWorkflowMenuText = "&Test && Copy + Cue (100% Log)";
+        private const string HtoaWorkflowMenuText = "Test && Copy &HTOA (100% Log)";
         internal const string WorkflowButtonTooltipText = "Test & Copy + Cue (100% Log)";
         private const string OutputSettingsMenuText = "EAC Enhancements &Options...";
         private const string OutputTemplateIniName = "EACEnhancements.ini";
@@ -161,6 +165,9 @@ namespace AudioDataPlugIn
         private static IntPtr workflowData;
         private static uint workflowSelectionBackupAddress;
         private static uint workflowAutoCloseFlagAddress;
+        private static uint htoaWorkflowStateAddress;
+        private static uint htoaRangeEndLow;
+        private static uint htoaRangeEndHigh;
         private static CallWndProcHookDelegate workflowCallWndProcHookDelegate;
         private static CallWndProcHookDelegate workflowGetMessageHookDelegate;
         private static MainWindowSubclassDelegate mainWindowSubclassDelegate;

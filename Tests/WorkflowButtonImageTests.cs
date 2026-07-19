@@ -29,6 +29,7 @@ namespace AudioDataPlugIn
                 }
                 AssertClickNotificationFiltering();
                 AssertWorkflowInvocationGate();
+                AssertHtoaDetection();
                 AssertWorkflowSetupConfirmationPolicy();
                 Console.WriteLine("Workflow button image tests passed.");
                 return 0;
@@ -37,6 +38,23 @@ namespace AudioDataPlugIn
             {
                 Console.Error.WriteLine(error);
                 return 1;
+            }
+        }
+
+        private static void AssertHtoaDetection()
+        {
+            if (!EnhancementRuntime.IsHtoaAvailable(1, 0, 8925, 0) ||
+                !EnhancementRuntime.IsHtoaAvailable(1, 0, 0, 1))
+            {
+                throw new InvalidOperationException("A valid audio HTOA range was rejected.");
+            }
+
+            if (EnhancementRuntime.IsHtoaAvailable(0, 0, 8925, 0) ||
+                EnhancementRuntime.IsHtoaAvailable(1, 0, 0, 0) ||
+                EnhancementRuntime.IsHtoaAvailable(1, 4, 8925, 0))
+            {
+                throw new InvalidOperationException(
+                    "An unavailable, zero-length, or data-track HTOA passed the workflow gate.");
             }
         }
 

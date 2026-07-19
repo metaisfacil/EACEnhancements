@@ -332,6 +332,15 @@ namespace AudioDataPlugIn
             UIntPtr newItem,
             string text);
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool InsertMenuW(
+            IntPtr menu,
+            uint position,
+            uint flags,
+            UIntPtr newItem,
+            string text);
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool DrawMenuBar(IntPtr hwnd);

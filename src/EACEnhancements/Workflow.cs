@@ -31,6 +31,7 @@ namespace AudioDataPlugIn
 		Recommendations
 	}
 	internal const int EacPathBufferCapacity = 256;
+	private const int RangeOutputPathBufferBytes = 8192;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
 		Hex("55 89 E5 89 84 24 00 F0 FF FF 81 EC 48 18 00 00");
 
@@ -50,20 +51,26 @@ namespace AudioDataPlugIn
 		RequireBytes(layout.CueSaveHookVa, layout.ExpectedCueSaveDecision, "CUE path decision");
 		RequireBytes(layout.WaveformSaveHookVa, layout.ExpectedWaveformDecision, "waveform path decision");
 		RequireBytes(layout.RipCompleteHookVa, layout.ExpectedRipComplete, "completion dialog");
+		RequireBytes(layout.RangeDialogHookVa, layout.ExpectedRangeDialogHook, "Copy Range dialog decision");
+		RequireBytes(layout.RangeSaveHookVa, layout.ExpectedRangeSaveHook, "Copy Range output selection");
+		RequireBytes(layout.RangeSaveAcceptedHookVa, layout.ExpectedRangeSaveAcceptedHook, "Copy Range selected output path");
 		RequireBytes(
 			layout.LiveSettingsRefreshVa,
 			ExpectedLiveSettingsRefreshPrologue,
 			"live settings refresh");
 		workflowCode = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(4096u), 12288u, 64u);
-		workflowData = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(256u), 12288u, 4u);
+		workflowData = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(16384u), 12288u, 4u);
 		if (workflowCode == IntPtr.Zero || workflowData == IntPtr.Zero)
 		{
 			throw new InvalidOperationException("VirtualAlloc for the workflow payload failed with Win32 error " + Marshal.GetLastWin32Error() + ".");
 		}
 		uint num = Pointer32(workflowData);
 		uint address = num + 100;
+		uint htoaStateAddress = num + 101;
+		uint htoaOutputPathAddress = num + 256;
 		workflowSelectionBackupAddress = num;
 		workflowAutoCloseFlagAddress = address;
+		htoaWorkflowStateAddress = htoaStateAddress;
 		X86CodeBuilder x86CodeBuilder = new X86CodeBuilder(workflowCode);
 		int offset = x86CodeBuilder.Offset;
 		x86CodeBuilder.Emit(Hex("3D 14 03 00 00"));
@@ -145,6 +152,24 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.PatchBranch(instructionOffset9, x86CodeBuilder.AddressOf(offset14));
 		int offset15 = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.CopyStatusCompleteFlagVa), 1);
+		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 0);
+		int htoaInactiveBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.Emit(Hex("6A 00"));
+		x86CodeBuilder.EmitPushImmediate(811u);
+		x86CodeBuilder.EmitPushImmediate(273u);
+		x86CodeBuilder.Emit(Hex("FF 75 08"));
+		x86CodeBuilder.EmitCall(RuntimeVa(layout.PostMessageWThunkVa));
+		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 1);
+		int htoaFirstPassBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.EmitMovByteAbsolute(htoaStateAddress, 0);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RipCompleteResumeVa));
+		int htoaFirstPass = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitMovByteAbsolute(htoaStateAddress, 2);
+		EmitPostCommand(x86CodeBuilder, StartHtoaSecondPassCommand);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RipCompleteResumeVa));
+		int regularCompletion = x86CodeBuilder.Offset;
+		x86CodeBuilder.PatchBranch(htoaInactiveBranch, x86CodeBuilder.AddressOf(regularCompletion));
+		x86CodeBuilder.PatchBranch(htoaFirstPassBranch, x86CodeBuilder.AddressOf(htoaFirstPass));
 		x86CodeBuilder.EmitCmpByteAbsolute(address, 0);
 		int instructionOffset10 = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitMovByteAbsolute(address, 0);
@@ -156,10 +181,51 @@ namespace AudioDataPlugIn
 		int offset16 = x86CodeBuilder.Offset;
 		x86CodeBuilder.PatchBranch(instructionOffset10, x86CodeBuilder.AddressOf(offset16));
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RipCompleteResumeVa));
+		int rangeDialogHook = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 0);
+		int regularRangeDialogBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.RangeDialogAcceptedFlagVa), 1);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeDialogBypassVa));
+		int regularRangeDialog = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.RangeDialogAcceptedFlagVa), 0);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeDialogResumeVa));
+		x86CodeBuilder.PatchBranch(regularRangeDialogBranch, x86CodeBuilder.AddressOf(regularRangeDialog));
+		int rangeSaveHook = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 2);
+		int reuseHtoaOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.Emit(Hex("68 FF 0F 00 00"));
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveResumeVa));
+		int reuseHtoaOutputPath = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
+			htoaOutputPathAddress,
+			RuntimeVa(layout.RangeOutputPathVa),
+			RangeOutputPathBufferBytes);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveBypassVa));
+		x86CodeBuilder.PatchBranch(
+			reuseHtoaOutputPathBranch,
+			x86CodeBuilder.AddressOf(reuseHtoaOutputPath));
+		int rangeSaveAcceptedHook = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 1);
+		int captureHtoaOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.Emit(Hex("68 FF 0F 00 00"));
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveAcceptedResumeVa));
+		int captureHtoaOutputPath = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
+			RuntimeVa(layout.RangeOutputPathVa),
+			htoaOutputPathAddress,
+			RangeOutputPathBufferBytes);
+		x86CodeBuilder.Emit(Hex("68 FF 0F 00 00"));
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveAcceptedResumeVa));
+		x86CodeBuilder.PatchBranch(
+			captureHtoaOutputPathBranch,
+			x86CodeBuilder.AddressOf(captureHtoaOutputPath));
 		byte[] array2 = x86CodeBuilder.ToArray();
 		Marshal.Copy(array2, 0, workflowCode, array2.Length);
 		NativeMethods.FlushInstructionCache(NativeMethods.GetCurrentProcess(), workflowCode, new UIntPtr((uint)array2.Length));
 		WriteJumpPatch(layout.RipCompleteHookVa, x86CodeBuilder.AddressOf(offset15), 7);
+		WriteJumpPatch(layout.RangeDialogHookVa, x86CodeBuilder.AddressOf(rangeDialogHook), 7);
+		WriteJumpPatch(layout.RangeSaveHookVa, x86CodeBuilder.AddressOf(rangeSaveHook), 5);
+		WriteJumpPatch(layout.RangeSaveAcceptedHookVa, x86CodeBuilder.AddressOf(rangeSaveAcceptedHook), 5);
 		WriteJumpPatch(layout.WaveformSaveHookVa, x86CodeBuilder.AddressOf(offset13), 9);
 		WriteJumpPatch(layout.CueSaveHookVa, x86CodeBuilder.AddressOf(offset12), 9);
 		WriteJumpPatch(layout.CueChainHookVa, x86CodeBuilder.AddressOf(offset9), 23);
@@ -242,12 +308,37 @@ namespace AudioDataPlugIn
 		bool flag = false;
 		if (NativeMethods.GetMenuState(intPtr, 786u, 0u) == uint.MaxValue)
 		{
-			if (!NativeMethods.AppendMenuW(intPtr, 2048u, UIntPtr.Zero, null) || !NativeMethods.AppendMenuW(intPtr, 0u, new UIntPtr(786u), "&Test && Copy + Cue (100% Log)"))
+			if (!NativeMethods.AppendMenuW(intPtr, 2048u, UIntPtr.Zero, null))
+			{
+				throw new InvalidOperationException("AppendMenuW failed for the 100% log separator with Win32 error " + Marshal.GetLastWin32Error() + ".");
+			}
+			if (workflowInstalled &&
+				!NativeMethods.AppendMenuW(intPtr, NativeMethods.MF_STRING | NativeMethods.MF_GRAYED, new UIntPtr(HtoaWorkflowCommand), HtoaWorkflowMenuText))
+			{
+				throw new InvalidOperationException("AppendMenuW failed for the HTOA workflow with Win32 error " + Marshal.GetLastWin32Error() + ".");
+			}
+			if (!NativeMethods.AppendMenuW(intPtr, 0u, new UIntPtr(786u), CustomWorkflowMenuText))
 			{
 				throw new InvalidOperationException("AppendMenuW failed for command 0x312 with Win32 error " + Marshal.GetLastWin32Error() + ".");
 			}
 			flag = true;
+			if (workflowInstalled)
+				Log("Installed Action-menu command 0x" + HtoaWorkflowCommand.ToString("X") + ": " + HtoaWorkflowMenuText + ".");
 			Log("Installed Action-menu command 0x312: &Test && Copy + Cue (100% Log).");
+		}
+		else if (workflowInstalled && NativeMethods.GetMenuState(intPtr, HtoaWorkflowCommand, 0u) == uint.MaxValue)
+		{
+			if (!NativeMethods.InsertMenuW(
+				intPtr,
+				CustomWorkflowCommand,
+				NativeMethods.MF_STRING | NativeMethods.MF_GRAYED,
+				new UIntPtr(HtoaWorkflowCommand),
+				HtoaWorkflowMenuText))
+			{
+				throw new InvalidOperationException("InsertMenuW failed for the HTOA workflow with Win32 error " + Marshal.GetLastWin32Error() + ".");
+			}
+			flag = true;
+			Log("Installed Action-menu command 0x" + HtoaWorkflowCommand.ToString("X") + ": " + HtoaWorkflowMenuText + ".");
 		}
 		bool flag2 = NativeMethods.GetMenuState(intPtr, 41746u, 0u) != uint.MaxValue;
 		if (workflowInstalled && !flag2)
@@ -297,12 +388,13 @@ namespace AudioDataPlugIn
 	private static void MonitorWorkflowMenuState(IntPtr mainWindow)
 	{
 		int lastEnabled = -1;
+		int lastHtoaEnabled = -1;
 		while (NativeMethods.IsWindow(mainWindow))
 		{
 			try
 			{
 				EnsureWorkflowCancellationHooks(mainWindow);
-				SynchronizeWorkflowMenuState(mainWindow, ref lastEnabled);
+				SynchronizeWorkflowMenuState(mainWindow, ref lastEnabled, ref lastHtoaEnabled);
 			}
 			catch (Exception ex)
 			{
@@ -312,7 +404,7 @@ namespace AudioDataPlugIn
 		}
 	}
 
-	private static void SynchronizeWorkflowMenuState(IntPtr mainWindow, ref int lastEnabled)
+	private static void SynchronizeWorkflowMenuState(IntPtr mainWindow, ref int lastEnabled, ref int lastHtoaEnabled)
 	{
 		IntPtr menu = NativeMethods.GetMenu(mainWindow);
 		if (menu == IntPtr.Zero)
@@ -350,6 +442,23 @@ namespace AudioDataPlugIn
 			{
 				lastEnabled = num;
 				Log("100% log menu is now " + (flag ? "enabled" : "disabled") + " (mirrors command 0x303).");
+			}
+		}
+		uint htoaMenuState = NativeMethods.GetMenuState(intPtr, HtoaWorkflowCommand, 0u);
+		if (htoaMenuState != uint.MaxValue)
+		{
+			bool htoaEnabled = workflowInstalled && IsCompressedCopyRangeEnabled(menu) && IsHtoaAvailable();
+			bool currentlyEnabled = (htoaMenuState & 3) == 0;
+			if (currentlyEnabled != htoaEnabled)
+			{
+				NativeMethods.EnableMenuItem(intPtr, HtoaWorkflowCommand, htoaEnabled ? 0u : 1u);
+				NativeMethods.DrawMenuBar(mainWindow);
+			}
+			int state = htoaEnabled ? 1 : 0;
+			if (lastHtoaEnabled != state)
+			{
+				lastHtoaEnabled = state;
+				Log("HTOA 100% log menu is now " + (htoaEnabled ? "enabled" : "disabled") + ".");
 			}
 		}
 	}
@@ -538,6 +647,20 @@ namespace AudioDataPlugIn
 				ShowOutputSettingsDialog();
 				return IntPtr.Zero;
 			}
+			if (message == NativeMethods.WM_COMMAND &&
+				lParam == IntPtr.Zero &&
+				command == (int)HtoaWorkflowCommand)
+			{
+				StartHtoaWorkflow(hwnd);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND &&
+				lParam == IntPtr.Zero &&
+				command == (int)StartHtoaSecondPassCommand)
+			{
+				StartHtoaSecondPass(hwnd);
+				return IntPtr.Zero;
+			}
 			if (message == 273 &&
 				lParam == IntPtr.Zero &&
 				(command == (int)CustomWorkflowCommand ||
@@ -573,6 +696,91 @@ namespace AudioDataPlugIn
 			return IntPtr.Zero;
 		}
 		return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
+	}
+
+	private static void StartHtoaWorkflow(IntPtr mainWindow)
+	{
+		if (htoaWorkflowStateAddress == 0 || !IsHtoaAvailable() ||
+			!IsCompressedCopyRangeEnabled(NativeMethods.GetMenu(mainWindow)))
+		{
+			Log("HTOA workflow invocation ignored because no rip-capable HTOA is currently available.");
+			return;
+		}
+		if (Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress)) != 0 ||
+			Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa)) != 0 ||
+			ripSessionActive)
+		{
+			Log("HTOA workflow invocation ignored because another extraction workflow is active.");
+			return;
+		}
+		if (!ConfirmWorkflowSetup(mainWindow))
+			return;
+
+		try
+		{
+			ulong trackOneStart = ReadUInt64(
+				layout.FirstTocTrackStartLowVa,
+				layout.FirstTocTrackStartHighVa);
+			ulong rangeEnd = trackOneStart - 1UL;
+			htoaRangeEndLow = unchecked((uint)rangeEnd);
+			htoaRangeEndHigh = unchecked((uint)(rangeEnd >> 32));
+			WriteHtoaRange(htoaRangeEndLow, htoaRangeEndHigh);
+			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 1);
+			NativeMethods.PostMessageW(
+				mainWindow,
+				NativeMethods.WM_COMMAND,
+				new IntPtr((int)CompressedCopyRangeCommand),
+				IntPtr.Zero);
+			Log("HTOA 100% log pass 1 queued for sectors 0-" + rangeEnd + ".");
+		}
+		catch (Exception ex)
+		{
+			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 0);
+			Log("HTOA workflow could not be started: " + ex);
+			MessageBox.Show(
+				new WindowHandleOwner(mainWindow),
+				"The HTOA extraction could not be started.\r\n\r\n" + ex.Message,
+				"EAC Enhancements",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Error);
+		}
+	}
+
+	private static void StartHtoaSecondPass(IntPtr mainWindow)
+	{
+		if (htoaWorkflowStateAddress == 0 ||
+			Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress)) != 2)
+			return;
+		try
+		{
+			WriteHtoaRange(htoaRangeEndLow, htoaRangeEndHigh);
+			NativeMethods.PostMessageW(
+				mainWindow,
+				NativeMethods.WM_COMMAND,
+				new IntPtr((int)CompressedCopyRangeCommand),
+				IntPtr.Zero);
+			Log("HTOA 100% log pass 2 queued with EAC's retained output filename.");
+		}
+		catch (Exception ex)
+		{
+			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 0);
+			Log("HTOA workflow pass 2 could not be started: " + ex);
+		}
+	}
+
+	private static void WriteHtoaRange(uint endLow, uint endHigh)
+	{
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeStartLowVa), 0);
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeStartHighVa), 0);
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeEndLowVa), unchecked((int)endLow));
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeEndHighVa), unchecked((int)endHigh));
+	}
+
+	private static ulong ReadUInt64(uint lowVa, uint highVa)
+	{
+		uint low = unchecked((uint)Marshal.ReadInt32(AddressFromStaticVa(lowVa)));
+		uint high = unchecked((uint)Marshal.ReadInt32(AddressFromStaticVa(highVa)));
+		return ((ulong)high << 32) | low;
 	}
 
 	private static void ShowWorkflowDestinationDialog(IntPtr mainWindow)
@@ -772,6 +980,44 @@ namespace AudioDataPlugIn
 		return firstTrackNumber > 0;
 	}
 
+	private static bool IsCompressedCopyRangeEnabled(IntPtr menu)
+	{
+		if (menu == IntPtr.Zero)
+			return false;
+		IntPtr owner = FindMenuContainingCommand(menu, CompressedCopyRangeCommand);
+		if (owner == IntPtr.Zero)
+			return false;
+		uint state = NativeMethods.GetMenuState(owner, CompressedCopyRangeCommand, 0u);
+		return state != uint.MaxValue && (state & 3u) == 0;
+	}
+
+	private static bool IsHtoaAvailable()
+	{
+		try
+		{
+			int firstTrackNumber = Marshal.ReadInt32(AddressFromStaticVa(layout.FirstTocTrackNumberVa));
+			byte flags = Marshal.ReadByte(AddressFromStaticVa(layout.FirstTocTrackFlagsVa));
+			uint startLow = unchecked((uint)Marshal.ReadInt32(AddressFromStaticVa(layout.FirstTocTrackStartLowVa)));
+			uint startHigh = unchecked((uint)Marshal.ReadInt32(AddressFromStaticVa(layout.FirstTocTrackStartHighVa)));
+			return IsHtoaAvailable(firstTrackNumber, flags, startLow, startHigh);
+		}
+		catch (Exception ex)
+		{
+			Log("Could not read EAC's HTOA state: " + ex.Message);
+			return false;
+		}
+	}
+
+	internal static bool IsHtoaAvailable(
+		int firstTrackNumber,
+		byte firstTrackFlags,
+		uint firstTrackStartLow,
+		uint firstTrackStartHigh)
+	{
+		ulong start = ((ulong)firstTrackStartHigh << 32) | firstTrackStartLow;
+		return firstTrackNumber > 0 && (firstTrackFlags & 4) == 0 && start > 0;
+	}
+
 	private static void RequestWorkflowFolderTemplateRestore()
 	{
 		if (!suppressWorkflowFolderTemplate)
@@ -946,13 +1192,17 @@ namespace AudioDataPlugIn
 	private static void InspectWorkflowMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, string source)
 	{
 		byte b = Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa));
+		byte htoaState = htoaWorkflowStateAddress == 0
+			? (byte)0
+			: Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress));
+		bool htoaActive = htoaState == 1 || htoaState == 2;
 		bool preparationActive = b == 2 || b == 3;
 		bool outputSelectionPending =
 			!preparationActive &&
 			!ripSessionActive &&
 			workflowAutoCloseFlagAddress != 0 &&
 			Marshal.ReadByte(new IntPtr((int)workflowAutoCloseFlagAddress)) != 0;
-		if (!preparationActive && !outputSelectionPending)
+		if (!preparationActive && !outputSelectionPending && !htoaActive)
 		{
 			return;
 		}
@@ -969,7 +1219,7 @@ namespace AudioDataPlugIn
 			{
 				Log(
 					"100% log " +
-					(outputSelectionPending ? "output selection" : "stage " + b) +
+					(htoaActive ? "HTOA pass " + htoaState : outputSelectionPending ? "output selection" : "stage " + b) +
 					" saw WM_COMMAND 0x" + num.ToString("X") +
 					", notify=0x" + ((num2 >> 16) & 0xFFFFu).ToString("X") +
 					" on thread " + NativeMethods.GetCurrentThreadId() +
@@ -994,11 +1244,27 @@ namespace AudioDataPlugIn
 		}
 		if (flag)
 		{
-			if (preparationActive)
+			if (htoaActive)
+				AbortHtoaWorkflow(hwnd, message, num, htoaState);
+			else if (preparationActive)
 				AbortCustomWorkflowIfActive(hwnd, message, num);
 			else
 				AbortPendingOutputSelection(hwnd, message, num);
 		}
+	}
+
+	private static void AbortHtoaWorkflow(IntPtr hwnd, uint message, uint command, byte state)
+	{
+		if (htoaWorkflowStateAddress == 0)
+			return;
+		IntPtr stateAddress = new IntPtr((int)htoaWorkflowStateAddress);
+		if (Marshal.ReadByte(stateAddress) == 0)
+			return;
+		Marshal.WriteByte(stateAddress, 0);
+		Log(
+			"Aborted HTOA 100% log pass " + state + " before message 0x" +
+			message.ToString("X") + ", command 0x" + command.ToString("X") +
+			", hwnd=0x" + hwnd.ToInt64().ToString("X8") + ".");
 	}
 
 	private static bool IsCancelControl(IntPtr hwnd)

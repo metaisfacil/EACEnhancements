@@ -18,6 +18,23 @@ namespace AudioDataPlugIn
         internal readonly uint ChainFlagVa;
         internal readonly uint TrackSelectionArrayVa;
         internal readonly uint FirstTocTrackNumberVa;
+        internal readonly uint FirstTocTrackFlagsVa;
+        internal readonly uint FirstTocTrackStartLowVa;
+        internal readonly uint FirstTocTrackStartHighVa;
+        internal readonly uint RangeStartLowVa;
+        internal readonly uint RangeStartHighVa;
+        internal readonly uint RangeEndLowVa;
+        internal readonly uint RangeEndHighVa;
+        internal readonly uint RangeDialogAcceptedFlagVa;
+        internal readonly uint RangeDialogHookVa;
+        internal readonly uint RangeDialogResumeVa;
+        internal readonly uint RangeDialogBypassVa;
+        internal readonly uint RangeSaveHookVa;
+        internal readonly uint RangeSaveResumeVa;
+        internal readonly uint RangeSaveBypassVa;
+        internal readonly uint RangeOutputPathVa;
+        internal readonly uint RangeSaveAcceptedHookVa;
+        internal readonly uint RangeSaveAcceptedResumeVa;
         internal readonly uint CueSaveHookVa;
         internal readonly uint CueSaveDefaultVa;
         internal readonly uint CueSavePromptVa;
@@ -51,6 +68,9 @@ namespace AudioDataPlugIn
         internal readonly byte[] ExpectedCueSaveDecision;
         internal readonly byte[] ExpectedWaveformDecision;
         internal readonly byte[] ExpectedRipComplete;
+        internal readonly byte[] ExpectedRangeDialogHook;
+        internal readonly byte[] ExpectedRangeSaveHook;
+        internal readonly byte[] ExpectedRangeSaveAcceptedHook;
 
         private static readonly byte[] CommandCompletionPrologue =
             Hex("55 89 E5 83 EC 04");
@@ -66,6 +86,23 @@ namespace AudioDataPlugIn
             uint chainFlagVa,
             uint trackSelectionArrayVa,
             uint firstTocTrackNumberVa,
+            uint firstTocTrackFlagsVa,
+            uint firstTocTrackStartLowVa,
+            uint firstTocTrackStartHighVa,
+            uint rangeStartLowVa,
+            uint rangeStartHighVa,
+            uint rangeEndLowVa,
+            uint rangeEndHighVa,
+            uint rangeDialogAcceptedFlagVa,
+            uint rangeDialogHookVa,
+            uint rangeDialogResumeVa,
+            uint rangeDialogBypassVa,
+            uint rangeSaveHookVa,
+            uint rangeSaveResumeVa,
+            uint rangeSaveBypassVa,
+            uint rangeOutputPathVa,
+            uint rangeSaveAcceptedHookVa,
+            uint rangeSaveAcceptedResumeVa,
             uint cueSaveHookVa,
             uint cueSaveDefaultVa,
             uint cueSavePromptVa,
@@ -109,6 +146,23 @@ namespace AudioDataPlugIn
             ChainFlagVa = chainFlagVa;
             TrackSelectionArrayVa = trackSelectionArrayVa;
             FirstTocTrackNumberVa = firstTocTrackNumberVa;
+            FirstTocTrackFlagsVa = firstTocTrackFlagsVa;
+            FirstTocTrackStartLowVa = firstTocTrackStartLowVa;
+            FirstTocTrackStartHighVa = firstTocTrackStartHighVa;
+            RangeStartLowVa = rangeStartLowVa;
+            RangeStartHighVa = rangeStartHighVa;
+            RangeEndLowVa = rangeEndLowVa;
+            RangeEndHighVa = rangeEndHighVa;
+            RangeDialogAcceptedFlagVa = rangeDialogAcceptedFlagVa;
+            RangeDialogHookVa = rangeDialogHookVa;
+            RangeDialogResumeVa = rangeDialogResumeVa;
+            RangeDialogBypassVa = rangeDialogBypassVa;
+            RangeSaveHookVa = rangeSaveHookVa;
+            RangeSaveResumeVa = rangeSaveResumeVa;
+            RangeSaveBypassVa = rangeSaveBypassVa;
+            RangeOutputPathVa = rangeOutputPathVa;
+            RangeSaveAcceptedHookVa = rangeSaveAcceptedHookVa;
+            RangeSaveAcceptedResumeVa = rangeSaveAcceptedResumeVa;
             CueSaveHookVa = cueSaveHookVa;
             CueSaveDefaultVa = cueSaveDefaultVa;
             CueSavePromptVa = cueSavePromptVa;
@@ -142,6 +196,9 @@ namespace AudioDataPlugIn
             ExpectedCueSaveDecision = Hex(expectedCueSaveDecision);
             ExpectedWaveformDecision = Hex(expectedWaveformDecision);
             ExpectedRipComplete = Hex(expectedRipComplete);
+            ExpectedRangeDialogHook = Hex("C6 05 " + LittleEndian(rangeDialogAcceptedFlagVa) + " 00");
+            ExpectedRangeSaveHook = Hex("68 FF 0F 00 00");
+            ExpectedRangeSaveAcceptedHook = Hex("68 FF 0F 00 00");
         }
 
         internal static EacVersionLayout Detect(ProcessModule module, IntPtr imageBase)
@@ -216,6 +273,12 @@ namespace AudioDataPlugIn
             return bytes;
         }
 
+        private static string LittleEndian(uint value)
+        {
+            byte[] bytes = BitConverter.GetBytes(value);
+            return BitConverter.ToString(bytes).Replace("-", " ");
+        }
+
         private static readonly EacVersionLayout Eac18 = new EacVersionLayout(
             "EAC 1.8",
             "A169A5CAD41CC341F2B108D8A38EAF957C817DF1F971AC13AA1FB731F957A204",
@@ -227,6 +290,23 @@ namespace AudioDataPlugIn
             0x00D260F9,
             0x007F9014,
             0x007EEE0A,
+            0x007EEE09,
+            0x007EEE0E,
+            0x007EEE12,
+            0x007F8FDC,
+            0x007F8FE0,
+            0x007F8FE4,
+            0x007F8FE8,
+            0x00B55140,
+            0x00409DF6,
+            0x00409DFD,
+            0x00409E25,
+            0x00409E8F,
+            0x00409E94,
+            0x00409EDF,
+            0x00C9B4F4,
+            0x00409EDF,
+            0x00409EE4,
             0x0040B255,
             0x0040B25E,
             0x0040B2DA,
@@ -273,6 +353,23 @@ namespace AudioDataPlugIn
             0x00A8691F,
             0x00775004,
             0x0076ADFA,
+            0x0076ADF9,
+            0x0076ADFE,
+            0x0076AE02,
+            0x00774FCC,
+            0x00774FD0,
+            0x00774FD4,
+            0x00774FD8,
+            0x008B5968,
+            0x00409C12,
+            0x00409C19,
+            0x00409C41,
+            0x00409CAB,
+            0x00409CB0,
+            0x00409CFB,
+            0x009FBD1C,
+            0x00409CFB,
+            0x00409D00,
             0x0040B071,
             0x0040B07A,
             0x0040B0F6,
