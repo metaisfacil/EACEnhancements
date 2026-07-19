@@ -55,6 +55,14 @@ namespace AudioDataPlugIn
         internal readonly uint RangeBeepHook3Va;
         internal readonly uint RangeBeepResume3Va;
         internal readonly uint RangeBeepSkip3Va;
+        internal readonly uint RangeHibernateRequestedVa;
+        internal readonly uint RangeHibernateInitHookVa;
+        internal readonly uint RangeHibernateInitResumeVa;
+        internal readonly uint RangeHibernateCheckboxHookVa;
+        internal readonly uint RangeHibernateCheckboxResumeVa;
+        internal readonly uint RangeHibernateDecisionHookVa;
+        internal readonly uint RangeHibernateDecisionResumeVa;
+        internal readonly uint RangeHibernateDecisionSkipVa;
         internal readonly uint CueSaveHookVa;
         internal readonly uint CueSaveDefaultVa;
         internal readonly uint CueSavePromptVa;
@@ -93,6 +101,8 @@ namespace AudioDataPlugIn
         internal readonly byte[] ExpectedRangeSaveAcceptedHook;
         internal readonly byte[] ExpectedRangeEjectDecision;
         internal readonly byte[] ExpectedRangeBeepDecision;
+        internal readonly byte[] ExpectedRangeHibernateStore;
+        internal readonly byte[] ExpectedRangeHibernateDecision;
 
         private static readonly byte[] CommandCompletionPrologue =
             Hex("55 89 E5 83 EC 04");
@@ -145,6 +155,14 @@ namespace AudioDataPlugIn
             uint rangeBeepHook3Va,
             uint rangeBeepResume3Va,
             uint rangeBeepSkip3Va,
+            uint rangeHibernateRequestedVa,
+            uint rangeHibernateInitHookVa,
+            uint rangeHibernateInitResumeVa,
+            uint rangeHibernateCheckboxHookVa,
+            uint rangeHibernateCheckboxResumeVa,
+            uint rangeHibernateDecisionHookVa,
+            uint rangeHibernateDecisionResumeVa,
+            uint rangeHibernateDecisionSkipVa,
             uint cueSaveHookVa,
             uint cueSaveDefaultVa,
             uint cueSavePromptVa,
@@ -225,6 +243,14 @@ namespace AudioDataPlugIn
             RangeBeepHook3Va = rangeBeepHook3Va;
             RangeBeepResume3Va = rangeBeepResume3Va;
             RangeBeepSkip3Va = rangeBeepSkip3Va;
+            RangeHibernateRequestedVa = rangeHibernateRequestedVa;
+            RangeHibernateInitHookVa = rangeHibernateInitHookVa;
+            RangeHibernateInitResumeVa = rangeHibernateInitResumeVa;
+            RangeHibernateCheckboxHookVa = rangeHibernateCheckboxHookVa;
+            RangeHibernateCheckboxResumeVa = rangeHibernateCheckboxResumeVa;
+            RangeHibernateDecisionHookVa = rangeHibernateDecisionHookVa;
+            RangeHibernateDecisionResumeVa = rangeHibernateDecisionResumeVa;
+            RangeHibernateDecisionSkipVa = rangeHibernateDecisionSkipVa;
             CueSaveHookVa = cueSaveHookVa;
             CueSaveDefaultVa = cueSaveDefaultVa;
             CueSavePromptVa = cueSavePromptVa;
@@ -263,6 +289,8 @@ namespace AudioDataPlugIn
             ExpectedRangeSaveAcceptedHook = Hex("68 FF 0F 00 00");
             ExpectedRangeEjectDecision = Hex("80 3D " + LittleEndian(ejectWhenDoneVa) + " 00");
             ExpectedRangeBeepDecision = Hex("80 3D " + LittleEndian(beepWhenDoneVa) + " 00");
+            ExpectedRangeHibernateStore = Hex("A2 " + LittleEndian(rangeHibernateRequestedVa));
+            ExpectedRangeHibernateDecision = Hex("80 3D " + LittleEndian(rangeHibernateRequestedVa) + " 00");
         }
 
         internal static EacVersionLayout Detect(ProcessModule module, IntPtr imageBase)
@@ -391,6 +419,14 @@ namespace AudioDataPlugIn
             0x00627709,
             0x00627710,
             0x00627744,
+            0x009B44D8,
+            0x00621BDC,
+            0x00621BE1,
+            0x00622238,
+            0x0062223D,
+            0x0040A456,
+            0x0040A45D,
+            0x0040A472,
             0x0040B255,
             0x0040B25E,
             0x0040B2DA,
@@ -474,6 +510,14 @@ namespace AudioDataPlugIn
             0x00624039,
             0x00624040,
             0x00624074,
+            0x00851348,
+            0x0061E50C,
+            0x0061E511,
+            0x0061EB68,
+            0x0061EB6D,
+            0x0040A272,
+            0x0040A279,
+            0x0040A28E,
             0x0040B071,
             0x0040B07A,
             0x0040B0F6,

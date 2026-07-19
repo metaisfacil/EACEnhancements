@@ -130,6 +130,12 @@ namespace AudioDataPlugIn
             EmitUInt32(address);
         }
 
+        internal void EmitMovAlToByteAbsolute(uint address)
+        {
+            bytes.Add(0xA2);
+            EmitUInt32(address);
+        }
+
         internal void EmitCopyBytesPreservingRegisters(uint source, uint destination, int count)
         {
             bytes.Add(0x60);                              // PUSHAD

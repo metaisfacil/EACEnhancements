@@ -31,6 +31,7 @@ namespace AudioDataPlugIn
 		Recommendations
 	}
 	internal const int EacPathBufferCapacity = 256;
+	private const int HtoaHibernateControlId = 0x10D9;
 	private const int RangeOutputPathBufferBytes = 8192;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
 		Hex("55 89 E5 89 84 24 00 F0 FF FF 81 EC 48 18 00 00");
@@ -60,6 +61,9 @@ namespace AudioDataPlugIn
 		RequireBytes(layout.RangeBeepHook1Va, layout.ExpectedRangeBeepDecision, "Copy Range beep decision 1");
 		RequireBytes(layout.RangeBeepHook2Va, layout.ExpectedRangeBeepDecision, "Copy Range beep decision 2");
 		RequireBytes(layout.RangeBeepHook3Va, layout.ExpectedRangeBeepDecision, "Copy Range nested beep decision");
+		RequireBytes(layout.RangeHibernateInitHookVa, layout.ExpectedRangeHibernateStore, "Copy Range hibernate initialization");
+		RequireBytes(layout.RangeHibernateCheckboxHookVa, layout.ExpectedRangeHibernateStore, "Copy Range hibernate checkbox");
+		RequireBytes(layout.RangeHibernateDecisionHookVa, layout.ExpectedRangeHibernateDecision, "Copy Range hibernate decision");
 		RequireBytes(
 			layout.LiveSettingsRefreshVa,
 			ExpectedLiveSettingsRefreshPrologue,
@@ -174,6 +178,7 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.EmitMovByteAbsolute(htoaStateAddress, 0);
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RipCompleteResumeVa));
 		int htoaFirstPass = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
 		x86CodeBuilder.EmitMovByteAbsolute(htoaStateAddress, 2);
 		EmitPostCommand(x86CodeBuilder, StartHtoaSecondPassCommand);
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RipCompleteResumeVa));
@@ -265,6 +270,15 @@ namespace AudioDataPlugIn
 			htoaBeepCountersAddress + 8,
 			layout.RangeBeepResume3Va,
 			layout.RangeBeepSkip3Va);
+		int rangeHibernateInitHook = EmitRangeHibernateInitHook(
+			x86CodeBuilder,
+			htoaStateAddress);
+		int rangeHibernateCheckboxHook = EmitRangeHibernateCheckboxHook(
+			x86CodeBuilder,
+			htoaStateAddress);
+		int rangeHibernateDecisionHook = EmitRangeHibernateDecisionHook(
+			x86CodeBuilder,
+			htoaStateAddress);
 		byte[] array2 = x86CodeBuilder.ToArray();
 		Marshal.Copy(array2, 0, workflowCode, array2.Length);
 		NativeMethods.FlushInstructionCache(NativeMethods.GetCurrentProcess(), workflowCode, new UIntPtr((uint)array2.Length));
@@ -278,6 +292,9 @@ namespace AudioDataPlugIn
 		WriteJumpPatch(layout.RangeBeepHook1Va, x86CodeBuilder.AddressOf(rangeBeepHook1), 7);
 		WriteJumpPatch(layout.RangeBeepHook2Va, x86CodeBuilder.AddressOf(rangeBeepHook2), 7);
 		WriteJumpPatch(layout.RangeBeepHook3Va, x86CodeBuilder.AddressOf(rangeBeepHook3), 7);
+		WriteJumpPatch(layout.RangeHibernateInitHookVa, x86CodeBuilder.AddressOf(rangeHibernateInitHook), 5);
+		WriteJumpPatch(layout.RangeHibernateCheckboxHookVa, x86CodeBuilder.AddressOf(rangeHibernateCheckboxHook), 5);
+		WriteJumpPatch(layout.RangeHibernateDecisionHookVa, x86CodeBuilder.AddressOf(rangeHibernateDecisionHook), 7);
 		WriteJumpPatch(layout.WaveformSaveHookVa, x86CodeBuilder.AddressOf(offset13), 9);
 		WriteJumpPatch(layout.CueSaveHookVa, x86CodeBuilder.AddressOf(offset12), 9);
 		WriteJumpPatch(layout.CueChainHookVa, x86CodeBuilder.AddressOf(offset9), 23);
@@ -328,6 +345,54 @@ namespace AudioDataPlugIn
 		int suppress = code.Offset;
 		code.EmitIncrementDwordAbsolute(counterAddress);
 		code.EmitJmp(RuntimeVa(suppressBeepVa));
+		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
+		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		return hook;
+	}
+
+	private static int EmitRangeHibernateInitHook(X86CodeBuilder code, uint htoaStateAddress)
+	{
+		int hook = code.Offset;
+		code.EmitCmpByteAbsolute(htoaStateAddress, 0);
+		int regularInitialization = code.EmitJzPlaceholder();
+		code.EmitMovByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
+		code.EmitJmp(RuntimeVa(layout.RangeHibernateInitResumeVa));
+		int regular = code.Offset;
+		code.EmitMovAlToByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa));
+		code.EmitJmp(RuntimeVa(layout.RangeHibernateInitResumeVa));
+		code.PatchBranch(regularInitialization, code.AddressOf(regular));
+		return hook;
+	}
+
+	private static int EmitRangeHibernateCheckboxHook(X86CodeBuilder code, uint htoaStateAddress)
+	{
+		int hook = code.Offset;
+		code.EmitCmpByteAbsolute(htoaStateAddress, 1);
+		int suppressDuringPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
+		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitMovAlToByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa));
+		code.EmitJmp(RuntimeVa(layout.RangeHibernateCheckboxResumeVa));
+		int suppress = code.Offset;
+		code.EmitMovByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
+		code.EmitJmp(RuntimeVa(layout.RangeHibernateCheckboxResumeVa));
+		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
+		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		return hook;
+	}
+
+	private static int EmitRangeHibernateDecisionHook(X86CodeBuilder code, uint htoaStateAddress)
+	{
+		int hook = code.Offset;
+		code.EmitCmpByteAbsolute(htoaStateAddress, 1);
+		int suppressDuringPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
+		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
+		code.EmitJmp(RuntimeVa(layout.RangeHibernateDecisionResumeVa));
+		int suppress = code.Offset;
+		code.EmitMovByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
+		code.EmitJmp(RuntimeVa(layout.RangeHibernateDecisionSkipVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
 		return hook;
@@ -821,6 +886,7 @@ namespace AudioDataPlugIn
 			htoaRangeEndLow = unchecked((uint)rangeEnd);
 			htoaRangeEndHigh = unchecked((uint)(rangeEnd >> 32));
 			WriteHtoaRange(htoaRangeEndLow, htoaRangeEndHigh);
+			Marshal.WriteByte(AddressFromStaticVa(layout.RangeHibernateRequestedVa), 0);
 			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress), 0);
 			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress + 4), 0);
 			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress + 8), 0);
@@ -870,6 +936,7 @@ namespace AudioDataPlugIn
 				", nested=" +
 				Marshal.ReadInt32(new IntPtr((int)htoaBeepCounterAddress + 8)) + ".");
 			WriteHtoaRange(htoaRangeEndLow, htoaRangeEndHigh);
+			Marshal.WriteByte(AddressFromStaticVa(layout.RangeHibernateRequestedVa), 0);
 			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 3);
 			NativeMethods.PostMessageW(
 				mainWindow,
@@ -1313,6 +1380,15 @@ namespace AudioDataPlugIn
 			? (byte)0
 			: Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress));
 		bool htoaActive = htoaState == 1 || htoaState == 2 || htoaState == 3;
+		if (message == 272u && htoaState == 1)
+		{
+			IntPtr hibernateCheckbox = NativeMethods.GetDlgItem(hwnd, HtoaHibernateControlId);
+			if (hibernateCheckbox != IntPtr.Zero)
+			{
+				NativeMethods.EnableWindow(hibernateCheckbox, false);
+				Log("HTOA pass 1 hibernate checkbox disabled.");
+			}
+		}
 		bool preparationActive = b == 2 || b == 3;
 		bool outputSelectionPending =
 			!preparationActive &&
