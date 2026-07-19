@@ -13,14 +13,14 @@ namespace AudioDataPlugIn
     internal static partial class EnhancementRuntime
     {
 		internal const string WorkflowSetupWarningText =
-			"Warning!\r\n\r\nAlthough you are trying to use the 100% log rip workflow, your EAC does not appear to be configured to use it correctly.\r\n" +
+			"Warning!\r\n\r\nYour EAC is not configured to produce 100% log rips.\r\n" +
 			"EAC must be set up with the correct configuration in order to produce rips which adhere to best practices. " +
 			"If you continue anyway, your rips may not qualify as 'perfect' in certain communities.\r\n\r\n" +
-			"It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and change your settings accordingly.\r\n\r\n" +
+			"It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and review the suggested settings.\r\n\r\n" +
 			"Are you sure you want to proceed?";
 		internal const string WorkflowRecommendationWarningText =
-			"Warning!\r\n\r\nYour EAC settings that affect 100% log score appear to be configured correctly. However, one or more other ripping settings do not follow recommended best practices. " +
-			"These settings cannot cause deductions from the log score, but continuing may still produce a subpar rip.\r\n\r\n" +
+			"Warning!\r\n\r\nAlthough your EAC is configured to produce 100% log rips,\r\none or more other ripping settings do not follow recommended best practices. " +
+			"These settings cannot cause deductions in log checkers but continuing may still produce a subpar rip.\r\n\r\n" +
 			"It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and review the suggested settings.\r\n\r\n" +
 			"Are you sure you want to proceed?";
 

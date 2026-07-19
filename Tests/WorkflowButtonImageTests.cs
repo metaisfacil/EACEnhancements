@@ -134,11 +134,11 @@ namespace AudioDataPlugIn
             {
                 "Warning!",
                 String.Empty,
-                "Although you are trying to use the 100% log rip workflow, your EAC does not appear to be configured to use it correctly.",
+                "Your EAC is not configured to produce 100% log rips.",
                 "EAC must be set up with the correct configuration in order to produce rips which adhere to best practices. " +
                     "If you continue anyway, your rips may not qualify as 'perfect' in certain communities.",
                 String.Empty,
-                "It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and change your settings accordingly.",
+                "It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and review the suggested settings.",
                 String.Empty,
                 "Are you sure you want to proceed?"
             });
@@ -149,8 +149,8 @@ namespace AudioDataPlugIn
             {
                 "Warning!",
                 String.Empty,
-                "Your EAC settings that affect 100% log score appear to be configured correctly. However, one or more other ripping settings do not follow recommended best practices. " +
-                    "These settings cannot cause deductions from the log score, but continuing may still produce a subpar rip.",
+                "Although your EAC is configured to produce 100% log rips,\r\none or more other ripping settings do not follow recommended best practices. " +
+                    "These settings cannot cause deductions in log checkers but continuing may still produce a subpar rip.",
                 String.Empty,
                 "It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and review the suggested settings.",
                 String.Empty,
