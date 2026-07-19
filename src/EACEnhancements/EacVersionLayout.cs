@@ -45,6 +45,16 @@ namespace AudioDataPlugIn
         internal readonly uint RangeEjectHook3Va;
         internal readonly uint RangeEjectResume3Va;
         internal readonly uint RangeEjectSkip3Va;
+        internal readonly uint BeepWhenDoneVa;
+        internal readonly uint RangeBeepHook1Va;
+        internal readonly uint RangeBeepResume1Va;
+        internal readonly uint RangeBeepSkip1Va;
+        internal readonly uint RangeBeepHook2Va;
+        internal readonly uint RangeBeepResume2Va;
+        internal readonly uint RangeBeepSkip2Va;
+        internal readonly uint RangeBeepHook3Va;
+        internal readonly uint RangeBeepResume3Va;
+        internal readonly uint RangeBeepSkip3Va;
         internal readonly uint CueSaveHookVa;
         internal readonly uint CueSaveDefaultVa;
         internal readonly uint CueSavePromptVa;
@@ -82,6 +92,7 @@ namespace AudioDataPlugIn
         internal readonly byte[] ExpectedRangeSaveHook;
         internal readonly byte[] ExpectedRangeSaveAcceptedHook;
         internal readonly byte[] ExpectedRangeEjectDecision;
+        internal readonly byte[] ExpectedRangeBeepDecision;
 
         private static readonly byte[] CommandCompletionPrologue =
             Hex("55 89 E5 83 EC 04");
@@ -124,6 +135,16 @@ namespace AudioDataPlugIn
             uint rangeEjectHook3Va,
             uint rangeEjectResume3Va,
             uint rangeEjectSkip3Va,
+            uint beepWhenDoneVa,
+            uint rangeBeepHook1Va,
+            uint rangeBeepResume1Va,
+            uint rangeBeepSkip1Va,
+            uint rangeBeepHook2Va,
+            uint rangeBeepResume2Va,
+            uint rangeBeepSkip2Va,
+            uint rangeBeepHook3Va,
+            uint rangeBeepResume3Va,
+            uint rangeBeepSkip3Va,
             uint cueSaveHookVa,
             uint cueSaveDefaultVa,
             uint cueSavePromptVa,
@@ -194,6 +215,16 @@ namespace AudioDataPlugIn
             RangeEjectHook3Va = rangeEjectHook3Va;
             RangeEjectResume3Va = rangeEjectResume3Va;
             RangeEjectSkip3Va = rangeEjectSkip3Va;
+            BeepWhenDoneVa = beepWhenDoneVa;
+            RangeBeepHook1Va = rangeBeepHook1Va;
+            RangeBeepResume1Va = rangeBeepResume1Va;
+            RangeBeepSkip1Va = rangeBeepSkip1Va;
+            RangeBeepHook2Va = rangeBeepHook2Va;
+            RangeBeepResume2Va = rangeBeepResume2Va;
+            RangeBeepSkip2Va = rangeBeepSkip2Va;
+            RangeBeepHook3Va = rangeBeepHook3Va;
+            RangeBeepResume3Va = rangeBeepResume3Va;
+            RangeBeepSkip3Va = rangeBeepSkip3Va;
             CueSaveHookVa = cueSaveHookVa;
             CueSaveDefaultVa = cueSaveDefaultVa;
             CueSavePromptVa = cueSavePromptVa;
@@ -231,6 +262,7 @@ namespace AudioDataPlugIn
             ExpectedRangeSaveHook = Hex("68 FF 0F 00 00");
             ExpectedRangeSaveAcceptedHook = Hex("68 FF 0F 00 00");
             ExpectedRangeEjectDecision = Hex("80 3D " + LittleEndian(ejectWhenDoneVa) + " 00");
+            ExpectedRangeBeepDecision = Hex("80 3D " + LittleEndian(beepWhenDoneVa) + " 00");
         }
 
         internal static EacVersionLayout Detect(ProcessModule module, IntPtr imageBase)
@@ -349,6 +381,16 @@ namespace AudioDataPlugIn
             0x006276A3,
             0x006276AA,
             0x00627709,
+            0x009B3DD3,
+            0x0062E7C0,
+            0x0062E7C7,
+            0x0062E7FB,
+            0x0063345A,
+            0x00633461,
+            0x00633495,
+            0x00627709,
+            0x00627710,
+            0x00627744,
             0x0040B255,
             0x0040B25E,
             0x0040B2DA,
@@ -422,6 +464,16 @@ namespace AudioDataPlugIn
             0x00623FD3,
             0x00623FDA,
             0x00624039,
+            0x00850C43,
+            0x0062B0F0,
+            0x0062B0F7,
+            0x0062B12B,
+            0x0062FD8A,
+            0x0062FD91,
+            0x0062FDC5,
+            0x00624039,
+            0x00624040,
+            0x00624074,
             0x0040B071,
             0x0040B07A,
             0x0040B0F6,

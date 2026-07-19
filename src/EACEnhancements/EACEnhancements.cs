@@ -167,6 +167,7 @@ namespace AudioDataPlugIn
         private static uint workflowAutoCloseFlagAddress;
         private static uint htoaWorkflowStateAddress;
         private static uint htoaEjectCounterAddress;
+        private static uint htoaBeepCounterAddress;
         private static uint htoaRangeEndLow;
         private static uint htoaRangeEndHigh;
         private static CallWndProcHookDelegate workflowCallWndProcHookDelegate;

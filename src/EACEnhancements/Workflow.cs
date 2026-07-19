@@ -57,6 +57,9 @@ namespace AudioDataPlugIn
 		RequireBytes(layout.RangeEjectHook1Va, layout.ExpectedRangeEjectDecision, "Copy Range eject decision 1");
 		RequireBytes(layout.RangeEjectHook2Va, layout.ExpectedRangeEjectDecision, "Copy Range eject decision 2");
 		RequireBytes(layout.RangeEjectHook3Va, layout.ExpectedRangeEjectDecision, "Copy Range nested eject decision");
+		RequireBytes(layout.RangeBeepHook1Va, layout.ExpectedRangeBeepDecision, "Copy Range beep decision 1");
+		RequireBytes(layout.RangeBeepHook2Va, layout.ExpectedRangeBeepDecision, "Copy Range beep decision 2");
+		RequireBytes(layout.RangeBeepHook3Va, layout.ExpectedRangeBeepDecision, "Copy Range nested beep decision");
 		RequireBytes(
 			layout.LiveSettingsRefreshVa,
 			ExpectedLiveSettingsRefreshPrologue,
@@ -71,11 +74,13 @@ namespace AudioDataPlugIn
 		uint address = num + 100;
 		uint htoaStateAddress = num + 101;
 		uint htoaEjectCountersAddress = num + 104;
+		uint htoaBeepCountersAddress = num + 116;
 		uint htoaOutputPathAddress = num + 256;
 		workflowSelectionBackupAddress = num;
 		workflowAutoCloseFlagAddress = address;
 		htoaWorkflowStateAddress = htoaStateAddress;
 		htoaEjectCounterAddress = htoaEjectCountersAddress;
+		htoaBeepCounterAddress = htoaBeepCountersAddress;
 		X86CodeBuilder x86CodeBuilder = new X86CodeBuilder(workflowCode);
 		int offset = x86CodeBuilder.Offset;
 		x86CodeBuilder.Emit(Hex("3D 14 03 00 00"));
@@ -242,6 +247,24 @@ namespace AudioDataPlugIn
 			htoaEjectCountersAddress + 8,
 			layout.RangeEjectResume3Va,
 			layout.RangeEjectSkip3Va);
+		int rangeBeepHook1 = EmitRangeBeepHook(
+			x86CodeBuilder,
+			htoaStateAddress,
+			htoaBeepCountersAddress,
+			layout.RangeBeepResume1Va,
+			layout.RangeBeepSkip1Va);
+		int rangeBeepHook2 = EmitRangeBeepHook(
+			x86CodeBuilder,
+			htoaStateAddress,
+			htoaBeepCountersAddress + 4,
+			layout.RangeBeepResume2Va,
+			layout.RangeBeepSkip2Va);
+		int rangeBeepHook3 = EmitRangeBeepHook(
+			x86CodeBuilder,
+			htoaStateAddress,
+			htoaBeepCountersAddress + 8,
+			layout.RangeBeepResume3Va,
+			layout.RangeBeepSkip3Va);
 		byte[] array2 = x86CodeBuilder.ToArray();
 		Marshal.Copy(array2, 0, workflowCode, array2.Length);
 		NativeMethods.FlushInstructionCache(NativeMethods.GetCurrentProcess(), workflowCode, new UIntPtr((uint)array2.Length));
@@ -252,6 +275,9 @@ namespace AudioDataPlugIn
 		WriteJumpPatch(layout.RangeEjectHook1Va, x86CodeBuilder.AddressOf(rangeEjectHook1), 7);
 		WriteJumpPatch(layout.RangeEjectHook2Va, x86CodeBuilder.AddressOf(rangeEjectHook2), 7);
 		WriteJumpPatch(layout.RangeEjectHook3Va, x86CodeBuilder.AddressOf(rangeEjectHook3), 7);
+		WriteJumpPatch(layout.RangeBeepHook1Va, x86CodeBuilder.AddressOf(rangeBeepHook1), 7);
+		WriteJumpPatch(layout.RangeBeepHook2Va, x86CodeBuilder.AddressOf(rangeBeepHook2), 7);
+		WriteJumpPatch(layout.RangeBeepHook3Va, x86CodeBuilder.AddressOf(rangeBeepHook3), 7);
 		WriteJumpPatch(layout.WaveformSaveHookVa, x86CodeBuilder.AddressOf(offset13), 9);
 		WriteJumpPatch(layout.CueSaveHookVa, x86CodeBuilder.AddressOf(offset12), 9);
 		WriteJumpPatch(layout.CueChainHookVa, x86CodeBuilder.AddressOf(offset9), 23);
@@ -280,6 +306,28 @@ namespace AudioDataPlugIn
 		int suppress = code.Offset;
 		code.EmitIncrementDwordAbsolute(counterAddress);
 		code.EmitJmp(RuntimeVa(suppressEjectVa));
+		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
+		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		return hook;
+	}
+
+	private static int EmitRangeBeepHook(
+		X86CodeBuilder code,
+		uint htoaStateAddress,
+		uint counterAddress,
+		uint normalResumeVa,
+		uint suppressBeepVa)
+	{
+		int hook = code.Offset;
+		code.EmitCmpByteAbsolute(htoaStateAddress, 1);
+		int suppressDuringPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
+		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(RuntimeVa(layout.BeepWhenDoneVa), 0);
+		code.EmitJmp(RuntimeVa(normalResumeVa));
+		int suppress = code.Offset;
+		code.EmitIncrementDwordAbsolute(counterAddress);
+		code.EmitJmp(RuntimeVa(suppressBeepVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
 		return hook;
@@ -776,6 +824,9 @@ namespace AudioDataPlugIn
 			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress), 0);
 			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress + 4), 0);
 			Marshal.WriteInt32(new IntPtr((int)htoaEjectCounterAddress + 8), 0);
+			Marshal.WriteInt32(new IntPtr((int)htoaBeepCounterAddress), 0);
+			Marshal.WriteInt32(new IntPtr((int)htoaBeepCounterAddress + 4), 0);
+			Marshal.WriteInt32(new IntPtr((int)htoaBeepCounterAddress + 8), 0);
 			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 1);
 			NativeMethods.PostMessageW(
 				mainWindow,
@@ -811,6 +862,13 @@ namespace AudioDataPlugIn
 				Marshal.ReadInt32(new IntPtr((int)htoaEjectCounterAddress + 4)) +
 				", nested=" +
 				Marshal.ReadInt32(new IntPtr((int)htoaEjectCounterAddress + 8)) + ".");
+			Log(
+				"HTOA pass 1 beep branches suppressed: controller-a=" +
+				Marshal.ReadInt32(new IntPtr((int)htoaBeepCounterAddress)) +
+				", controller-b=" +
+				Marshal.ReadInt32(new IntPtr((int)htoaBeepCounterAddress + 4)) +
+				", nested=" +
+				Marshal.ReadInt32(new IntPtr((int)htoaBeepCounterAddress + 8)) + ".");
 			WriteHtoaRange(htoaRangeEndLow, htoaRangeEndHigh);
 			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 3);
 			NativeMethods.PostMessageW(
