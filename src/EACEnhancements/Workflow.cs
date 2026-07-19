@@ -32,6 +32,7 @@ namespace AudioDataPlugIn
 	}
 	internal const int EacPathBufferCapacity = 256;
 	private const int HtoaHibernateControlId = 0x10D9;
+	private const string HtoaDefaultRangeFilename = "HTOA.flac";
 	private const int RangeOutputPathBufferBytes = 8192;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
 		Hex("55 89 E5 89 84 24 00 F0 FF FF 81 EC 48 18 00 00");
@@ -79,7 +80,14 @@ namespace AudioDataPlugIn
 		uint htoaStateAddress = num + 101;
 		uint htoaEjectCountersAddress = num + 104;
 		uint htoaBeepCountersAddress = num + 116;
+		uint htoaDefaultFilenameAddress = num + 128;
 		uint htoaOutputPathAddress = num + 256;
+		byte[] htoaDefaultFilenameBytes = Encoding.Unicode.GetBytes(HtoaDefaultRangeFilename + "\0");
+		Marshal.Copy(
+			htoaDefaultFilenameBytes,
+			0,
+			new IntPtr(unchecked((int)htoaDefaultFilenameAddress)),
+			htoaDefaultFilenameBytes.Length);
 		workflowSelectionBackupAddress = num;
 		workflowAutoCloseFlagAddress = address;
 		htoaWorkflowStateAddress = htoaStateAddress;
@@ -208,8 +216,17 @@ namespace AudioDataPlugIn
 		int rangeSaveHook = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 3);
 		int reuseHtoaOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 1);
+		int useHtoaDefaultFilenameBranch = x86CodeBuilder.EmitJzPlaceholder();
+		int promptWithCurrentFilename = x86CodeBuilder.Offset;
 		x86CodeBuilder.Emit(Hex("68 FF 0F 00 00"));
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveResumeVa));
+		int useHtoaDefaultFilename = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
+			htoaDefaultFilenameAddress,
+			RuntimeVa(layout.RangeOutputPathVa),
+			htoaDefaultFilenameBytes.Length);
+		x86CodeBuilder.EmitJmp(x86CodeBuilder.AddressOf(promptWithCurrentFilename));
 		int reuseHtoaOutputPath = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
 			htoaOutputPathAddress,
@@ -219,6 +236,9 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.PatchBranch(
 			reuseHtoaOutputPathBranch,
 			x86CodeBuilder.AddressOf(reuseHtoaOutputPath));
+		x86CodeBuilder.PatchBranch(
+			useHtoaDefaultFilenameBranch,
+			x86CodeBuilder.AddressOf(useHtoaDefaultFilename));
 		int rangeSaveAcceptedHook = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 1);
 		int captureHtoaOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
