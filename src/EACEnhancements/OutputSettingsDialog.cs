@@ -16,6 +16,8 @@ internal sealed class OutputTemplateSettings
 
 	internal bool ShowRipErrorAlert { get; private set; }
 
+	internal bool ShowWorkflowSetupAlert { get; private set; }
+
 	internal bool CreateWorkflowFolders { get; private set; }
 
 	internal bool EnableLogging { get; private set; }
@@ -24,12 +26,14 @@ internal sealed class OutputTemplateSettings
 		string rootFolder,
 		string folderTemplate,
 		bool showRipErrorAlert,
+		bool showWorkflowSetupAlert,
 		bool createWorkflowFolders,
 		bool enableLogging)
 	{
 		RootFolder = rootFolder;
 		FolderTemplate = folderTemplate;
 		ShowRipErrorAlert = showRipErrorAlert;
+		ShowWorkflowSetupAlert = showWorkflowSetupAlert;
 		CreateWorkflowFolders = createWorkflowFolders;
 		EnableLogging = enableLogging;
 	}
@@ -56,6 +60,8 @@ internal sealed class OutputTemplateDialog : Form
 	private readonly TextBox templateTextBox;
 
 	private readonly CheckBox errorAlertCheckBox;
+
+	private readonly CheckBox workflowSetupAlertCheckBox;
 
 	private readonly CheckBox createWorkflowFoldersCheckBox;
 
@@ -89,7 +95,7 @@ internal sealed class OutputTemplateDialog : Form
 			Margin = Padding.Empty,
 			Padding = Padding.Empty,
 			ColumnCount = 3,
-			RowCount = 9
+			RowCount = 10
 		};
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 97F));
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -98,6 +104,7 @@ internal sealed class OutputTemplateDialog : Form
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
@@ -179,6 +186,18 @@ internal sealed class OutputTemplateDialog : Form
 		layout.Controls.Add(errorAlertCheckBox, 1, 4);
 		layout.SetColumnSpan(errorAlertCheckBox, 2);
 
+		workflowSetupAlertCheckBox = new CheckBox
+		{
+			AutoSize = true,
+			Anchor = AnchorStyles.Left,
+			Margin = Padding.Empty,
+			Text = "Show alert if EAC is misconfigured before starting 100% log workflow",
+			Checked = settings.ShowWorkflowSetupAlert,
+			UseVisualStyleBackColor = true
+		};
+		layout.Controls.Add(workflowSetupAlertCheckBox, 1, 5);
+		layout.SetColumnSpan(workflowSetupAlertCheckBox, 2);
+
 		createWorkflowFoldersCheckBox = new CheckBox
 		{
 			AutoSize = true,
@@ -188,7 +207,7 @@ internal sealed class OutputTemplateDialog : Form
 			Checked = settings.CreateWorkflowFolders,
 			UseVisualStyleBackColor = true
 		};
-		layout.Controls.Add(createWorkflowFoldersCheckBox, 1, 5);
+		layout.Controls.Add(createWorkflowFoldersCheckBox, 1, 6);
 		layout.SetColumnSpan(createWorkflowFoldersCheckBox, 2);
 		createWorkflowFoldersToolTip = new ToolTip();
 		createWorkflowFoldersToolTip.SetToolTip(
@@ -205,7 +224,7 @@ internal sealed class OutputTemplateDialog : Form
 			Checked = settings.EnableLogging,
 			UseVisualStyleBackColor = true
 		};
-		layout.Controls.Add(loggingCheckBox, 1, 6);
+		layout.Controls.Add(loggingCheckBox, 1, 7);
 		layout.SetColumnSpan(loggingCheckBox, 2);
 
 		Button setupCheckButton = new Button
@@ -262,7 +281,7 @@ internal sealed class OutputTemplateDialog : Form
 		bottomRow.Controls.Add(updateCheckButton, 1, 0);
 		bottomRow.Controls.Add(saveButton, 3, 0);
 		bottomRow.Controls.Add(cancelButton, 4, 0);
-		layout.Controls.Add(bottomRow, 0, 8);
+		layout.Controls.Add(bottomRow, 0, 9);
 		layout.SetColumnSpan(bottomRow, 3);
 
 		base.Controls.Add(layout);
@@ -409,6 +428,7 @@ internal sealed class OutputTemplateDialog : Form
 				rootFolder,
 				folderTemplate,
 				errorAlertCheckBox.Checked,
+				workflowSetupAlertCheckBox.Checked,
 				createWorkflowFoldersCheckBox.Checked,
 				loggingCheckBox.Checked);
 			base.DialogResult = DialogResult.OK;

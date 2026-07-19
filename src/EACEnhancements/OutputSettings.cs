@@ -150,6 +150,7 @@ namespace AudioDataPlugIn
 				writer.WriteLine("Root=" + SingleLineIniValue(root));
 				writer.WriteLine("FolderTemplate=" + SingleLineIniValue(folderTemplate));
 				writer.WriteLine("ShowRipErrorAlert=1");
+				writer.WriteLine("ShowWorkflowSetupAlert=1");
 				writer.WriteLine("CreateWorkflowFolders=1");
 				writer.WriteLine("EnableLogging=0");
 			}
@@ -221,6 +222,9 @@ namespace AudioDataPlugIn
 		bool showRipErrorAlert = ParseIniBoolean(
 			ReadIniValue(text, "ShowRipErrorAlert", "1"),
 			true);
+		bool showWorkflowSetupAlert = ParseIniBoolean(
+			ReadIniValue(text, "ShowWorkflowSetupAlert", "1"),
+			true);
 		bool createWorkflowFolders = ParseIniBoolean(
 			ReadIniValue(text, "CreateWorkflowFolders", "1"),
 			true);
@@ -255,6 +259,7 @@ namespace AudioDataPlugIn
 			NormalizeRootFolder(value),
 			text2 ?? string.Empty,
 			showRipErrorAlert,
+			showWorkflowSetupAlert,
 			createWorkflowFolders,
 			enableLogging);
 	}
@@ -271,6 +276,22 @@ namespace AudioDataPlugIn
 		catch (Exception error)
 		{
 			Log("Could not read the rip-error-alert option; defaulting to enabled: " + error.Message);
+			return true;
+		}
+	}
+
+	private static bool IsWorkflowSetupAlertEnabled()
+	{
+		try
+		{
+			string iniPath = GetSettingsFilePath();
+			return ParseIniBoolean(
+				ReadIniValue(iniPath, "ShowWorkflowSetupAlert", "1"),
+				true);
+		}
+		catch (Exception error)
+		{
+			Log("Could not read the workflow-setup-alert option; defaulting to enabled: " + error.Message);
 			return true;
 		}
 	}
@@ -321,6 +342,11 @@ namespace AudioDataPlugIn
 				"OutputTemplate",
 				"ShowRipErrorAlert",
 				settings.ShowRipErrorAlert ? "1" : "0",
+				text4) ||
+			!NativeMethods.WritePrivateProfileStringW(
+				"OutputTemplate",
+				"ShowWorkflowSetupAlert",
+				settings.ShowWorkflowSetupAlert ? "1" : "0",
 				text4) ||
 			!NativeMethods.WritePrivateProfileStringW(
 				"OutputTemplate",
@@ -376,6 +402,7 @@ namespace AudioDataPlugIn
 			"Enhancement settings updated: root='" + text +
 			"', folder='" + text2 +
 			"', ripErrorAlert=" + settings.ShowRipErrorAlert +
+			", workflowSetupAlert=" + settings.ShowWorkflowSetupAlert +
 			", createWorkflowFolders=" + settings.CreateWorkflowFolders +
 			", logging=" + settings.EnableLogging + ".");
 	}

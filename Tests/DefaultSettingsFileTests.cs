@@ -30,6 +30,7 @@ namespace AudioDataPlugIn
                 AssertContains(contents, "Root=");
                 AssertContains(contents, "FolderTemplate=");
                 AssertContains(contents, "ShowRipErrorAlert=1");
+                AssertContains(contents, "ShowWorkflowSetupAlert=1");
                 AssertContains(contents, "CreateWorkflowFolders=1");
                 AssertContains(contents, "EnableLogging=0");
 

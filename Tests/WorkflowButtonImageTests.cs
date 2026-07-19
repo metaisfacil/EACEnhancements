@@ -146,16 +146,22 @@ namespace AudioDataPlugIn
                 throw new InvalidOperationException("The 100% log setup warning text is incorrect.");
 
             EacSetupAuditResult compliant = new EacSetupAuditResult();
-            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(compliant))
+            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(compliant, true))
                 throw new InvalidOperationException("A compliant EAC setup requires confirmation.");
 
             EacSetupAuditResult noncompliant = new EacSetupAuditResult();
             noncompliant.Add("Test", "Setting", "Off", "On");
-            if (!EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant) ||
-                !EnhancementRuntime.WorkflowSetupNeedsConfirmation(null))
+            if (!EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant, true) ||
+                !EnhancementRuntime.WorkflowSetupNeedsConfirmation(null, true))
             {
                 throw new InvalidOperationException(
                     "An incomplete or unavailable EAC setup audit bypassed confirmation.");
+            }
+            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant, false) ||
+                EnhancementRuntime.WorkflowSetupNeedsConfirmation(null, false))
+            {
+                throw new InvalidOperationException(
+                    "The disabled workflow setup alert still requires confirmation.");
             }
         }
     }

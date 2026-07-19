@@ -617,6 +617,7 @@ namespace AudioDataPlugIn
 						dialog.SelectedPath,
 						settings.FolderTemplate,
 						settings.ShowRipErrorAlert,
+						settings.ShowWorkflowSetupAlert,
 						settings.CreateWorkflowFolders,
 						settings.EnableLogging);
 					SaveOutputTemplateSettings(selectedSettings);
@@ -666,11 +667,18 @@ namespace AudioDataPlugIn
 
 	private static bool ConfirmWorkflowSetup(IntPtr mainWindow)
 	{
+		bool showAlert = IsWorkflowSetupAlertEnabled();
+		if (!showAlert)
+		{
+			Log("100% log setup warning skipped because it is disabled in EAC Enhancements options.");
+			return true;
+		}
+
 		EacSetupAuditResult audit = null;
 		try
 		{
 			audit = EacSetupAudit.Run(mainWindow);
-			if (!WorkflowSetupNeedsConfirmation(audit))
+			if (!WorkflowSetupNeedsConfirmation(audit, showAlert))
 				return true;
 			Log("100% log setup warning shown for " + audit.Issues.Count + " audit issue(s).");
 		}
@@ -695,9 +703,11 @@ namespace AudioDataPlugIn
 		return true;
 	}
 
-	internal static bool WorkflowSetupNeedsConfirmation(EacSetupAuditResult audit)
+	internal static bool WorkflowSetupNeedsConfirmation(
+		EacSetupAuditResult audit,
+		bool showAlert)
 	{
-		return audit == null || !audit.IsCompliant;
+		return showAlert && (audit == null || !audit.IsCompliant);
 	}
 
 	private static bool IsGapDetectionTocReady()
