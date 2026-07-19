@@ -145,22 +145,45 @@ namespace AudioDataPlugIn
             if (EnhancementRuntime.WorkflowSetupWarningText != expectedWarning)
                 throw new InvalidOperationException("The 100% log setup warning text is incorrect.");
 
+            string expectedRecommendationWarning = String.Join("\r\n", new[]
+            {
+                "Warning!",
+                String.Empty,
+                "Your EAC settings that affect 100% log score appear to be configured correctly. However, one or more other ripping settings do not follow recommended best practices. " +
+                    "These settings cannot cause deductions from the log score, but continuing may still produce a subpar rip.",
+                String.Empty,
+                "It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and review the suggested settings.",
+                String.Empty,
+                "Are you sure you want to proceed?"
+            });
+            if (EnhancementRuntime.WorkflowRecommendationWarningText != expectedRecommendationWarning)
+                throw new InvalidOperationException("The rip recommendation warning text is incorrect.");
+
             EacSetupAuditResult compliant = new EacSetupAuditResult();
-            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(compliant, true))
+            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(compliant, true) ||
+                EnhancementRuntime.GetWorkflowSetupWarningKind(compliant, true) !=
+                    EnhancementRuntime.WorkflowSetupWarningKind.None)
                 throw new InvalidOperationException("A compliant EAC setup requires confirmation.");
 
             EacSetupAuditResult recommendationOnly = new EacSetupAuditResult();
             recommendationOnly.AddRecommendation("Test", "Recommended setting", "Off", "On");
-            if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(recommendationOnly, true))
+            if (!EnhancementRuntime.WorkflowSetupNeedsConfirmation(recommendationOnly, true) ||
+                EnhancementRuntime.GetWorkflowSetupWarningKind(recommendationOnly, true) !=
+                    EnhancementRuntime.WorkflowSetupWarningKind.Recommendations)
             {
                 throw new InvalidOperationException(
-                    "A recommendation that does not affect log score requires confirmation.");
+                    "A recommendation-only setup did not select the recommendation warning.");
             }
 
             EacSetupAuditResult noncompliant = new EacSetupAuditResult();
             noncompliant.AddLogScoreIssue("Test", "Score setting", "Off", "On");
+            noncompliant.AddRecommendation("Test", "Recommended setting", "Off", "On");
             if (!EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant, true) ||
-                !EnhancementRuntime.WorkflowSetupNeedsConfirmation(null, true))
+                !EnhancementRuntime.WorkflowSetupNeedsConfirmation(null, true) ||
+                EnhancementRuntime.GetWorkflowSetupWarningKind(noncompliant, true) !=
+                    EnhancementRuntime.WorkflowSetupWarningKind.RequiredSettings ||
+                EnhancementRuntime.GetWorkflowSetupWarningKind(null, true) !=
+                    EnhancementRuntime.WorkflowSetupWarningKind.RequiredSettings)
             {
                 throw new InvalidOperationException(
                     "An incomplete or unavailable EAC setup audit bypassed confirmation.");
@@ -176,6 +199,7 @@ namespace AudioDataPlugIn
                 throw new InvalidOperationException("A missing log checksum did not require confirmation.");
 
             if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant, false) ||
+                EnhancementRuntime.WorkflowSetupNeedsConfirmation(recommendationOnly, false) ||
                 EnhancementRuntime.WorkflowSetupNeedsConfirmation(null, false))
             {
                 throw new InvalidOperationException(

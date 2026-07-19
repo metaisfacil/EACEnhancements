@@ -18,6 +18,18 @@ namespace AudioDataPlugIn
 			"If you continue anyway, your rips may not qualify as 'perfect' in certain communities.\r\n\r\n" +
 			"It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and change your settings accordingly.\r\n\r\n" +
 			"Are you sure you want to proceed?";
+		internal const string WorkflowRecommendationWarningText =
+			"Warning!\r\n\r\nYour EAC settings that affect 100% log score appear to be configured correctly. However, one or more other ripping settings do not follow recommended best practices. " +
+			"These settings cannot cause deductions from the log score, but continuing may still produce a subpar rip.\r\n\r\n" +
+			"It is strongly advised you first open Action > EAC Enhancement Options... > Check Rip Configuration... and review the suggested settings.\r\n\r\n" +
+			"Are you sure you want to proceed?";
+
+	internal enum WorkflowSetupWarningKind
+	{
+		None,
+		RequiredSettings,
+		Recommendations
+	}
 	internal const int EacPathBufferCapacity = 256;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
 		Hex("55 89 E5 89 84 24 00 F0 FF FF 81 EC 48 18 00 00");
@@ -675,12 +687,21 @@ namespace AudioDataPlugIn
 		}
 
 		EacSetupAuditResult audit = null;
+		WorkflowSetupWarningKind warningKind = WorkflowSetupWarningKind.RequiredSettings;
 		try
 		{
 			audit = EacSetupAudit.Run(mainWindow);
-			if (!WorkflowSetupNeedsConfirmation(audit, showAlert))
+			warningKind = GetWorkflowSetupWarningKind(audit, showAlert);
+			if (warningKind == WorkflowSetupWarningKind.None)
 				return true;
-			Log("100% log setup warning shown for " + audit.LogScoreIssues.Count + " log-score issue(s).");
+			if (warningKind == WorkflowSetupWarningKind.Recommendations)
+			{
+				Log("100% log recommendation warning shown for " + audit.Recommendations.Count + " recommendation(s).");
+			}
+			else
+			{
+				Log("100% log setup warning shown for " + audit.LogScoreIssues.Count + " required issue(s).");
+			}
 		}
 		catch (Exception ex)
 		{
@@ -689,17 +710,25 @@ namespace AudioDataPlugIn
 
 		DialogResult result = MessageBox.Show(
 			new WindowHandleOwner(mainWindow),
-			WorkflowSetupWarningText,
-			"100% Log Setup Warning",
+			warningKind == WorkflowSetupWarningKind.Recommendations
+				? WorkflowRecommendationWarningText
+				: WorkflowSetupWarningText,
+			warningKind == WorkflowSetupWarningKind.Recommendations
+				? "Rip Configuration Recommendations"
+				: "100% Log Setup Warning",
 			MessageBoxButtons.YesNo,
 			MessageBoxIcon.Warning,
 			MessageBoxDefaultButton.Button2);
 		if (result != DialogResult.Yes)
 		{
-			Log("100% log workflow cancelled at the setup warning.");
+			Log(warningKind == WorkflowSetupWarningKind.Recommendations
+				? "100% log workflow cancelled at the recommendation warning."
+				: "100% log workflow cancelled at the setup warning.");
 			return false;
 		}
-		Log("100% log workflow continuing despite an incomplete setup audit.");
+		Log(warningKind == WorkflowSetupWarningKind.Recommendations
+			? "100% log workflow continuing despite configuration recommendations."
+			: "100% log workflow continuing despite an incomplete setup audit.");
 		return true;
 	}
 
@@ -707,7 +736,20 @@ namespace AudioDataPlugIn
 		EacSetupAuditResult audit,
 		bool showAlert)
 	{
-		return showAlert && (audit == null || !audit.Is100PercentLogCompliant);
+		return GetWorkflowSetupWarningKind(audit, showAlert) != WorkflowSetupWarningKind.None;
+	}
+
+	internal static WorkflowSetupWarningKind GetWorkflowSetupWarningKind(
+		EacSetupAuditResult audit,
+		bool showAlert)
+	{
+		if (!showAlert)
+			return WorkflowSetupWarningKind.None;
+		if (audit == null || !audit.Is100PercentLogCompliant)
+			return WorkflowSetupWarningKind.RequiredSettings;
+		if (audit.Recommendations.Count > 0)
+			return WorkflowSetupWarningKind.Recommendations;
+		return WorkflowSetupWarningKind.None;
 	}
 
 	private static bool IsGapDetectionTocReady()
