@@ -130,7 +130,11 @@ namespace AudioDataPlugIn
 
                     int? command = ReadInteger(drive, "ExtractionCommandSet");
                     if (!command.HasValue || command.Value == 0)
-                        result.Add(section + " > Drive", "Read command", DisplayInteger(command), "Autodetected for this drive");
+                        result.Add(
+                            section + " > Drive",
+                            "Read command",
+                            DisplayReadCommand(command),
+                            "Autodetected for this drive");
 
                     CheckInteger(result, drive, section + " > Offset/Speed", "Speed selection", "SpeedSelection", -1, "Current");
                     CheckEnabled(result, drive, section + " > Offset/Speed", "Allow speed reduction during extraction", "SpeedReduction", true);
@@ -144,15 +148,15 @@ namespace AudioDataPlugIn
                         0,
                         2,
                         "Detection Method A, B, or C (start with A)");
-                    CheckIntegerRange(
-                        result,
-                        drive,
-                        section + " > Gap Detection",
-                        "Detection accuracy",
-                        "GapDetectionAccuracy",
-                        1,
-                        2,
-                        "Secure, or Accurate if Secure stalls");
+                    int? gapAccuracy = ReadInteger(drive, "GapDetectionAccuracy");
+                    if (!gapAccuracy.HasValue || gapAccuracy.Value < 1 || gapAccuracy.Value > 2)
+                    {
+                        result.Add(
+                            section + " > Gap Detection",
+                            "Detection accuracy",
+                            DisplayGapDetectionAccuracy(gapAccuracy),
+                            "Secure, or Accurate if Secure stalls");
+                    }
                 }
             }
         }
@@ -286,6 +290,33 @@ namespace AudioDataPlugIn
         private static string DisplayInteger(int? value)
         {
             return value.HasValue ? value.Value.ToString() : "Not configured";
+        }
+
+        internal static string DisplayReadCommand(int? value)
+        {
+            if (!value.HasValue)
+                return "Not configured";
+            if (value.Value == 0)
+                return "Not autodetected";
+            return "Command set " + value.Value;
+        }
+
+        internal static string DisplayGapDetectionAccuracy(int? value)
+        {
+            if (!value.HasValue)
+                return "Not configured";
+
+            switch (value.Value)
+            {
+                case 0:
+                    return "Inaccurate";
+                case 1:
+                    return "Accurate";
+                case 2:
+                    return "Secure";
+                default:
+                    return "Unknown value (" + value.Value + ")";
+            }
         }
 
         private static string DisplayString(string value)

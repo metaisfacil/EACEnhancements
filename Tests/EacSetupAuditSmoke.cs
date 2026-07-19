@@ -19,6 +19,19 @@ namespace AudioDataPlugIn
                 return 1;
             }
 
+            if (EacSetupAudit.DisplayReadCommand(null) != "Not configured" ||
+                EacSetupAudit.DisplayReadCommand(0) != "Not autodetected" ||
+                EacSetupAudit.DisplayReadCommand(7) != "Command set 7" ||
+                EacSetupAudit.DisplayGapDetectionAccuracy(null) != "Not configured" ||
+                EacSetupAudit.DisplayGapDetectionAccuracy(0) != "Inaccurate" ||
+                EacSetupAudit.DisplayGapDetectionAccuracy(1) != "Accurate" ||
+                EacSetupAudit.DisplayGapDetectionAccuracy(2) != "Secure" ||
+                EacSetupAudit.DisplayGapDetectionAccuracy(3) != "Unknown value (3)")
+            {
+                Console.Error.WriteLine("The drive-option audit did not format enum values clearly.");
+                return 1;
+            }
+
             IntPtr mainWindow = arguments.Length == 0
                 ? IntPtr.Zero
                 : Process.GetProcessById(Int32.Parse(arguments[0])).MainWindowHandle;
