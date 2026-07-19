@@ -16,8 +16,8 @@ using HelperFunctionsLib;
 [assembly: AssemblyDescription("Exact Audio Copy plugin for one-click perfect logs and other creature comforts")]
 [assembly: AssemblyCompany("metaisfacil")]
 [assembly: AssemblyProduct("EAC Enhancements")]
-[assembly: AssemblyVersion("0.14.1.0")]
-[assembly: AssemblyFileVersion("0.14.1.0")]
+[assembly: AssemblyVersion("0.14.2.0")]
+[assembly: AssemblyFileVersion("0.14.2.0")]
 
 namespace AudioDataPlugIn
 {
