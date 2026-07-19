@@ -78,7 +78,7 @@ namespace AudioDataPlugIn
         internal static EacSetupAuditResult Run(IntPtr mainWindow)
         {
             // Base LogScore issues on the Orpheus/OPS deductions implemented by
-            // Cambia, plus settings required to produce the log at all.
+            // Cambia, plus settings required for a complete, verifiable 100% log.
             // Recommendations remain useful guidance but do not gate the workflow.
             EacSetupAuditResult result = new EacSetupAuditResult();
             using (RegistryKey extraction = Registry.CurrentUser.OpenSubKey(EacRoot + @"\Extraction Options"))
@@ -94,7 +94,7 @@ namespace AudioDataPlugIn
                 CheckEnabled(result, startup, "EAC Options > General", "Create log files in English", "CreateEnglishLogFile", true, IssueCategory.Recommendation);
 
                 CheckEnabled(result, extraction, "EAC Options > Tools", "Automatically write status report after extraction", "AutoSaveStatus", true, IssueCategory.LogScore);
-                CheckEnabled(result, extraction, "EAC Options > Tools", "Append checksum to status report", "AddChecksumLogFile", true, IssueCategory.Recommendation);
+                CheckEnabled(result, extraction, "EAC Options > Tools", "Append checksum to status report", "AddChecksumLogFile", true, IssueCategory.LogScore);
                 CheckEnabled(result, extraction, "EAC Options > Tools", "Start external compressors queued in the background", "BackgroundExternalCompression", false, IssueCategory.Recommendation);
                 CheckEnabled(result, startup, "EAC Options > Tools", "Beginner mode", "EasyGUI", false, IssueCategory.Recommendation);
 

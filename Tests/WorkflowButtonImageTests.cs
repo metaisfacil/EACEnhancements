@@ -165,6 +165,16 @@ namespace AudioDataPlugIn
                 throw new InvalidOperationException(
                     "An incomplete or unavailable EAC setup audit bypassed confirmation.");
             }
+
+            EacSetupAuditResult checksumMissing = new EacSetupAuditResult();
+            checksumMissing.AddLogScoreIssue(
+                "EAC Options > Tools",
+                "Append checksum to status report",
+                "Disabled",
+                "Enabled");
+            if (!EnhancementRuntime.WorkflowSetupNeedsConfirmation(checksumMissing, true))
+                throw new InvalidOperationException("A missing log checksum did not require confirmation.");
+
             if (EnhancementRuntime.WorkflowSetupNeedsConfirmation(noncompliant, false) ||
                 EnhancementRuntime.WorkflowSetupNeedsConfirmation(null, false))
             {
