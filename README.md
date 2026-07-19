@@ -8,6 +8,7 @@ EAC Enhancements is an experimental/proof-of-concept third-party plugin for
 Exact Audio Copy that adds a number of quality-of-life features:
 
 - Automated 100% log + cue test & copy workflow
+- Automated 100% log HTOA test & copy workflow
 - Read-only verification of EAC's required 100% log settings
 - Optional alerts after rips highlighting errors
 - Auto-generated album folders with dynamic naming
