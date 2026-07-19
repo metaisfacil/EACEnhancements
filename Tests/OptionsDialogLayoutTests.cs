@@ -109,6 +109,13 @@ namespace AudioDataPlugIn
                 {
                     throw new Exception("Configuration issues were placed in the wrong report category.");
                 }
+                if (reports[0].Text.IndexOf("Required: On", StringComparison.Ordinal) < 0 ||
+                    reports[0].Text.IndexOf("Suggested:", StringComparison.Ordinal) >= 0 ||
+                    reports[1].Text.IndexOf("Suggested: On", StringComparison.Ordinal) < 0 ||
+                    reports[1].Text.IndexOf("Required:", StringComparison.Ordinal) >= 0)
+                {
+                    throw new Exception("Configuration report labels do not match their issue categories.");
+                }
                 if (reports[1].Top <= reports[0].Top)
                     throw new Exception("The recommendations report is not below the log-score report.");
                 dialog.Close();

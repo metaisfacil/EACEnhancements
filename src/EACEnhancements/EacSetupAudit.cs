@@ -444,7 +444,10 @@ namespace AudioDataPlugIn
             };
 
             TextBox logScoreReport = CreateReportTextBox(
-                FormatReport(result.LogScoreIssues, "No 100% log problems were found."),
+                FormatReport(
+                    result.LogScoreIssues,
+                    "No 100% log problems were found.",
+                    "Required"),
                 1);
             logScoreReport.Margin = new Padding(0, 0, 0, 12);
 
@@ -458,7 +461,10 @@ namespace AudioDataPlugIn
             };
 
             TextBox recommendationReport = CreateReportTextBox(
-                FormatReport(result.Recommendations, "No additional recommendations were found."),
+                FormatReport(
+                    result.Recommendations,
+                    "No additional recommendations were found.",
+                    "Suggested"),
                 2);
             recommendationReport.Margin = new Padding(0, 0, 0, 8);
 
@@ -518,7 +524,8 @@ namespace AudioDataPlugIn
 
         private static string FormatReport(
             IList<EacSetupAuditIssue> issues,
-            string emptyMessage)
+            string emptyMessage,
+            string targetLabel)
         {
             if (issues.Count == 0)
                 return emptyMessage;
@@ -536,7 +543,7 @@ namespace AudioDataPlugIn
                 }
                 text.AppendLine("  " + issue.Setting);
                 text.AppendLine("    Current:  " + issue.Current);
-                text.AppendLine("    Required: " + issue.Required);
+                text.AppendLine("    " + targetLabel + ": " + issue.Required);
             }
             return text.ToString().TrimEnd();
         }
