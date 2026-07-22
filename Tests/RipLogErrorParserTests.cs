@@ -17,6 +17,7 @@ internal static class RipLogErrorParserTests
         TestMismatchedHtoaCrcs();
         TestIncompleteHtoaCrcPair();
         TestIncompleteHtoaSecondReportIsNotComplete();
+        TestTracksAbsentFromAccurateRipAreNotMismatches();
         TestCleanLog();
         if (failures != 0)
             Environment.Exit(1);
@@ -66,6 +67,27 @@ internal static class RipLogErrorParserTests
     private static void TestCleanLog()
     {
         AssertEqual(RipLogErrorParser.Parse("No errors occurred\r\nEnd of status report\r\n", 0));
+    }
+
+    private static void TestTracksAbsentFromAccurateRipAreNotMismatches()
+    {
+        string log =
+            "Track  4\r\n" +
+            "  Test CRC B6704598\r\n" +
+            "  Copy CRC B6704598\r\n" +
+            "  Track not present in AccurateRip database\r\n" +
+            "  Copy OK\r\n" +
+            "Track  5\r\n" +
+            "  Test CRC DA0BCBA1\r\n" +
+            "  Copy CRC DA0BCBA1\r\n" +
+            "  Track not present in AccurateRip database\r\n" +
+            "  Copy OK\r\n" +
+            "3 track(s) accurately ripped\r\n" +
+            "2 track(s) not present in the AccurateRip database\r\n" +
+            "Some tracks could not be verified as accurate\r\n" +
+            "No errors occurred\r\n" +
+            "End of status report\r\n";
+        AssertEqual(RipLogErrorParser.Parse(log, 0));
     }
 
     private static void TestAppendedLogUsesOnlyLatestReport()

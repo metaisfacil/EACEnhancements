@@ -104,14 +104,18 @@ namespace AudioDataPlugIn
                     }
                 }
 
-                if (Regex.IsMatch(
+                Match explicitTrackMismatch = Regex.Match(
                     line,
-                    "(?:not accurately ripped|could not be verified as accurate|cannot be verified as accurate)",
-                    RegexOptions.IgnoreCase))
+                    "^\\s*Track\\s+(\\d+)\\s+(?:not accurately ripped|could not be verified as accurate|cannot be verified as accurate)\\b",
+                    RegexOptions.IgnoreCase);
+                bool currentTrackMismatch = currentTrack.HasValue && Regex.IsMatch(
+                    line,
+                    "^\\s*(?:not accurately ripped|could not be verified as accurate|cannot be verified as accurate)\\b",
+                    RegexOptions.IgnoreCase);
+                if (explicitTrackMismatch.Success || currentTrackMismatch)
                 {
-                    Match explicitTrack = Regex.Match(line, "^\\s*Track\\s+(\\d+)\\b", RegexOptions.IgnoreCase);
-                    int? mismatchTrack = explicitTrack.Success
-                        ? (int?)Int32.Parse(explicitTrack.Groups[1].Value)
+                    int? mismatchTrack = explicitTrackMismatch.Success
+                        ? (int?)Int32.Parse(explicitTrackMismatch.Groups[1].Value)
                         : currentTrack;
                     errors.Add("AccurateRip verification mismatch", mismatchTrack, selectedRange && !mismatchTrack.HasValue);
                 }
