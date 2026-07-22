@@ -35,8 +35,12 @@ VersionInfoProductName={#AppName}
 VersionInfoProductVersion={#AppVersion}
 VersionInfoVersion={#AppVersion}
 
+[Messages]
+WelcomeLabel2=This will install [name/ver] on your computer.%n%nImportant: Setup requires administrator privileges to copy files into the Exact Audio Copy folder. Installation may fail if elevation is declined or your account lacks permission to modify the Program Files directory.%n%nClose Exact Audio Copy and all other applications before continuing.
+
 [Files]
 Source: "..\Artifacts\EACEnhancements.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\EACEnhancements.example.ini"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
 
 [Code]
 function DirectoryFromRegistryValue(Value: String): String;

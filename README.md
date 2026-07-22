@@ -31,7 +31,8 @@ See [Command-line use](COMMAND-LINE.md) for details.
 1. Ensure Exact Audio Copy is not running.
 2. Download and run `EACEnhancements-Setup.exe` from the latest release. The
 installer automatically locates EAC; portable installations can be selected
-manually.
+manually. It installs the plugin and a non-destructive
+`EACEnhancements.example.ini` template.
 3. After first install, run EAC as admin so the options file can be created.
 Alternatively, you can manually create your own EACEnhancements.ini based
 on the example provided in this repo and place it next to EAC.exe.
