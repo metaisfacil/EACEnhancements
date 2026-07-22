@@ -35,9 +35,9 @@ See [Command-line use](COMMAND-LINE.md) for details.
 can be initialized.
 
 For a manual installation, download `EACEnhancements.zip` instead and copy
-`EACEnhancements.dll` into the folder containing `EAC.exe`.
+`EACEnhancements.dll` next to `EAC.exe`.
 
-For those building from source, you can use this Powershell helper:
+For those building from source, use this Powershell helper:
 `.\Scripts\Install.ps1 -EacDirectory "path to EAC"`
 
 ## Building
