@@ -4,7 +4,7 @@
 > This is experimental and proof-of-concept software that relies on memory hacking.
 > It has not yet been extensively battle-tested. Proceed at your own risk.
 
-EAC Enhancements is an experimental/proof-of-concept third-party plugin for
+EAC Enhancements is a third-party plugin for
 Exact Audio Copy that adds a number of quality-of-life features:
 
 - Automated 100% log + cue test & copy workflow
