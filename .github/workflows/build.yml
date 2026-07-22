@@ -32,14 +32,18 @@ jobs:
           .\Scripts\Test.ps1
           -InteropPath Artifacts\Reference\Interop.HelperFunctionsLib.dll
 
-      - name: Package installable build
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer
         shell: powershell
         run: .\Scripts\Package.ps1
 
-      - name: Upload installable build
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: EACEnhancements-${{ github.sha }}
-          path: Artifacts/Package/EACEnhancements
+          path: Artifacts/EACEnhancements-Setup.exe
           if-no-files-found: error
           retention-days: 30

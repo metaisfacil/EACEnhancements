@@ -103,7 +103,7 @@ function Get-MissingEacEnhancementsDllMessage {
         return @(
             'This appears to be a source checkout or GitHub source-code archive, which does not include a compiled EACEnhancements.dll.'
             ''
-            'For a normal installation, download EACEnhancements.zip from the Releases page and extract the complete archive:'
+            'For a normal installation, download EACEnhancements-Setup.exe from the Releases page:'
             'https://github.com/metaisfacil/EACEnhancements/releases'
             ''
             'Do not download GitHub''s automatically generated "Source code" ZIP. To install from source instead, run Scripts\Build.ps1 first.'

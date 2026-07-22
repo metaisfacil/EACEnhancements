@@ -29,16 +29,15 @@ See [Command-line use](COMMAND-LINE.md) for details.
 ## Installation
 
 1. Ensure Exact Audio Copy is not running.
-2. If you downloaded a release, extract the complete ZIP and run
-`Install EAC Enhancements.cmd`. The installer automatically locates EAC
-and copies the plugin into its proper location.
-If you built from source, run `Scripts\Install EAC Enhancements.cmd`.
+2. Download and run `EACEnhancements-Setup.exe` from the latest release. The
+installer automatically locates EAC; portable installations can be selected
+manually.
 3. After first install, run EAC as admin so the options file can be created.
 Alternatively, you can manually create your own EACEnhancements.ini based
 on the example provided in this repo and place it next to EAC.exe.
 
-The installer locates registered EAC installations automatically. 
-You can also run `.\Scripts\Install.ps1 -EacDirectory "path to EAC"`.
+Developers building from source can continue to use
+`.\Scripts\Install.ps1 -EacDirectory "path to EAC"`.
 
 ## Building
 
@@ -48,6 +47,9 @@ its location with `-EacDirectory "path to EAC"`.
 
 Run `.\Scripts\Test.ps1` to compile and execute all standalone test programs.
 Their generated executables are written under `Artifacts\Tests`.
+
+Run `.\Scripts\Package.ps1` with Inno Setup 6 installed to build
+`Artifacts\EACEnhancements-Setup.exe`.
 
 ## Using the 100% log workflow
 
@@ -113,7 +115,7 @@ alert identifies affected track numbers when the error is track-specific.
 
 Diagnostic logging is off by default. Enable it in EAC Enhancements Options
 before reproducing a problem, then check `EACEnhancements.log` in the Exact
-Audio Copy folder. Developers can instead use
+Audio Copy folder. Developers can instead use the source checkout's
 `Scripts\Launch EAC with Logging.cmd` for a single logging-enabled session
 without changing the saved option.
 

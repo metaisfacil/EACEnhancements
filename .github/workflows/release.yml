@@ -48,17 +48,21 @@ jobs:
           .\Scripts\Test.ps1
           -InteropPath Artifacts\Reference\Interop.HelperFunctionsLib.dll
 
-      - name: Package release
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer
         shell: powershell
         run: .\Scripts\Package.ps1
 
       - name: Create checksum
         shell: powershell
         run: |
-          $hash = (Get-FileHash -LiteralPath .\Artifacts\EACEnhancements.zip `
+          $hash = (Get-FileHash -LiteralPath .\Artifacts\EACEnhancements-Setup.exe `
             -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *EACEnhancements.zip" | Set-Content `
-            -LiteralPath .\Artifacts\EACEnhancements.sha256 `
+          "$hash *EACEnhancements-Setup.exe" | Set-Content `
+            -LiteralPath .\Artifacts\EACEnhancements-Setup.exe.sha256 `
             -Encoding Ascii
 
       - name: Create GitHub release
@@ -76,8 +80,8 @@ jobs:
           }
           $arguments = @(
             'release', 'create', $env:RELEASE_TAG,
-            '.\Artifacts\EACEnhancements.zip',
-            '.\Artifacts\EACEnhancements.sha256',
+            '.\Artifacts\EACEnhancements-Setup.exe',
+            '.\Artifacts\EACEnhancements-Setup.exe.sha256',
             '--repo', $env:GITHUB_REPOSITORY,
             '--target', $env:GITHUB_SHA,
             '--title', $title,
