@@ -29,10 +29,10 @@ See [Command-line use](COMMAND-LINE.md) for details.
 ## Installation
 
 1. Ensure Exact Audio Copy is not running.
-2. Download [the latest `EACEnhancements-Setup.exe`](https://github.com/metaisfacil/EACEnhancements/releases) and run as administrator.
-The installer should automatically locate EAC for you.
-3. After installing, run EAC itself as admin at least once so the options
-file can be initialized.
+2. Download the latest [`EACEnhancements-Setup.exe`](https://github.com/metaisfacil/EACEnhancements/releases) and run as administrator.
+3. Proceed through the install; it should take no more than 30 seconds.
+3. Afterwards, run EAC itself as admin at least once so the options file
+can be initialized.
 
 For a manual installation, download `EACEnhancements.zip` instead and copy
 `EACEnhancements.dll` into the folder containing `EAC.exe`.
