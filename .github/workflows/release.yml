@@ -11,6 +11,10 @@ on:
         description: Optional release title; defaults to the tag
         required: false
         type: string
+      release_blurb:
+        description: Optional short Markdown blurb prepended to generated notes
+        required: false
+        type: string
       prerelease:
         description: Mark this as a prerelease
         required: true
@@ -90,6 +94,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_NAME: ${{ inputs.release_name }}
+          RELEASE_BLURB: ${{ inputs.release_blurb }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           $title = if ([string]::IsNullOrWhiteSpace($env:RELEASE_NAME)) {
@@ -107,6 +112,9 @@ jobs:
             '--title', $title,
             '--generate-notes'
           )
+          if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_BLURB)) {
+            $arguments += @('--notes', $env:RELEASE_BLURB.Trim())
+          }
           if ($env:PRERELEASE -eq 'true') {
             $arguments += '--prerelease'
           }
