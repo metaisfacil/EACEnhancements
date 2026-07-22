@@ -9,7 +9,7 @@ $eacRoot = Resolve-EacDirectory $EacDirectory
 $executable = Join-Path $eacRoot 'EAC.exe'
 
 $existing = Get-CimInstance Win32_Process |
-    Where-Object { $_.Name -like 'EAC*.exe' }
+    Where-Object { $_.Name -ieq 'EAC.exe' }
 if ($existing) {
     $processList = ($existing | ForEach-Object {
         '{0} (PID {1})' -f $_.Name, $_.ProcessId

@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 function Get-RunningEacProcesses {
     return @(Get-CimInstance Win32_Process |
-        Where-Object { $_.Name -like 'EAC*.exe' })
+        Where-Object { $_.Name -ieq 'EAC.exe' })
 }
 
 function Stop-RunningEacProcesses {

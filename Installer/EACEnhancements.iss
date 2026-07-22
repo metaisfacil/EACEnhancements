@@ -151,7 +151,7 @@ begin
     Locator := CreateOleObject('WbemScripting.SWbemLocator');
     Services := Locator.ConnectServer('.', 'root\CIMV2');
     Processes := Services.ExecQuery(
-      'SELECT ProcessId FROM Win32_Process WHERE Name LIKE "EAC%.exe"');
+      'SELECT ProcessId FROM Win32_Process WHERE Name = "EAC.exe"');
     Result := Processes.Count > 0;
   except
     Log('Could not query running EAC processes.');
