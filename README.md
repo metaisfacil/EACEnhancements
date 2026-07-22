@@ -36,8 +36,9 @@ can be initialized.
 
 For a manual installation, download `EACEnhancements.zip` instead and copy
 `EACEnhancements.dll` into the folder containing `EAC.exe`.
-Developers building from source can use this helper for rapid testing:
-`.\Scripts\Install.ps1 -EacDirectory "path to EAC"`.
+
+For those building from source, you can use this Powershell helper:
+`.\Scripts\Install.ps1 -EacDirectory "path to EAC"`
 
 ## Building
 
@@ -51,7 +52,7 @@ Their generated executables are written under `Artifacts\Tests`.
 Run `.\Scripts\Package.ps1` with Inno Setup 6 installed to build
 `Artifacts\EACEnhancements-Setup.exe`.
 
-## Using the 100% log workflow
+## Workflow use
 
 Select the tracks to rip, then click the golden "100%" button on the left
 side of EAC or choose **Action > Test & Copy + Cue (100% Log)**. 
@@ -67,16 +68,16 @@ The destination works as follows:
 - **Ask every time**, with **Create new folders...** off: Manually choose the folder
   to directly receive the rip files.
 
-## EAC Enhancements options
+## Plugin options
 
 Open **Action > EAC Enhancements Options...** to choose the extraction root,
 folder template, new-folder behavior, rip-error alerts, and diagnostic logging.
 
 The **Check Rip Configuration...** button reports both EAC settings that can
 affect 100% log score and additional configuration changes that are strongly
-recommended. It does not change any settings.
+recommended. It does not change any settings for you.
 
-### Conditional folder components
+### Conditional folder naming
 
 Use EAC's usual percent-style tokens in folder templates. For example:
 
@@ -106,7 +107,7 @@ With both values empty:
 Unknown Artist - Unknown Title [FLAC]
 ```
 
-## Rip-error alerts
+### Rip-error alerts
 
 When enabled, an alert appears after a rip only if EAC reported a problem. The
 alert identifies affected track numbers when the error is track-specific.
