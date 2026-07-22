@@ -32,6 +32,18 @@ namespace AudioDataPlugIn
 	}
 	internal const int EacPathBufferCapacity = 256;
 	private const int HtoaHibernateControlId = 0x10D9;
+	private const int TrackListControlId = 0x000E;
+	private const int NmCustomDraw = -12;
+	private const uint CddsPrepaint = 0x00000001;
+	private const uint CddsItem = 0x00010000;
+	private const uint CddsSubItem = 0x00020000;
+	private const uint CdrfNewFont = 0x00000002;
+	private const uint CdrfNotifyItemDraw = 0x00000020;
+	private const uint CdrfNotifySubItemDraw = 0x00000020;
+	private const uint CdisSelected = 0x00000001;
+	private const uint CdisHot = 0x00000040;
+	private const uint CdisDropHilited = 0x00001000;
+	internal const uint HtoaTrackBackgroundColor = 0x00E1E1E1;
 	private const string HtoaDefaultRangeFilename = "HTOA.flac";
 	private const int RangeOutputPathBufferBytes = 8192;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
@@ -774,6 +786,9 @@ namespace AudioDataPlugIn
 			{
 				Interlocked.Exchange(ref mainWindowSubclassInstalled, 1);
 				Log("Output settings window subclass active.");
+				IntPtr trackList = NativeMethods.GetDlgItem(mainWindow, TrackListControlId);
+				if (trackList != IntPtr.Zero)
+					NativeMethods.InvalidateRect(trackList, IntPtr.Zero, false);
 			}
 		}
 		catch (Exception ex)
@@ -788,6 +803,11 @@ namespace AudioDataPlugIn
 	{
 		try
 		{
+			if (message == NativeMethods.WM_NOTIFY &&
+				IsTrackListCustomDraw(hwnd, lParam))
+			{
+				return HandleTrackListCustomDraw(hwnd, message, wParam, lParam);
+			}
 			int command = (int)wParam.ToInt64() & 0xFFFF;
 			if (message == NativeMethods.WM_DRAWITEM &&
 				command == WorkflowButtonControlId &&
@@ -877,6 +897,72 @@ namespace AudioDataPlugIn
 			return IntPtr.Zero;
 		}
 		return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
+	}
+
+	private static bool IsTrackListCustomDraw(IntPtr mainWindow, IntPtr notificationPointer)
+	{
+		if (notificationPointer == IntPtr.Zero)
+			return false;
+		NativeMethods.NMHDR header = (NativeMethods.NMHDR)Marshal.PtrToStructure(
+			notificationPointer,
+			typeof(NativeMethods.NMHDR));
+		return header.Code == NmCustomDraw &&
+			header.WindowFrom == NativeMethods.GetDlgItem(mainWindow, TrackListControlId);
+	}
+
+	private static IntPtr HandleTrackListCustomDraw(
+		IntPtr hwnd,
+		uint message,
+		IntPtr wParam,
+		IntPtr lParam)
+	{
+		NativeMethods.NMLVCUSTOMDRAW draw =
+			(NativeMethods.NMLVCUSTOMDRAW)Marshal.PtrToStructure(
+				lParam,
+				typeof(NativeMethods.NMLVCUSTOMDRAW));
+		uint stage = draw.CustomDraw.DrawStage;
+		IntPtr result = NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
+
+		if (stage == CddsPrepaint)
+			return CombineCustomDrawResult(result, CdrfNotifyItemDraw);
+
+		if ((stage & (CddsItem | CddsPrepaint)) != (CddsItem | CddsPrepaint))
+			return result;
+
+		// EAC's window procedure may have supplied the red HTOA text color.
+		// Read the structure again after it returns so that color is preserved.
+		draw = (NativeMethods.NMLVCUSTOMDRAW)Marshal.PtrToStructure(
+			lParam,
+			typeof(NativeMethods.NMLVCUSTOMDRAW));
+		if (!ShouldShadeHtoaTrack(
+			unchecked((int)draw.CustomDraw.ItemSpec.ToUInt64()),
+			draw.CustomDraw.ItemState,
+			IsHtoaAvailable()))
+		{
+			return result;
+		}
+
+		draw.TextBackgroundColor = HtoaTrackBackgroundColor;
+		Marshal.StructureToPtr(draw, lParam, false);
+		uint flags = CdrfNewFont;
+		if ((stage & CddsSubItem) == 0)
+			flags |= CdrfNotifySubItemDraw;
+		return CombineCustomDrawResult(result, flags);
+	}
+
+	private static IntPtr CombineCustomDrawResult(IntPtr result, uint flags)
+	{
+		return new IntPtr(result.ToInt64() | flags);
+	}
+
+	internal static bool ShouldShadeHtoaTrack(
+		int itemIndex,
+		uint itemState,
+		bool htoaAvailable)
+	{
+		const uint interactiveState = CdisSelected | CdisHot | CdisDropHilited;
+		return htoaAvailable && itemIndex == 0 &&
+			(itemState & interactiveState) == 0;
 	}
 
 	private static void StartHtoaWorkflow(IntPtr mainWindow)

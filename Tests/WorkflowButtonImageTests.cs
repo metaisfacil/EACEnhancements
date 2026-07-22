@@ -30,6 +30,7 @@ namespace AudioDataPlugIn
                 AssertClickNotificationFiltering();
                 AssertWorkflowInvocationGate();
                 AssertHtoaDetection();
+                AssertHtoaTrackHighlighting();
                 AssertWorkflowSetupConfirmationPolicy();
                 Console.WriteLine("Workflow button image tests passed.");
                 return 0;
@@ -55,6 +56,29 @@ namespace AudioDataPlugIn
             {
                 throw new InvalidOperationException(
                     "An unavailable, zero-length, or data-track HTOA passed the workflow gate.");
+            }
+        }
+
+        private static void AssertHtoaTrackHighlighting()
+        {
+            if (!EnhancementRuntime.ShouldShadeHtoaTrack(0, 0, true))
+                throw new InvalidOperationException("The available HTOA track was not highlighted.");
+
+            uint[] excludedStates = { 0x00000001, 0x00000040, 0x00001000 };
+            foreach (uint state in excludedStates)
+            {
+                if (EnhancementRuntime.ShouldShadeHtoaTrack(0, state, true))
+                {
+                    throw new InvalidOperationException(
+                        "The HTOA background replaced an interactive track-list state.");
+                }
+            }
+
+            if (EnhancementRuntime.ShouldShadeHtoaTrack(1, 0, true) ||
+                EnhancementRuntime.ShouldShadeHtoaTrack(0, 0, false) ||
+                EnhancementRuntime.HtoaTrackBackgroundColor != 0x00E1E1E1)
+            {
+                throw new InvalidOperationException("The HTOA track highlighting policy is incorrect.");
             }
         }
 

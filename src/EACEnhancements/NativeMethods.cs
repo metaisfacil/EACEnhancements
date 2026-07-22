@@ -35,6 +35,7 @@ namespace AudioDataPlugIn
         internal const uint WM_PAINT = 0x000F;
         internal const uint WM_ERASEBKGND = 0x0014;
         internal const uint WM_DRAWITEM = 0x002B;
+        internal const uint WM_NOTIFY = 0x004E;
         internal const uint WM_COMMAND = 0x0111;
         internal const uint WM_SYSCOMMAND = 0x0112;
         internal const uint WM_TIMER = 0x0113;
@@ -96,6 +97,35 @@ namespace AudioDataPlugIn
             internal IntPtr DeviceContext;
             internal RECT ItemRectangle;
             internal UIntPtr ItemData;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NMHDR
+        {
+            internal IntPtr WindowFrom;
+            internal UIntPtr IdFrom;
+            internal int Code;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NMCUSTOMDRAW
+        {
+            internal NMHDR Header;
+            internal uint DrawStage;
+            internal IntPtr DeviceContext;
+            internal RECT Rectangle;
+            internal UIntPtr ItemSpec;
+            internal uint ItemState;
+            internal IntPtr ItemParameter;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NMLVCUSTOMDRAW
+        {
+            internal NMCUSTOMDRAW CustomDraw;
+            internal uint TextColor;
+            internal uint TextBackgroundColor;
+            internal int SubItem;
         }
 
         [StructLayout(LayoutKind.Sequential)]
