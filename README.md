@@ -60,12 +60,12 @@ the preparation and extraction process.
 
 The destination works as follows:
 
-- **Use this directory:** A new album folder is always created inside EAC's
+- **Use this directory:** Automatically create a new album folder inside EAC's
   configured extraction directory.
-- **Ask every time**, with **Create new folders...** enabled: Choose the parent
-  directory in which the new album folder should be created.
-- **Ask every time**, with **Create new folders...** disabled: Choose the folder
-  that should receive the rip files directly.
+- **Ask every time**, with **Create new folders...** on: Manually choose the parent
+  directory for the new album folder.
+- **Ask every time**, with **Create new folders...** off: Manually choose the folder
+  to directly receive the rip files.
 
 ## EAC Enhancements options
 
