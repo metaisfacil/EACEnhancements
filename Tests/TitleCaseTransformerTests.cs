@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace AudioDataPlugIn
 {
@@ -30,6 +31,7 @@ namespace AudioDataPlugIn
 
                 AssertTrack(String.Empty, String.Empty);
                 AssertTrack(null, String.Empty);
+                AssertDatabaseMenuResolution();
                 Console.WriteLine("Title-case transformer tests passed.");
                 return 0;
             }
@@ -39,6 +41,49 @@ namespace AudioDataPlugIn
                 return 1;
             }
         }
+
+        private static void AssertDatabaseMenuResolution()
+        {
+            IntPtr root = CreateMenu();
+            IntPtr database = CreateMenu();
+            IntPtr transform = CreateMenu();
+            if (root == IntPtr.Zero || database == IntPtr.Zero || transform == IntPtr.Zero)
+                throw new InvalidOperationException("Could not create the menu-placement fixture.");
+
+            try
+            {
+                if (!NativeMethods.AppendMenuW(
+                        root,
+                        NativeMethods.MF_POPUP,
+                        new UIntPtr(unchecked((uint)database.ToInt32())),
+                        "&Database") ||
+                    !NativeMethods.AppendMenuW(
+                        database,
+                        NativeMethods.MF_POPUP,
+                        new UIntPtr(unchecked((uint)transform.ToInt32())),
+                        "Tr&ansform Current CD Information"))
+                {
+                    throw new InvalidOperationException("Could not populate the menu-placement fixture.");
+                }
+
+                if (EnhancementRuntime.FindDatabaseTransformMenu(root) != transform)
+                {
+                    throw new InvalidOperationException(
+                        "The Database > Transform Current CD Information submenu was not resolved.");
+                }
+            }
+            finally
+            {
+                DestroyMenu(root);
+            }
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DestroyMenu(IntPtr menu);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr CreateMenu();
 
         private static void AssertTrack(string input, string expected)
         {

@@ -536,29 +536,6 @@ namespace AudioDataPlugIn
 			Log("Installed Action-menu command 0x" + HtoaWorkflowCommand.ToString("X") + ": " + HtoaWorkflowMenuText + ".");
 		}
 		bool flag2 = NativeMethods.GetMenuState(intPtr, 41746u, 0u) != uint.MaxValue;
-		bool transformInstalled = NativeMethods.GetMenuState(
-			intPtr,
-			TransformCurrentCdInformationCommand,
-			0u) != uint.MaxValue;
-		if (workflowInstalled && !transformInstalled)
-		{
-			if (!NativeMethods.AppendMenuW(
-				intPtr,
-				NativeMethods.MF_STRING,
-				new UIntPtr(TransformCurrentCdInformationCommand),
-				TransformCurrentCdInformationMenuText))
-			{
-				throw new InvalidOperationException(
-					"AppendMenuW failed for transform command 0x" +
-					TransformCurrentCdInformationCommand.ToString("X") +
-					" with Win32 error " + Marshal.GetLastWin32Error() + ".");
-			}
-			flag = true;
-			Log(
-				"Installed Action-menu command 0x" +
-				TransformCurrentCdInformationCommand.ToString("X") + ": " +
-				TransformCurrentCdInformationMenuText + ".");
-		}
 		if (workflowInstalled && !flag2)
 		{
 			if (!NativeMethods.AppendMenuW(
@@ -574,6 +551,36 @@ namespace AudioDataPlugIn
 				"Installed Action-menu command 0x" +
 				OutputSettingsCommand.ToString("X") + ": " +
 				OutputSettingsMenuText + ".");
+		}
+		IntPtr transformMenu = FindDatabaseTransformMenu(menu);
+		bool transformInstalled = transformMenu != IntPtr.Zero &&
+			NativeMethods.GetMenuState(
+				transformMenu,
+				TitleCaseTransformCommand,
+				0u) != uint.MaxValue;
+		if (workflowInstalled && !transformInstalled)
+		{
+			if (transformMenu == IntPtr.Zero)
+			{
+				throw new InvalidOperationException(
+					"Database > Transform Current CD Information menu was not found.");
+			}
+			if (!NativeMethods.AppendMenuW(
+				transformMenu,
+				NativeMethods.MF_STRING,
+				new UIntPtr(TitleCaseTransformCommand),
+				TitleCaseTransformMenuText))
+			{
+				throw new InvalidOperationException(
+					"AppendMenuW failed for title-case command 0x" +
+					TitleCaseTransformCommand.ToString("X") +
+					" with Win32 error " + Marshal.GetLastWin32Error() + ".");
+			}
+			flag = true;
+			Log(
+				"Installed Database > Transform Current CD Information command 0x" +
+				TitleCaseTransformCommand.ToString("X") + ": " +
+				TitleCaseTransformMenuText + ".");
 		}
 		if (flag)
 		{
@@ -700,6 +707,40 @@ namespace AudioDataPlugIn
 				}
 			}
 		}
+		return IntPtr.Zero;
+	}
+
+	internal static IntPtr FindDatabaseTransformMenu(IntPtr menu)
+	{
+		IntPtr databaseMenu = FindSubMenu(menu, "Database", 3);
+		if (databaseMenu == IntPtr.Zero)
+			return IntPtr.Zero;
+		return FindSubMenu(databaseMenu, "Transform Current CD Information", 4);
+	}
+
+	private static IntPtr FindSubMenu(IntPtr menu, string expectedText, int fallbackPosition)
+	{
+		int menuItemCount = NativeMethods.GetMenuItemCount(menu);
+		StringBuilder text = new StringBuilder(256);
+		for (int position = 0; position < menuItemCount; position++)
+		{
+			IntPtr subMenu = NativeMethods.GetSubMenu(menu, position);
+			if (subMenu == IntPtr.Zero)
+				continue;
+			text.Length = 0;
+			NativeMethods.GetMenuStringW(
+				menu,
+				(uint)position,
+				text,
+				text.Capacity,
+				NativeMethods.MF_BYPOSITION);
+			string normalized = text.ToString().Replace("&", String.Empty).Trim();
+			if (normalized.Equals(expectedText, StringComparison.OrdinalIgnoreCase))
+				return subMenu;
+		}
+
+		if (fallbackPosition >= 0 && fallbackPosition < menuItemCount)
+			return NativeMethods.GetSubMenu(menu, fallbackPosition);
 		return IntPtr.Zero;
 	}
 
@@ -870,7 +911,7 @@ namespace AudioDataPlugIn
 			}
 			if (message == NativeMethods.WM_COMMAND &&
 				lParam == IntPtr.Zero &&
-				command == (int)TransformCurrentCdInformationCommand)
+				command == (int)TitleCaseTransformCommand)
 			{
 				TransformCurrentCdInformation(hwnd);
 				return IntPtr.Zero;

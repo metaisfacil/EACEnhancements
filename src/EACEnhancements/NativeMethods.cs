@@ -24,6 +24,7 @@ namespace AudioDataPlugIn
         internal const uint PM_REMOVE = 0x0001;
         internal const uint MF_BYCOMMAND = 0x00000000;
         internal const uint MF_BYPOSITION = 0x00000400;
+        internal const uint MF_POPUP = 0x00000010;
         internal const uint MF_SEPARATOR = 0x00000800;
         internal const uint MF_STRING = 0x00000000;
         internal const uint MF_ENABLED = 0x00000000;
