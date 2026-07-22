@@ -1283,7 +1283,7 @@ namespace AudioDataPlugIn
 		string logPrefix)
 	{
 		string template = String.IsNullOrWhiteSpace(settings.FolderTemplate)
-			? "%albumartist% - %albumtitle%"
+			? DefaultFolderTemplate
 			: settings.FolderTemplate;
 		Dictionary<string, string> metadata = ReadWorkflowFolderMetadata(mainWindow);
 		string destination = WorkflowFolderPath.ResolveDestination(

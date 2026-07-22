@@ -28,7 +28,9 @@ namespace AudioDataPlugIn
                 string contents = File.ReadAllText(iniPath, Encoding.Unicode);
                 AssertContains(contents, "[OutputTemplate]");
                 AssertContains(contents, "Root=");
-                AssertContains(contents, "FolderTemplate=");
+                AssertContains(
+                    contents,
+                    "FolderTemplate=%albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%comment%}}}");
                 AssertContains(contents, "ShowRipErrorAlert=1");
                 AssertContains(contents, "ShowWorkflowSetupAlert=1");
                 AssertContains(contents, "CreateWorkflowFolders=1");

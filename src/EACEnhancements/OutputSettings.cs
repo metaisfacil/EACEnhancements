@@ -12,6 +12,9 @@ namespace AudioDataPlugIn
 {
 	internal static partial class EnhancementRuntime
 	{
+	private const string DefaultFolderTemplate =
+		"%albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%comment%}}}";
+
 	internal static void ShowPluginOptions()
 	{
 		try
@@ -113,7 +116,7 @@ namespace AudioDataPlugIn
 			return false;
 
 		string root = "C:\\EAC\\";
-		string folderTemplate = String.Empty;
+		string folderTemplate = DefaultFolderTemplate;
 		using (RegistryKey key = Registry.CurrentUser.OpenSubKey(ExtractionOptionsKey))
 		{
 			if (key != null)
@@ -123,17 +126,6 @@ namespace AudioDataPlugIn
 					String.Empty) as string;
 				if (!String.IsNullOrWhiteSpace(configuredRoot))
 					root = configuredRoot;
-
-				string namingScheme = key.GetValue(
-					"FileNamingConvention",
-					String.Empty) as string;
-				if (!String.IsNullOrWhiteSpace(namingScheme))
-				{
-					namingScheme = namingScheme.Replace('/', '\\');
-					int separator = namingScheme.LastIndexOf('\\');
-					if (separator > 0)
-						folderTemplate = namingScheme.Substring(0, separator);
-				}
 			}
 		}
 
@@ -216,9 +208,8 @@ namespace AudioDataPlugIn
 	private static OutputTemplateSettings LoadOutputTemplateSettings()
 	{
 		string text = GetSettingsFilePath();
-		bool flag = File.Exists(text);
 		string value = ReadIniValue(text, "Root", string.Empty);
-		string text2 = ReadIniValue(text, "FolderTemplate", string.Empty);
+		string text2 = ReadIniValue(text, "FolderTemplate", DefaultFolderTemplate);
 		bool showRipErrorAlert = ParseIniBoolean(
 			ReadIniValue(text, "ShowRipErrorAlert", "1"),
 			true);
@@ -236,19 +227,6 @@ namespace AudioDataPlugIn
 			if (string.IsNullOrWhiteSpace(value) && registryKey != null)
 			{
 				value = registryKey.GetValue("DirectorySpecification", string.Empty) as string;
-			}
-			if (!flag && registryKey != null)
-			{
-				string text3 = registryKey.GetValue("FileNamingConvention", string.Empty) as string;
-				if (!string.IsNullOrWhiteSpace(text3))
-				{
-					text3 = text3.Replace('/', '\\');
-					int num = text3.LastIndexOf('\\');
-					if (num > 0)
-					{
-						text2 = text3.Substring(0, num);
-					}
-				}
 			}
 		}
 		if (string.IsNullOrWhiteSpace(value))
@@ -417,7 +395,7 @@ namespace AudioDataPlugIn
 				return;
 			}
 			string iniPath = GetSettingsFilePath();
-			string template = ReadIniValue(iniPath, "FolderTemplate", string.Empty);
+			string template = ReadIniValue(iniPath, "FolderTemplate", DefaultFolderTemplate);
 			if (!FolderTemplateFormatter.HasConditionalParentheses(template) &&
 				!FolderTemplateFormatter.HasConditionalCurlyBraces(template))
 				return;
