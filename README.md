@@ -29,20 +29,14 @@ See [Command-line use](COMMAND-LINE.md) for details.
 ## Installation
 
 1. Ensure Exact Audio Copy is not running.
-2. Download and run `EACEnhancements-Setup.exe` from the latest release. The
-installer automatically locates EAC; portable installations can be selected
-manually. It installs the plugin and a non-destructive
-`EACEnhancements.example.ini` template.
-3. After first install, run EAC as admin so the options file can be created.
-Alternatively, you can manually create your own EACEnhancements.ini based
-on the example provided in this repo and place it next to EAC.exe.
+2. Download [the latest `EACEnhancements-Setup.exe`](https://github.com/metaisfacil/EACEnhancements/releases) and run as administrator.
+The installer should automatically locate EAC for you.
+3. After installing, run EAC itself as admin at least once so the options
+file can be initialized.
 
 For a manual installation, download `EACEnhancements.zip` instead and copy
-`EACEnhancements.dll` into the folder containing `EAC.exe`. The archive also
-includes `EACEnhancements.example.ini`; rename and customize it only if you
-want to create the settings file manually.
-
-Developers building from source can continue to use
+`EACEnhancements.dll` into the folder containing `EAC.exe`.
+Developers building from source can use this helper for rapid testing:
 `.\Scripts\Install.ps1 -EacDirectory "path to EAC"`.
 
 ## Building
