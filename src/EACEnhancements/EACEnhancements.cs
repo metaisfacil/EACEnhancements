@@ -122,6 +122,7 @@ namespace AudioDataPlugIn
         private const uint CustomWorkflowCommand = 0x0312;
         private const uint HtoaWorkflowCommand = 0xA319;
         private const uint StartHtoaSecondPassCommand = 0xA31A;
+        private const uint TransformCurrentCdInformationCommand = 0xA31B;
         private const uint CompressedCopyRangeCommand = 0x0304;
         private const uint WorkflowDestinationCommand = 0xA313;
         private const uint StartPreparedWorkflowCommand = 0xA314;
@@ -134,6 +135,8 @@ namespace AudioDataPlugIn
         private const uint ReferenceRipCommand = 0x0303;
         private const string CustomWorkflowMenuText = "&Test && Copy + Cue (100% Log)";
         private const string HtoaWorkflowMenuText = "Test && Copy &HTOA (100% Log)";
+        private const string TransformCurrentCdInformationMenuText =
+            "Transform Current CD &Information";
         internal const string WorkflowButtonTooltipText = "Test & Copy + Cue (100% Log)";
         private const string OutputSettingsMenuText = "EAC Enhancements &Options...";
         private const string OutputTemplateIniName = "EACEnhancements.ini";

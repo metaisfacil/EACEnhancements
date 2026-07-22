@@ -32,6 +32,7 @@ namespace AudioDataPlugIn
         internal const int WH_GETMESSAGE = 3;
         internal const int WH_CALLWNDPROC = 4;
         internal const uint WM_CLOSE = 0x0010;
+        internal const uint WM_SETTEXT = 0x000C;
         internal const uint WM_PAINT = 0x000F;
         internal const uint WM_ERASEBKGND = 0x0014;
         internal const uint WM_DRAWITEM = 0x002B;
@@ -48,6 +49,11 @@ namespace AudioDataPlugIn
         internal const uint VK_ESCAPE = 0x1B;
         internal const uint MB_OK = 0x00000000;
         internal const uint MB_ICONWARNING = 0x00000030;
+        internal const uint LVM_GETITEMCOUNT = 0x1004;
+        internal const uint LVM_GETITEMTEXTW = 0x1073;
+        internal const uint LVM_SETITEMTEXTW = 0x1074;
+        internal const uint LVIF_TEXT = 0x0001;
+        internal const int LVN_ENDLABELEDITW = -176;
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct POINT
@@ -126,6 +132,33 @@ namespace AudioDataPlugIn
             internal uint TextColor;
             internal uint TextBackgroundColor;
             internal int SubItem;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct LVITEM
+        {
+            internal uint Mask;
+            internal int Item;
+            internal int SubItem;
+            internal uint State;
+            internal uint StateMask;
+            internal IntPtr Text;
+            internal int TextMaximum;
+            internal int Image;
+            internal IntPtr Parameter;
+            internal int Indent;
+            internal int GroupId;
+            internal uint ColumnCount;
+            internal IntPtr Columns;
+            internal IntPtr ColumnFormats;
+            internal int Group;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NMLVDISPINFO
+        {
+            internal NMHDR Header;
+            internal LVITEM Item;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -312,6 +345,20 @@ namespace AudioDataPlugIn
             uint message,
             IntPtr wParam,
             StringBuilder lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
+        internal static extern IntPtr SendMessageStringW(
+            IntPtr hwnd,
+            uint message,
+            IntPtr wParam,
+            string lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
+        internal static extern IntPtr SendMessageListViewItemW(
+            IntPtr hwnd,
+            uint message,
+            IntPtr wParam,
+            ref LVITEM lParam);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

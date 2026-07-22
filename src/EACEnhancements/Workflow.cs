@@ -33,6 +33,8 @@ namespace AudioDataPlugIn
 	internal const int EacPathBufferCapacity = 256;
 	private const int HtoaHibernateControlId = 0x10D9;
 	private const int TrackListControlId = 0x000E;
+	private const int CdTitleControlId = 0x03E0;
+	private const int TrackTitleSubItem = 1;
 	private const int NmCustomDraw = -12;
 	private const uint CddsPrepaint = 0x00000001;
 	private const uint CddsItem = 0x00010000;
@@ -534,6 +536,29 @@ namespace AudioDataPlugIn
 			Log("Installed Action-menu command 0x" + HtoaWorkflowCommand.ToString("X") + ": " + HtoaWorkflowMenuText + ".");
 		}
 		bool flag2 = NativeMethods.GetMenuState(intPtr, 41746u, 0u) != uint.MaxValue;
+		bool transformInstalled = NativeMethods.GetMenuState(
+			intPtr,
+			TransformCurrentCdInformationCommand,
+			0u) != uint.MaxValue;
+		if (workflowInstalled && !transformInstalled)
+		{
+			if (!NativeMethods.AppendMenuW(
+				intPtr,
+				NativeMethods.MF_STRING,
+				new UIntPtr(TransformCurrentCdInformationCommand),
+				TransformCurrentCdInformationMenuText))
+			{
+				throw new InvalidOperationException(
+					"AppendMenuW failed for transform command 0x" +
+					TransformCurrentCdInformationCommand.ToString("X") +
+					" with Win32 error " + Marshal.GetLastWin32Error() + ".");
+			}
+			flag = true;
+			Log(
+				"Installed Action-menu command 0x" +
+				TransformCurrentCdInformationCommand.ToString("X") + ": " +
+				TransformCurrentCdInformationMenuText + ".");
+		}
 		if (workflowInstalled && !flag2)
 		{
 			if (!NativeMethods.AppendMenuW(
@@ -843,6 +868,13 @@ namespace AudioDataPlugIn
 				ApplyWorkflowButtonState();
 				return IntPtr.Zero;
 			}
+			if (message == NativeMethods.WM_COMMAND &&
+				lParam == IntPtr.Zero &&
+				command == (int)TransformCurrentCdInformationCommand)
+			{
+				TransformCurrentCdInformation(hwnd);
+				return IntPtr.Zero;
+			}
 			if (message == 273 && command == 41746)
 			{
 				ShowOutputSettingsDialog();
@@ -897,6 +929,145 @@ namespace AudioDataPlugIn
 			return IntPtr.Zero;
 		}
 		return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
+	}
+
+	private static void TransformCurrentCdInformation(IntPtr mainWindow)
+	{
+		try
+		{
+			int changedTitles = 0;
+			IntPtr cdTitle = NativeMethods.GetDlgItem(mainWindow, CdTitleControlId);
+			if (cdTitle == IntPtr.Zero)
+				throw new InvalidOperationException("EAC's CD title field was not found.");
+
+			string albumTitle = ReadChildControlText(mainWindow, CdTitleControlId);
+			string transformedAlbumTitle = TitleCaseTransformer.TransformAlbumTitle(albumTitle);
+			if (!String.Equals(albumTitle, transformedAlbumTitle, StringComparison.Ordinal))
+			{
+				if (NativeMethods.SendMessageStringW(
+					cdTitle,
+					NativeMethods.WM_SETTEXT,
+					IntPtr.Zero,
+					transformedAlbumTitle) == IntPtr.Zero)
+				{
+					throw new InvalidOperationException("EAC rejected the transformed CD title.");
+				}
+				changedTitles++;
+			}
+
+			IntPtr trackList = NativeMethods.GetDlgItem(mainWindow, TrackListControlId);
+			if (trackList == IntPtr.Zero)
+				throw new InvalidOperationException("EAC's track list was not found.");
+
+			int trackCount = NativeMethods.SendMessageW(
+				trackList,
+				NativeMethods.LVM_GETITEMCOUNT,
+				IntPtr.Zero,
+				IntPtr.Zero).ToInt32();
+			for (int track = 0; track < trackCount; track++)
+			{
+				string trackTitle = ReadListViewText(trackList, track, TrackTitleSubItem);
+				string transformedTrackTitle =
+					TitleCaseTransformer.TransformTrackTitle(trackTitle);
+				if (String.Equals(trackTitle, transformedTrackTitle, StringComparison.Ordinal))
+					continue;
+
+				WriteTrackTitle(mainWindow, trackList, track, transformedTrackTitle);
+				changedTitles++;
+			}
+
+			NativeMethods.InvalidateRect(trackList, IntPtr.Zero, false);
+			Log(
+				"Transformed current CD information: " + changedTitles +
+				" title" + (changedTitles == 1 ? String.Empty : "s") + " changed.");
+		}
+		catch (Exception ex)
+		{
+			Log("Current CD information transformation failed: " + ex);
+			MessageBox.Show(
+				"EAC Enhancements could not transform the current CD information.\r\n\r\n" +
+				ex.Message,
+				"EAC Enhancements",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Error);
+		}
+	}
+
+	private static string ReadListViewText(IntPtr listView, int item, int subItem)
+	{
+		const int CharacterCapacity = 4096;
+		IntPtr text = Marshal.AllocHGlobal(CharacterCapacity * sizeof(char));
+		try
+		{
+			Marshal.WriteInt16(text, 0);
+			NativeMethods.LVITEM listViewItem = new NativeMethods.LVITEM();
+			listViewItem.SubItem = subItem;
+			listViewItem.Text = text;
+			listViewItem.TextMaximum = CharacterCapacity;
+			NativeMethods.SendMessageListViewItemW(
+				listView,
+				NativeMethods.LVM_GETITEMTEXTW,
+				new IntPtr(item),
+				ref listViewItem);
+			return Marshal.PtrToStringUni(text) ?? String.Empty;
+		}
+		finally
+		{
+			Marshal.FreeHGlobal(text);
+		}
+	}
+
+	private static void WriteTrackTitle(
+		IntPtr mainWindow,
+		IntPtr trackList,
+		int track,
+		string title)
+	{
+		IntPtr text = Marshal.StringToHGlobalUni(title);
+		try
+		{
+			NativeMethods.LVITEM item = new NativeMethods.LVITEM();
+			item.Mask = NativeMethods.LVIF_TEXT;
+			item.Item = track;
+			item.SubItem = TrackTitleSubItem;
+			item.Text = text;
+
+			NativeMethods.NMLVDISPINFO notification = new NativeMethods.NMLVDISPINFO();
+			notification.Header.WindowFrom = trackList;
+			notification.Header.IdFrom = new UIntPtr(TrackListControlId);
+			notification.Header.Code = NativeMethods.LVN_ENDLABELEDITW;
+			notification.Item = item;
+
+			IntPtr notificationPointer = Marshal.AllocHGlobal(
+				Marshal.SizeOf(typeof(NativeMethods.NMLVDISPINFO)));
+			try
+			{
+				Marshal.StructureToPtr(notification, notificationPointer, false);
+				NativeMethods.SendMessageW(
+					mainWindow,
+					NativeMethods.WM_NOTIFY,
+					new IntPtr(TrackListControlId),
+					notificationPointer);
+			}
+			finally
+			{
+				Marshal.FreeHGlobal(notificationPointer);
+			}
+
+			if (NativeMethods.SendMessageListViewItemW(
+				trackList,
+				NativeMethods.LVM_SETITEMTEXTW,
+				new IntPtr(track),
+				ref item) == IntPtr.Zero)
+			{
+				throw new InvalidOperationException(
+					"EAC rejected the transformed title for track " + (track + 1) + ".");
+			}
+		}
+		finally
+		{
+			Marshal.FreeHGlobal(text);
+		}
 	}
 
 	private static bool IsTrackListCustomDraw(IntPtr mainWindow, IntPtr notificationPointer)
