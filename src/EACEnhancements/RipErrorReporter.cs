@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using Microsoft.Win32;
@@ -12,6 +13,12 @@ namespace AudioDataPlugIn
 	internal static void BeginRipSession(string driveName, int mode)
 	{
 		ripSessionStartedUtc = DateTime.UtcNow;
+		ripSessionHtoaPass = GetCurrentHtoaRipPass();
+		if (ripSessionHtoaPass == 1)
+		{
+			htoaRipStartedUtc = ripSessionStartedUtc;
+			Interlocked.Exchange(ref htoaRipSuspiciousCount, 0);
+		}
 		Interlocked.Increment(ref ripSessionGeneration);
 		Interlocked.Exchange(ref ripSessionSuspiciousCount, 0);
 		ripSessionThreadId = (int)NativeMethods.GetCurrentThreadId();
@@ -48,11 +55,33 @@ namespace AudioDataPlugIn
 	{
 		ripSessionActive = false;
 		DateTime startedUtc = ripSessionStartedUtc;
+		int htoaPass = ripSessionHtoaPass;
+		ripSessionHtoaPass = 0;
 		int generation = Interlocked.CompareExchange(ref ripSessionGeneration, 0, 0);
 		int suspiciousCount = Interlocked.CompareExchange(ref ripSessionSuspiciousCount, 0, 0);
 		bool restoreWorkflowDestination = suppressWorkflowFolderTemplate;
 		string preferredOutputDirectory = workflowOutputDirectory;
 		Log("Rip session ended after " + assistedPumpCount + " assisted message pumps.");
+		if (htoaPass == 1 && IsHtoaWorkflowActive())
+		{
+			Interlocked.Add(ref htoaRipSuspiciousCount, suspiciousCount);
+			Log("HTOA rip error report deferred until pass 2 completes.");
+			return;
+		}
+		bool htoaWorkflowReport = htoaPass == 2;
+		if (htoaWorkflowReport)
+		{
+			if (htoaRipStartedUtc != default(DateTime))
+				startedUtc = htoaRipStartedUtc;
+			suspiciousCount += Interlocked.Exchange(ref htoaRipSuspiciousCount, 0);
+			htoaRipStartedUtc = default(DateTime);
+		}
+		else if (htoaPass == 1)
+		{
+			// The first pass was cancelled instead of advancing to pass two.
+			htoaRipStartedUtc = default(DateTime);
+			Interlocked.Exchange(ref htoaRipSuspiciousCount, 0);
+		}
 		bool reportErrors = IsRipErrorAlertEnabled();
 		if (!reportErrors)
 		{
@@ -66,7 +95,30 @@ namespace AudioDataPlugIn
 			suspiciousCount,
 			reportErrors,
 			restoreWorkflowDestination,
-			preferredOutputDirectory);
+			preferredOutputDirectory,
+			htoaWorkflowReport);
+	}
+
+	private static int GetCurrentHtoaRipPass()
+	{
+		if (htoaWorkflowStateAddress == 0)
+			return 0;
+		try
+		{
+			byte state = Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress));
+			if (state == 1 || state == 2)
+				return 1;
+			return state == 3 ? 2 : 0;
+		}
+		catch
+		{
+			return 0;
+		}
+	}
+
+	private static bool IsHtoaWorkflowActive()
+	{
+		return GetCurrentHtoaRipPass() != 0;
 	}
 
 	private static void StartRipCompletionWatcher(
@@ -75,7 +127,8 @@ namespace AudioDataPlugIn
 		int suspiciousCount,
 		bool reportErrors,
 		bool restoreWorkflowDestination,
-		string preferredOutputDirectory)
+		string preferredOutputDirectory,
+		bool htoaWorkflowReport)
 	{
 		Thread thread = new Thread((ThreadStart)delegate
 		{
@@ -85,7 +138,8 @@ namespace AudioDataPlugIn
 				suspiciousCount,
 				reportErrors,
 				restoreWorkflowDestination,
-				preferredOutputDirectory);
+				preferredOutputDirectory,
+				htoaWorkflowReport);
 		});
 		thread.IsBackground = true;
 		thread.Name = "EAC Enhancements rip completion watcher";
@@ -98,7 +152,8 @@ namespace AudioDataPlugIn
 		int suspiciousCount,
 		bool reportErrors,
 		bool restoreWorkflowDestination,
-		string preferredOutputDirectory)
+		string preferredOutputDirectory,
+		bool htoaWorkflowReport)
 	{
 		bool restorationRequested = false;
 		try
@@ -156,7 +211,9 @@ namespace AudioDataPlugIn
 					try
 					{
 						text = File.ReadAllText(fileInfo.FullName);
-						if (RipLogErrorParser.IsLatestReportComplete(text))
+						if (htoaWorkflowReport
+							? RipLogErrorParser.IsHtoaWorkflowComplete(text)
+							: RipLogErrorParser.IsLatestReportComplete(text))
 							break;
 					}
 					catch
@@ -166,7 +223,9 @@ namespace AudioDataPlugIn
 				}
 				Thread.Sleep(300);
 			}
-			List<string> list = RipLogErrorParser.Parse(text, suspiciousCount);
+			List<string> list = htoaWorkflowReport
+				? RipLogErrorParser.ParseHtoaWorkflow(text, suspiciousCount)
+				: RipLogErrorParser.Parse(text, suspiciousCount);
 			if (list.Count == 0)
 			{
 				Log("Rip error report: no extraction errors detected" + ((fileInfo == null) ? "." : (" in '" + fileInfo.FullName + "'.")));

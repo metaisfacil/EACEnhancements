@@ -204,6 +204,9 @@ namespace AudioDataPlugIn
         private static DateTime ripSessionStartedUtc;
         private static int ripSessionGeneration;
         private static int ripSessionSuspiciousCount;
+        private static int ripSessionHtoaPass;
+        private static DateTime htoaRipStartedUtc;
+        private static int htoaRipSuspiciousCount;
 
         [ThreadStatic]
         private static bool insideAssistedPump;

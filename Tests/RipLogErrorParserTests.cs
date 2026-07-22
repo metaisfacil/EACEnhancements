@@ -13,6 +13,10 @@ internal static class RipLogErrorParserTests
         TestCallbackOnlySuspiciousPosition();
         TestAppendedLogUsesOnlyLatestReport();
         TestIncompleteAppendedReportIsNotComplete();
+        TestCleanHtoaWorkflow();
+        TestMismatchedHtoaCrcs();
+        TestIncompleteHtoaCrcPair();
+        TestIncompleteHtoaSecondReportIsNotComplete();
         TestCleanLog();
         if (failures != 0)
             Environment.Exit(1);
@@ -91,6 +95,69 @@ internal static class RipLogErrorParserTests
             failures++;
             Console.Error.WriteLine("An incomplete appended report was incorrectly considered complete.");
         }
+    }
+
+    private static void TestCleanHtoaWorkflow()
+    {
+        string log = HtoaReport("4:34", "255229CD", null) +
+            "------------------------------------------------------------\r\n" +
+            HtoaReport("4:36", "255229CD", null);
+        AssertEqual(RipLogErrorParser.ParseHtoaWorkflow(log, 0));
+        if (!RipLogErrorParser.IsHtoaWorkflowComplete(log))
+        {
+            failures++;
+            Console.Error.WriteLine("Two complete HTOA reports were not recognized as complete.");
+        }
+    }
+
+    private static void TestMismatchedHtoaCrcs()
+    {
+        string log = HtoaReport("4:34", "255229CD", "Read error") +
+            "------------------------------------------------------------\r\n" +
+            HtoaReport("4:36", "DEADBEEF", "Sync error");
+        AssertEqual(
+            RipLogErrorParser.ParseHtoaWorkflow(log, 0),
+            "Read error \u2014 selected range",
+            "Sync error \u2014 selected range",
+            "Mismatched Test/Copy CRC \u2014 selected range");
+    }
+
+    private static void TestIncompleteHtoaCrcPair()
+    {
+        string log = HtoaReport("4:34", "255229CD", null) +
+            "------------------------------------------------------------\r\n" +
+            HtoaReport("4:36", null, null);
+        AssertEqual(
+            RipLogErrorParser.ParseHtoaWorkflow(log, 0),
+            "Missing HTOA Test/Copy CRC \u2014 selected range");
+    }
+
+    private static void TestIncompleteHtoaSecondReportIsNotComplete()
+    {
+        string log = HtoaReport("4:34", "255229CD", null) +
+            "------------------------------------------------------------\r\n" +
+            "Exact Audio Copy V1.8 from 15. July 2024\r\n" +
+            "Range status and errors\r\nSelected range (Sectors 0-45149)\r\n";
+        if (RipLogErrorParser.IsHtoaWorkflowComplete(log))
+        {
+            failures++;
+            Console.Error.WriteLine("An incomplete second HTOA report was considered complete.");
+        }
+    }
+
+    private static string HtoaReport(string time, string copyCrc, string error)
+    {
+        return
+            "Exact Audio Copy V1.8 from 15. July 2024\r\n" +
+            "EAC extraction logfile from 19. July 2026, " + time + "\r\n" +
+            "Range status and errors\r\n" +
+            "Selected range   (Sectors 0-45149)\r\n" +
+            (error == null ? String.Empty : error + "\r\n") +
+            (copyCrc == null ? String.Empty : "Copy CRC " + copyCrc + "\r\n") +
+            (error == null ? "No errors occurred\r\n" : "There were errors\r\n") +
+            "AccurateRip summary\r\n" +
+            "No tracks could be verified as accurate\r\n" +
+            "End of status report\r\n";
     }
 
     private static void AssertEqual(List<string> actual, params string[] expected)

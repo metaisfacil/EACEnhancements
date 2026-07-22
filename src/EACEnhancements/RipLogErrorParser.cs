@@ -9,8 +9,41 @@ namespace AudioDataPlugIn
     {
         internal static List<string> Parse(string logText, int suspiciousCallbackCount)
         {
+            return ParseSelectedText(
+                SelectLatestReport(logText),
+                suspiciousCallbackCount,
+                false,
+                null,
+                null);
+        }
+
+        internal static List<string> ParseHtoaWorkflow(
+            string logText,
+            int suspiciousCallbackCount)
+        {
+            List<string> reports = SelectLatestReports(logText, 2);
+            string firstCrc = reports.Count > 0
+                ? SelectRangeCopyCrc(reports[0])
+                : null;
+            string secondCrc = reports.Count > 1
+                ? SelectRangeCopyCrc(reports[1])
+                : null;
+            return ParseSelectedText(
+                String.Join("\r\n", reports.ToArray()),
+                suspiciousCallbackCount,
+                true,
+                firstCrc,
+                secondCrc);
+        }
+
+        private static List<string> ParseSelectedText(
+            string text,
+            int suspiciousCallbackCount,
+            bool compareHtoaRangeCrcs,
+            string firstHtoaCrc,
+            string secondHtoaCrc)
+        {
             ErrorCollection errors = new ErrorCollection();
-            string text = SelectLatestReport(logText);
             string[] lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
             int? currentTrack = null;
             bool selectedRange = false;
@@ -87,6 +120,20 @@ namespace AudioDataPlugIn
             for (int i = suspiciousLogCount; i < suspiciousCallbackCount; i++)
                 errors.Add("Suspicious position", null, false);
 
+            if (compareHtoaRangeCrcs)
+            {
+                if (firstHtoaCrc == null || secondHtoaCrc == null)
+                {
+                    errors.Add("Missing HTOA Test/Copy CRC", null, true);
+                }
+                else if (!firstHtoaCrc.Equals(
+                    secondHtoaCrc,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("Mismatched Test/Copy CRC", null, true);
+                }
+            }
+
             if (errors.Count == 0 && Regex.IsMatch(
                 text,
                 "^\\s*There were errors\\s*$",
@@ -105,6 +152,23 @@ namespace AudioDataPlugIn
                 StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        internal static bool IsHtoaWorkflowComplete(string logText)
+        {
+            List<string> reports = SelectLatestReports(logText, 2);
+            if (reports.Count != 2)
+                return false;
+            foreach (string report in reports)
+            {
+                if (report.IndexOf(
+                    "End of status report",
+                    StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         internal static string SelectLatestReport(string logText)
         {
             string text = logText ?? String.Empty;
@@ -114,7 +178,7 @@ namespace AudioDataPlugIn
             int reportStart = -1;
             MatchCollection headers = Regex.Matches(
                 text,
-                "^\\s*Exact Audio Copy V[^\\r\\n]*$",
+                "^[\\t ]*Exact Audio Copy V[^\\r\\n]*\\r?$",
                 RegexOptions.IgnoreCase | RegexOptions.Multiline);
             if (headers.Count > 0)
                 reportStart = headers[headers.Count - 1].Index;
@@ -135,6 +199,69 @@ namespace AudioDataPlugIn
             }
 
             return reportStart > 0 ? text.Substring(reportStart) : text;
+        }
+
+        private static List<string> SelectLatestReports(string logText, int maximumCount)
+        {
+            string text = logText ?? String.Empty;
+            List<string> reports = new List<string>();
+            if (text.Length == 0 || maximumCount <= 0)
+                return reports;
+
+            MatchCollection headers = Regex.Matches(
+                text,
+                "^[\\t ]*Exact Audio Copy V[^\\r\\n]*\\r?$",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            if (headers.Count == 0)
+            {
+                reports.Add(text);
+                return reports;
+            }
+
+            int firstHeader = Math.Max(0, headers.Count - maximumCount);
+            for (int i = firstHeader; i < headers.Count; i++)
+            {
+                int start = headers[i].Index;
+                int end = i + 1 < headers.Count ? headers[i + 1].Index : text.Length;
+                reports.Add(text.Substring(start, end - start));
+            }
+            return reports;
+        }
+
+        private static string SelectRangeCopyCrc(string report)
+        {
+            bool selectedRange = false;
+            string[] lines = (report ?? String.Empty).Split(
+                new[] { "\r\n", "\n" },
+                StringSplitOptions.None);
+            foreach (string line in lines)
+            {
+                if (Regex.IsMatch(
+                    line,
+                    "^\\s*(?:Range status and errors|Selected range\\b)",
+                    RegexOptions.IgnoreCase))
+                {
+                    selectedRange = true;
+                }
+                else if (Regex.IsMatch(
+                    line,
+                    "^\\s*(?:AccurateRip summary|End of status report)\\s*$",
+                    RegexOptions.IgnoreCase))
+                {
+                    selectedRange = false;
+                }
+
+                if (selectedRange)
+                {
+                    Match copy = Regex.Match(
+                        line,
+                        "^\\s*Copy CRC\\s+([0-9A-F]+)\\s*$",
+                        RegexOptions.IgnoreCase);
+                    if (copy.Success)
+                        return copy.Groups[1].Value;
+                }
+            }
+            return null;
         }
 
         private static void AddLineError(
