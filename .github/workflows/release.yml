@@ -36,6 +36,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
+      - name: Verify release tag matches source version
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: .\Scripts\AssertReleaseVersion.ps1 -Tag $env:RELEASE_TAG
+
       - name: Build EAC interop reference
         shell: powershell
         run: .\Scripts\BuildInteropReference.ps1
