@@ -134,7 +134,6 @@ namespace AudioDataPlugIn
                 result.AddRecommendation(section, "External compressor", DisplayString(encoder), "A command-line compressor ending in .exe");
 
             CheckEnabled(result, key, section, "Delete WAV after compression", "ExternalEncoderDeleteSource", true, IssueCategory.Recommendation);
-            CheckEnabled(result, key, section, "Use CRC check", "ExternalEncoderCreateCRC", true, IssueCategory.Recommendation);
             CheckEnabled(result, key, section, "Add ID3 tag", "ExternalEncoderID3Tag", false, IssueCategory.LogScore);
             CheckEnabled(result, key, section, "Check external program return code", "ExternalEncoderCheckReturnCode", true, IssueCategory.Recommendation);
 
