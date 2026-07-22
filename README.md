@@ -36,6 +36,11 @@ manually.
 Alternatively, you can manually create your own EACEnhancements.ini based
 on the example provided in this repo and place it next to EAC.exe.
 
+For a manual installation, download `EACEnhancements.zip` instead and copy
+`EACEnhancements.dll` into the folder containing `EAC.exe`. The archive also
+includes `EACEnhancements.example.ini`; rename and customize it only if you
+want to create the settings file manually.
+
 Developers building from source can continue to use
 `.\Scripts\Install.ps1 -EacDirectory "path to EAC"`.
 
