@@ -291,6 +291,30 @@ namespace AudioDataPlugIn
                 InstallCommandCompletionHook();
                 try
                 {
+                    InstallAlbumMetadataTokenLexerHook();
+                }
+                catch (Exception error)
+                {
+                    Log("Album metadata replacement-tag lexer hook installation failed: " + error);
+                }
+                try
+                {
+                    InstallAlbumMetadataFormatterHook();
+                }
+                catch (Exception error)
+                {
+                    Log("Album metadata formatter hook installation failed: " + error);
+                }
+                try
+                {
+                    InstallAlbumMetadataStoreHooks();
+                }
+                catch (Exception error)
+                {
+                    Log("Album metadata persistence hook installation failed: " + error);
+                }
+                try
+                {
                     InstallWorkflowHooks();
                 }
                 catch (Exception error)

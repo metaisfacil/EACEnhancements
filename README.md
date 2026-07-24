@@ -13,6 +13,7 @@ Exact Audio Copy that adds a number of quality-of-life features:
 - Optional alerts after rips highlighting errors
 - Auto-generated album folders with dynamic naming
 - Improved responsiveness of progress window during secure mode rips
+- Album-level CD label, barcode, and catalog-number fields for external compressor tags
 
 Exact Audio Copy 1.6 and 1.8 are supported. No patches or launcher needed.
 
@@ -92,8 +93,10 @@ folder containing the album folder. Audio, cue sheets, logs, playlists, and
 other rip outputs remain directed to the resolved deepest folder until EAC has
 finished its post-rip output.
 
-Triple parentheses include the year and its parentheses only when a year is
-present. Triple curly braces do the same for the comment and its braces.
+Triple parentheses and triple curly braces include their contents and a single
+pair of the corresponding delimiters only when every metadata token inside has
+a value. This works with `%year%`, `%comment%`, `%label%`, `%catalognumber%`,
+`%barcode%`, and the other folder template fields.
 
 With both values present:
 
@@ -107,10 +110,25 @@ With both values empty:
 Unknown Artist - Unknown Title [FLAC]
 ```
 
-### Rip-error alerts
+## Rip-error alerts
 
 When enabled, an alert appears after a rip only if EAC reported a problem. The
 alert identifies affected track numbers when the error is track-specific.
+
+## New metadata fields
+
+The main EAC window receives **CD Label**, **CD Barcode**, and **CD Catalog #**
+fields. Their values are exposed as `%label%`, `%barcode%`, and `%catalognumber%`,
+respectively, in both external compressor arguments and the EAC Enhancements folder
+template. The three new values are retained with EAC's local disc database entry
+and restored when that entry is loaded.
+
+If you want these fields tagged, pass them as additional command-line arguments.
+The example provided below is for FLAC:
+
+```text
+-T "LABEL=%label%" -T "BARCODE=%barcode%" -T "CATALOGNUMBER=%catalognumber%"
+```
 
 ## Troubleshooting
 

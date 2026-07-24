@@ -13,7 +13,10 @@ namespace AudioDataPlugIn
                 { "albumartist", "GULLET" },
                 { "albumtitle", "Hide & Sick" },
                 { "year", "2004" },
-                { "comment", "cpcs-004" }
+                { "comment", "cpcs-004" },
+                { "label", "Some Bizzare" },
+                { "barcode", "012345678905" },
+                { "catalognumber", "CPCS-004" }
             };
             AssertEqual(
                 WorkflowFolderPath.Resolve(
@@ -50,6 +53,37 @@ namespace AudioDataPlugIn
                     "%albumartist%/%year%/%albumtitle%",
                     metadata),
                 "GULLET\\2004\\Hide & Sick");
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist%/%label% - %barcode% - %catalognumber%",
+                    metadata),
+                "GULLET\\Some Bizzare - 012345678905 - CPCS-004");
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%catalognumber%}}}",
+                    metadata),
+                "GULLET - Hide & Sick (2004) [FLAC] {CPCS-004}");
+
+            metadata["catalognumber"] = String.Empty;
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%catalognumber%}}}",
+                    metadata),
+                "GULLET - Hide & Sick (2004) [FLAC]");
+            metadata["catalognumber"] = "CPCS-004";
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist% - %albumtitle% (((%catalognumber%)))",
+                    metadata),
+                "GULLET - Hide & Sick (CPCS-004)");
+
+            metadata["catalognumber"] = String.Empty;
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist% - %albumtitle% (((%catalognumber%)))",
+                    metadata),
+                "GULLET - Hide & Sick");
+            metadata["catalognumber"] = "CPCS-004";
             AssertEqual(
                 WorkflowFolderPath.ResolveDestination(
                     root,

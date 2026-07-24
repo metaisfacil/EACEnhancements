@@ -32,6 +32,7 @@ namespace AudioDataPlugIn
         internal const uint MF_DISABLED = 0x00000002;
         internal const int WH_GETMESSAGE = 3;
         internal const int WH_CALLWNDPROC = 4;
+        internal const uint WM_SIZE = 0x0005;
         internal const uint WM_CLOSE = 0x0010;
         internal const uint WM_SETTEXT = 0x000C;
         internal const uint WM_PAINT = 0x000F;
@@ -45,6 +46,10 @@ namespace AudioDataPlugIn
         internal const uint WM_LBUTTONUP = 0x0202;
         internal const uint WM_MOUSEMOVE = 0x0200;
         internal const uint WM_MOUSELEAVE = 0x02A3;
+        internal const uint WM_SETFONT = 0x0030;
+        internal const uint WM_GETFONT = 0x0031;
+        internal const uint EM_SETLIMITTEXT = 0x00C5;
+        internal const int EN_CHANGE = 0x0300;
         internal const uint SC_CLOSE = 0xF060;
         internal const int IDCANCEL = 2;
         internal const uint VK_ESCAPE = 0x1B;
@@ -268,6 +273,9 @@ namespace AudioDataPlugIn
         internal static extern IntPtr GetDlgItem(IntPtr parent, int controlId);
 
         [DllImport("user32.dll")]
+        internal static extern IntPtr GetParent(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool GetWindowRect(IntPtr hwnd, out RECT rectangle);
 
@@ -333,6 +341,9 @@ namespace AudioDataPlugIn
 
         [DllImport("user32.dll")]
         internal static extern int GetDlgCtrlID(IntPtr hwnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        internal static extern int GetWindowLongW(IntPtr hwnd, int index);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         internal static extern int GetWindowTextW(

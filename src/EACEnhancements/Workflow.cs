@@ -852,6 +852,14 @@ namespace AudioDataPlugIn
 			{
 				Interlocked.Exchange(ref mainWindowSubclassInstalled, 1);
 				Log("Output settings window subclass active.");
+				try
+				{
+					MaybeInstallAlbumMetadataControls(mainWindow);
+				}
+				catch (Exception ex)
+				{
+					Log("Album metadata control installation failed: " + ex);
+				}
 				IntPtr trackList = NativeMethods.GetDlgItem(mainWindow, TrackListControlId);
 				if (trackList != IntPtr.Zero)
 					NativeMethods.InvalidateRect(trackList, IntPtr.Zero, false);
@@ -869,6 +877,8 @@ namespace AudioDataPlugIn
 	{
 		try
 		{
+			if (message == NativeMethods.WM_TIMER)
+				MaybeInstallAlbumMetadataControls(hwnd);
 			if (message == NativeMethods.WM_NOTIFY &&
 				IsTrackListCustomDraw(hwnd, lParam))
 			{
@@ -1602,7 +1612,7 @@ namespace AudioDataPlugIn
 		Log(logPrefix + ": '" + destination + "'.");
 	}
 
-	private static Dictionary<string, string> ReadWorkflowFolderMetadata(IntPtr mainWindow)
+	internal static Dictionary<string, string> ReadWorkflowFolderMetadata(IntPtr mainWindow)
 	{
 		return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
@@ -1612,11 +1622,14 @@ namespace AudioDataPlugIn
 			{ "title", ReadChildControlText(mainWindow, 992) },
 			{ "tracktitle", ReadChildControlText(mainWindow, 992) },
 			{ "year", ReadChildControlText(mainWindow, 995) },
-			{ "genre", ReadChildControlText(mainWindow, 994) },
+			{ "genre", ReadChildControlText(mainWindow, 996) },
 			{ "comment", ReadChildControlText(mainWindow, 883) },
 			{ "composer", ReadChildControlText(mainWindow, 880) },
 			{ "albumcomposer", ReadChildControlText(mainWindow, 880) },
 			{ "albuminterpret", ReadChildControlText(mainWindow, 997) },
+			{ "barcode", ReadChildControlText(mainWindow, AlbumBarcodeControlId) },
+			{ "catalognumber", ReadChildControlText(mainWindow, AlbumCatalogNumberControlId) },
+			{ "label", ReadChildControlText(mainWindow, AlbumLabelControlId) },
 			{ "cdnumber", ReadChildControlText(mainWindow, 881) },
 			{ "totalcds", ReadChildControlText(mainWindow, 882) }
 		};
