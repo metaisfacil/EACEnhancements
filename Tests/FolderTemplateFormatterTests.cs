@@ -19,6 +19,19 @@ internal static class FolderTemplateFormatterTests
             FolderTemplateFormatter.ResolveConditionalParentheses("Album (((%year%)))", false),
             "Album");
         AssertEqual(
+            FolderTemplateFormatter.ResolveConditionalParentheses(
+                "Album (((%catalognumber%)))",
+                delegate(string content)
+                {
+                    return content == "%catalognumber%";
+                }),
+            "Album (%catalognumber%)");
+        AssertEqual(
+            FolderTemplateFormatter.ResolveConditionalParentheses(
+                "Album (((%catalognumber%)))",
+                delegate { return false; }),
+            "Album");
+        AssertEqual(
             FolderTemplateFormatter.ResolveConditionalCurlyBraces("[FLAC] {{{%comment%}}}", true),
             "[FLAC] {%comment%}");
         AssertEqual(
@@ -27,6 +40,14 @@ internal static class FolderTemplateFormatterTests
         AssertEqual(
             FolderTemplateFormatter.ResolveConditionalCurlyBraces("[FLAC]{{{%comment%}}}catalog", true),
             "[FLAC] {%comment%} catalog");
+        AssertEqual(
+            FolderTemplateFormatter.ResolveConditionalCurlyBraces(
+                "[FLAC] {{{%catalognumber%}}}",
+                delegate(string content)
+                {
+                    return content == "%catalognumber%";
+                }),
+            "[FLAC] {%catalognumber%}");
         Console.WriteLine("FolderTemplateFormatter tests passed.");
     }
 

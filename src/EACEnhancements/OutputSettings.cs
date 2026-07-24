@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -400,11 +402,27 @@ namespace AudioDataPlugIn
 				!FolderTemplateFormatter.HasConditionalCurlyBraces(template))
 				return;
 
+			Dictionary<string, string> metadata;
+			IntPtr mainWindow = ReadAbsolutePointer(layout.MainWindowGlobalVa);
+			if (mainWindow != IntPtr.Zero && NativeMethods.IsWindow(mainWindow))
+				metadata = ReadWorkflowFolderMetadata(mainWindow);
+			else
+				metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			metadata["year"] = year > 0
+				? year.ToString(CultureInfo.InvariantCulture)
+				: String.Empty;
+			metadata["comment"] = comment ?? String.Empty;
+			Func<string, bool> includeConditional = delegate(string content)
+			{
+				return WorkflowFolderPath.ConditionalTokensHaveValues(
+					content,
+					metadata);
+			};
 			string effectiveFolder = FolderTemplateFormatter.ResolveConditionalCurlyBraces(
 				FolderTemplateFormatter.ResolveConditionalParentheses(
 					ConvertBraceTokens(NormalizeFolderTemplate(template)),
-					year > 0),
-				!String.IsNullOrWhiteSpace(comment));
+					includeConditional),
+				includeConditional);
 			bool changed = false;
 			string[] names = { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
 			string[] defaults = { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };

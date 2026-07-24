@@ -18,11 +18,15 @@ namespace AudioDataPlugIn
         {
             string percentTemplate = EnhancementRuntime.ConvertBraceTokens(
                 EnhancementRuntime.NormalizeFolderTemplate(template));
+            Func<string, bool> includeConditional = delegate(string content)
+            {
+                return ConditionalTokensHaveValues(content, metadata);
+            };
             string conditionalTemplate = FolderTemplateFormatter.ResolveConditionalCurlyBraces(
                 FolderTemplateFormatter.ResolveConditionalParentheses(
                     percentTemplate,
-                    HasValue(metadata, "year")),
-                HasValue(metadata, "comment"));
+                    includeConditional),
+                includeConditional);
             // Split only separators authored in the template. Metadata values
             // are expanded afterward so a slash in an album title is sanitized
             // as part of that folder name rather than becoming another level.
@@ -73,6 +77,19 @@ namespace AudioDataPlugIn
         {
             string value;
             return metadata.TryGetValue(key, out value) && !String.IsNullOrWhiteSpace(value);
+        }
+
+        internal static bool ConditionalTokensHaveValues(
+            string content,
+            IDictionary<string, string> metadata)
+        {
+            MatchCollection matches = Token.Matches(content ?? String.Empty);
+            foreach (Match match in matches)
+            {
+                if (!HasValue(metadata, match.Groups[1].Value))
+                    return false;
+            }
+            return true;
         }
 
         private static string SanitizeComponent(string value)
