@@ -18,6 +18,7 @@ internal static class RipLogErrorParserTests
         TestIncompleteHtoaCrcPair();
         TestIncompleteHtoaSecondReportIsNotComplete();
         TestTracksAbsentFromAccurateRipAreNotMismatches();
+        TestAccurateRipResultsAreNeverErrors();
         TestCleanLog();
         if (failures != 0)
             Environment.Exit(1);
@@ -44,8 +45,7 @@ internal static class RipLogErrorParserTests
             "Read error (2) \u2014 track 1",
             "Suspicious position \u2014 track 1",
             "Mismatched Test/Copy CRC \u2014 track 1",
-            "Sync error \u2014 track 4",
-            "AccurateRip verification mismatch (2) \u2014 tracks 4, 7");
+            "Sync error \u2014 track 4");
     }
 
     private static void TestSelectedRange()
@@ -87,6 +87,38 @@ internal static class RipLogErrorParserTests
             "Some tracks could not be verified as accurate\r\n" +
             "No errors occurred\r\n" +
             "End of status report\r\n";
+        AssertEqual(RipLogErrorParser.Parse(log, 0));
+    }
+
+    private static void TestAccurateRipResultsAreNeverErrors()
+    {
+        string log =
+            "Track  1\r\n" +
+            "  Test CRC D23A99E3\r\n" +
+            "  Copy CRC D23A99E3\r\n" +
+            "  Cannot be verified as accurate (confidence 3)\r\n" +
+            "  Copy OK\r\n" +
+            "Track  2\r\n" +
+            "  Test CRC 6D4C68B8\r\n" +
+            "  Copy CRC 6D4C68B8\r\n" +
+            "  Cannot be verified as accurate (confidence 3)\r\n" +
+            "  Copy OK\r\n" +
+            "Track  3\r\n" +
+            "  Not accurately ripped (confidence 7)\r\n" +
+            "  Copy OK\r\n" +
+            "AccurateRip summary\r\n" +
+            "Track 1 could not be verified as accurate\r\n" +
+            "Track 2 cannot be verified as accurate\r\n" +
+            "Track 3 not accurately ripped\r\n" +
+            "No tracks could be verified as accurate\r\n" +
+            "You may have a different pressing from the one(s) in the database\r\n" +
+            "No errors occurred\r\n" +
+            "End of status report\r\n" +
+            "---- CUETools DB Plugin V2.2.6\r\n" +
+            "Track | CTDB Status\r\n" +
+            "  1   | (15/16) Accurately ripped\r\n" +
+            "  2   | (0/16) No match\r\n" +
+            "  3   | (0/16) No match\r\n";
         AssertEqual(RipLogErrorParser.Parse(log, 0));
     }
 
