@@ -16,6 +16,14 @@ namespace AudioDataPlugIn
             string template,
             IDictionary<string, string> metadata)
         {
+            return Resolve(template, metadata, null);
+        }
+
+        internal static string Resolve(
+            string template,
+            IDictionary<string, string> metadata,
+            IDictionary<char, string> characterReplacements)
+        {
             string percentTemplate = EnhancementRuntime.ConvertBraceTokens(
                 EnhancementRuntime.NormalizeFolderTemplate(template));
             Func<string, bool> includeConditional = delegate(string content)
@@ -41,7 +49,9 @@ namespace AudioDataPlugIn
                         throw new ArgumentException(
                             "The folder template token " + match.Value +
                             " cannot be resolved before extraction begins.");
-                    return value ?? String.Empty;
+                    return ApplyCharacterReplacements(
+                        value ?? String.Empty,
+                        characterReplacements);
                 });
                 string sanitized = SanitizeComponent(expanded);
                 if (sanitized.Length == 0)
@@ -57,13 +67,30 @@ namespace AudioDataPlugIn
             IDictionary<string, string> metadata,
             bool createWorkflowFolder)
         {
+            return ResolveDestination(
+                rootFolder,
+                template,
+                metadata,
+                createWorkflowFolder,
+                null);
+        }
+
+        internal static string ResolveDestination(
+            string rootFolder,
+            string template,
+            IDictionary<string, string> metadata,
+            bool createWorkflowFolder,
+            IDictionary<char, string> characterReplacements)
+        {
             string root = Path.GetFullPath(rootFolder);
             if (!createWorkflowFolder)
                 return String.Equals(root, Path.GetPathRoot(root), StringComparison.OrdinalIgnoreCase)
                     ? root
                     : root.TrimEnd('\\');
 
-            string destination = Path.GetFullPath(Path.Combine(root, Resolve(template, metadata)));
+            string destination = Path.GetFullPath(Path.Combine(
+                root,
+                Resolve(template, metadata, characterReplacements)));
             string rootedPrefix = root.EndsWith("\\", StringComparison.Ordinal)
                 ? root
                 : root + "\\";
@@ -102,6 +129,27 @@ namespace AudioDataPlugIn
                     result[index] = '_';
             }
             return result.ToString().TrimEnd(' ', '.');
+        }
+
+        private static string ApplyCharacterReplacements(
+            string value,
+            IDictionary<char, string> characterReplacements)
+        {
+            if (String.IsNullOrEmpty(value) ||
+                characterReplacements == null ||
+                characterReplacements.Count == 0)
+                return value ?? String.Empty;
+
+            StringBuilder result = new StringBuilder(value.Length);
+            foreach (char character in value)
+            {
+                string replacement;
+                if (characterReplacements.TryGetValue(character, out replacement))
+                    result.Append(replacement);
+                else
+                    result.Append(character);
+            }
+            return result.ToString();
         }
     }
 }

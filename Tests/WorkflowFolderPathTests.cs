@@ -99,6 +99,30 @@ namespace AudioDataPlugIn
                     metadata),
                 "GULLET\\2004\\Hide _ Sick_Deluxe");
 
+            Dictionary<char, string> characterReplacements = new Dictionary<char, string>
+            {
+                { ':', "：" },
+                { '/', "／" },
+                { '\\', "＼" },
+                { '"', "''" },
+                { '&', " and " },
+                { '#', String.Empty }
+            };
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "%albumartist%/%year%/%albumtitle%",
+                    metadata,
+                    characterReplacements),
+                "GULLET\\2004\\Hide ／ Sick＼Deluxe");
+
+            metadata["albumtitle"] = "A: \"B\" & C#";
+            AssertEqual(
+                WorkflowFolderPath.Resolve(
+                    "Literal & %albumtitle%",
+                    metadata,
+                    characterReplacements),
+                "Literal & A： ''B''  and  C");
+
             Console.WriteLine("Workflow folder path tests passed.");
             return 0;
         }

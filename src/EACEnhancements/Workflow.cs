@@ -1594,11 +1594,14 @@ namespace AudioDataPlugIn
 			? DefaultFolderTemplate
 			: settings.FolderTemplate;
 		Dictionary<string, string> metadata = ReadWorkflowFolderMetadata(mainWindow);
+		Dictionary<char, string> characterReplacements =
+			ReadEacFilenameCharacterReplacements();
 		string destination = WorkflowFolderPath.ResolveDestination(
 			settings.RootFolder,
 			template,
 			metadata,
-			true);
+			true,
+			characterReplacements);
 		Directory.CreateDirectory(destination);
 
 		// EAC derives CUE, playlist, and log paths directly from these live
@@ -1610,6 +1613,42 @@ namespace AudioDataPlugIn
 		WriteEacPathBuffer(layout.StandardDirectoryPathVa, destination);
 		WriteEacPathBuffer(layout.ActualPathVa, destination);
 		Log(logPrefix + ": '" + destination + "'.");
+	}
+
+	private static Dictionary<char, string> ReadEacFilenameCharacterReplacements()
+	{
+		const int ruleCount = 16;
+		const int ruleStride = 0x20;
+		const int replacementOffset = sizeof(char);
+		const int replacementCapacity = 8;
+		Dictionary<char, string> replacements = new Dictionary<char, string>();
+		IntPtr table = AddressFromStaticVa(layout.FilenameCharacterReplacementTableVa);
+
+		for (int ruleIndex = 0; ruleIndex < ruleCount; ruleIndex++)
+		{
+			IntPtr rule = Add(table, ruleIndex * ruleStride);
+			char source = (char)(ushort)Marshal.ReadInt16(rule);
+			if (source == '\0' || replacements.ContainsKey(source))
+				continue;
+
+			StringBuilder replacement = new StringBuilder(replacementCapacity);
+			for (int characterIndex = 0;
+				characterIndex < replacementCapacity;
+				characterIndex++)
+			{
+				char character = (char)(ushort)Marshal.ReadInt16(
+					Add(rule, replacementOffset + (characterIndex * sizeof(char))));
+				if (character == '\0')
+					break;
+				replacement.Append(character);
+			}
+
+			// EAC evaluates the rules in order and uses the first matching
+			// source character. An empty replacement deletes that character.
+			replacements.Add(source, replacement.ToString());
+		}
+
+		return replacements;
 	}
 
 	internal static Dictionary<string, string> ReadWorkflowFolderMetadata(IntPtr mainWindow)
