@@ -751,7 +751,8 @@ namespace AudioDataPlugIn
             SetAlbumMetadataEditText(
                 albumCatalogNumberEdit,
                 albumCatalogNumber);
-            albumMetadataStoreLoadPending = false;
+            CompletePendingAlbumMetadataStoreLoadIfReady(
+                albumMetadataParent);
             ApplyAlbumMetadataControlState(albumMetadataParent);
             Log("CD Label, CD Barcode, and CD Catalog # fields installed on EAC's main window.");
         }
@@ -1205,11 +1206,41 @@ namespace AudioDataPlugIn
                 albumLabel = ReadWindowText(albumLabelEdit);
                 MarkAlbumMetadataStoreDirty(parent);
             }
-            else if (command == CdTitleControlId &&
-                String.IsNullOrEmpty(ReadWindowText(lParam)))
+            else if (command == CdTitleControlId)
             {
-                ClearAlbumMetadataControls();
+                if (String.IsNullOrEmpty(ReadWindowText(lParam)))
+                {
+                    if (!albumMetadataStoreLoadPending)
+                        ClearAlbumMetadataControls();
+                }
+                else
+                {
+                    CompletePendingAlbumMetadataStoreLoadIfReady(parent);
+                }
             }
+        }
+
+        private static void CompletePendingAlbumMetadataStoreLoadIfReady(
+            IntPtr parent)
+        {
+            if (!albumMetadataStoreLoadPending ||
+                !AreAlbumMetadataControlsAvailable())
+            {
+                return;
+            }
+            IntPtr title = NativeMethods.GetDlgItem(parent, CdTitleControlId);
+            if (title == IntPtr.Zero ||
+                String.IsNullOrEmpty(ReadWindowText(title)))
+            {
+                return;
+            }
+
+            SetAlbumMetadataEditText(albumLabelEdit, albumLabel);
+            SetAlbumMetadataEditText(albumBarcodeEdit, albumBarcode);
+            SetAlbumMetadataEditText(
+                albumCatalogNumberEdit,
+                albumCatalogNumber);
+            albumMetadataStoreLoadPending = false;
         }
 
         private static void MarkAlbumMetadataStoreDirty(IntPtr parent)

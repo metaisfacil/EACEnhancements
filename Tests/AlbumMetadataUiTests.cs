@@ -141,6 +141,11 @@ namespace AudioDataPlugIn
                         NativeMethods.GetDlgItem(host.Handle, 0xA31E),
                         NativeMethods.GetDlgItem(host.Handle, 0xA31F)
                     });
+                AssertHydratedMetadataSurvivesUiRefresh(
+                    title,
+                    label,
+                    barcode,
+                    catalogNumber);
                 AssertLabelsDoNotOverlap(
                     host.Handle,
                     label,
@@ -200,6 +205,72 @@ namespace AudioDataPlugIn
 
             Console.WriteLine("Album metadata UI tests passed.");
             return 0;
+        }
+
+        private static void AssertHydratedMetadataSurvivesUiRefresh(
+            IntPtr title,
+            IntPtr label,
+            IntPtr barcode,
+            IntPtr catalogNumber)
+        {
+            EnhancementRuntime.ApplyStoredAlbumMetadataValues(
+                "Refreshed Label",
+                "123456789012",
+                "REFRESH-1");
+
+            NativeMethods.SendMessageStringW(
+                title,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                String.Empty);
+            NativeMethods.SendMessageStringW(
+                label,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                String.Empty);
+            NativeMethods.SendMessageStringW(
+                barcode,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                String.Empty);
+            NativeMethods.SendMessageStringW(
+                catalogNumber,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                String.Empty);
+            NativeMethods.SendMessageStringW(
+                title,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                "Refreshed Album");
+            Application.DoEvents();
+
+            AssertWindowText(label, "Refreshed Label", "refreshed label");
+            AssertWindowText(barcode, "123456789012", "refreshed barcode");
+            AssertWindowText(
+                catalogNumber,
+                "REFRESH-1",
+                "refreshed catalog number");
+
+            // Once the matching refresh has settled, a later empty title is
+            // a real disc-context reset and must clear the sidecar fields.
+            NativeMethods.SendMessageStringW(
+                title,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                String.Empty);
+            Application.DoEvents();
+            AssertWindowText(label, String.Empty, "cleared label");
+            AssertWindowText(barcode, String.Empty, "cleared barcode");
+            AssertWindowText(
+                catalogNumber,
+                String.Empty,
+                "cleared catalog number");
+            NativeMethods.SendMessageStringW(
+                title,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                "Loaded Album");
         }
 
         private static void AssertAlbumMetadataEnabledState(
@@ -529,6 +600,29 @@ namespace AudioDataPlugIn
             {
                 throw new Exception(
                     "The album metadata label '" + expected + "' is missing.");
+            }
+        }
+
+        private static void AssertWindowText(
+            IntPtr control,
+            string expected,
+            string description)
+        {
+            StringBuilder text = new StringBuilder(512);
+            if (control == IntPtr.Zero ||
+                (NativeMethods.GetWindowTextW(
+                        control,
+                        text,
+                        text.Capacity) == 0 &&
+                    expected.Length != 0) ||
+                !String.Equals(
+                    text.ToString(),
+                    expected,
+                    StringComparison.Ordinal))
+            {
+                throw new Exception(
+                    "The " + description + " was expected to be '" +
+                    expected + "' but was '" + text + "'.");
             }
         }
 

@@ -12,6 +12,7 @@ namespace AudioDataPlugIn
             TestEmptyValuesRemoveStoredPayload();
             TestMalformedOrForeignTextIsUntouched();
             TestNativeBufferAccess();
+            TestUiRecordFiltering();
 
             Console.WriteLine("Album metadata store tests passed.");
             return 0;
@@ -176,6 +177,26 @@ namespace AudioDataPlugIn
             {
                 Marshal.FreeHGlobal(buffer);
             }
+        }
+
+        private static void TestUiRecordFiltering()
+        {
+            IntPtr uiRecord = new IntPtr(0x1234);
+            Assert(
+                EnhancementRuntime.IsAlbumMetadataStoreUiRecord(
+                    uiRecord,
+                    uiRecord),
+                "the main UI metadata record was accepted");
+            Assert(
+                !EnhancementRuntime.IsAlbumMetadataStoreUiRecord(
+                    new IntPtr(0x5678),
+                    uiRecord),
+                "an unrelated metadata record was rejected");
+            Assert(
+                !EnhancementRuntime.IsAlbumMetadataStoreUiRecord(
+                    IntPtr.Zero,
+                    uiRecord),
+                "a null metadata record was rejected");
         }
 
         private static int Count(string text, string value)

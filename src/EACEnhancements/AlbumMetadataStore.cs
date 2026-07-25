@@ -21,6 +21,11 @@ namespace AudioDataPlugIn
         private const int AlbumMetadataStorePayloadLimit = 8192;
         private const int MetadataStoreSavePatchLength = 8;
         private const int MetadataStoreLoadPatchLength = 5;
+        // UpdateTrackList passes these fixed native records to the local
+        // metadata database in EAC 1.8 and 1.6 respectively. Other callers
+        // use scratch records and must not change the main-window sidecar.
+        private const uint Eac18AlbumMetadataStoreUiRecordVa = 0x007F9848;
+        private const uint Eac16AlbumMetadataStoreUiRecordVa = 0x00775838;
         private static readonly object AlbumMetadataStoreStateLock =
             new object();
 
@@ -259,7 +264,9 @@ namespace AudioDataPlugIn
             bool saved = false;
             try
             {
-                if (metadata != IntPtr.Zero && cddbId != 0)
+                if (metadata != IntPtr.Zero &&
+                    cddbId != 0 &&
+                    IsAlbumMetadataStoreUiRecord(metadata))
                 {
                     IntPtr extendedDisc = Add(
                         metadata,
@@ -342,9 +349,12 @@ namespace AudioDataPlugIn
         {
             PersistPendingAlbumMetadataStoreChanges();
             byte result = originalMetadataStoreFind(metadata, cddbId);
-            SetAlbumMetadataStoreContext(metadata, cddbId);
-            if (result != 0)
-                LoadAlbumMetadataStorePayload(metadata);
+            if (IsAlbumMetadataStoreUiRecord(metadata))
+            {
+                SetAlbumMetadataStoreContext(metadata, cddbId);
+                if (result != 0)
+                    LoadAlbumMetadataStorePayload(metadata);
+            }
             return result;
         }
 
@@ -354,7 +364,8 @@ namespace AudioDataPlugIn
         {
             PersistPendingAlbumMetadataStoreChanges();
             uint result = originalMetadataStoreNext(metadata, cddbId);
-            if ((result & 0xFF) != 0)
+            if ((result & 0xFF) != 0 &&
+                IsAlbumMetadataStoreUiRecord(metadata))
             {
                 if (cddbId != IntPtr.Zero)
                 {
@@ -365,6 +376,43 @@ namespace AudioDataPlugIn
                 LoadAlbumMetadataStorePayload(metadata);
             }
             return result;
+        }
+
+        private static bool IsAlbumMetadataStoreUiRecord(IntPtr metadata)
+        {
+            if (metadata == IntPtr.Zero || layout == null)
+                return false;
+            uint staticVa;
+            if (String.Equals(
+                    layout.Name,
+                    "EAC 1.8",
+                    StringComparison.Ordinal))
+            {
+                staticVa = Eac18AlbumMetadataStoreUiRecordVa;
+            }
+            else if (String.Equals(
+                    layout.Name,
+                    "EAC 1.6",
+                    StringComparison.Ordinal))
+            {
+                staticVa = Eac16AlbumMetadataStoreUiRecordVa;
+            }
+            else
+            {
+                return false;
+            }
+            return IsAlbumMetadataStoreUiRecord(
+                metadata,
+                AddressFromStaticVa(staticVa));
+        }
+
+        internal static bool IsAlbumMetadataStoreUiRecord(
+            IntPtr metadata,
+            IntPtr uiRecord)
+        {
+            return metadata != IntPtr.Zero &&
+                uiRecord != IntPtr.Zero &&
+                metadata == uiRecord;
         }
 
         private static void SetAlbumMetadataStoreContext(
@@ -654,6 +702,7 @@ namespace AudioDataPlugIn
             albumCatalogNumber = catalogNumber ?? String.Empty;
             lock (AlbumMetadataStoreStateLock)
                 albumMetadataStoreDirty = false;
+            albumMetadataStoreLoadPending = true;
             if (AreAlbumMetadataControlsAvailable())
             {
                 SetAlbumMetadataEditText(albumLabelEdit, albumLabel);
@@ -661,11 +710,6 @@ namespace AudioDataPlugIn
                 SetAlbumMetadataEditText(
                     albumCatalogNumberEdit,
                     albumCatalogNumber);
-                albumMetadataStoreLoadPending = false;
-            }
-            else
-            {
-                albumMetadataStoreLoadPending = true;
             }
         }
 
