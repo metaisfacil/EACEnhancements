@@ -52,11 +52,16 @@ namespace AudioDataPlugIn
 
             if (EnhancementRuntime.IsHtoaAvailable(0, 0, 8925, 0) ||
                 EnhancementRuntime.IsHtoaAvailable(1, 0, 0, 0) ||
-                EnhancementRuntime.IsHtoaAvailable(1, 4, 8925, 0))
+                EnhancementRuntime.IsHtoaAvailable(1, 4, 8925, 0) ||
+                EnhancementRuntime.IsHtoaAvailable(1, 0, 0x1C2, 0))
             {
                 throw new InvalidOperationException(
-                    "An unavailable, zero-length, or data-track HTOA passed the workflow gate.");
+                    "An unavailable, ordinary-pregap, or data-track HTOA passed the workflow gate.");
             }
+
+            if (!EnhancementRuntime.IsHtoaAvailable(1, 0, 0x1C3, 0))
+                throw new InvalidOperationException(
+                    "The first sector beyond EAC's HTOA threshold was rejected.");
         }
 
         private static void AssertHtoaTrackHighlighting()

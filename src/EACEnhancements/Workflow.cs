@@ -1526,8 +1526,11 @@ namespace AudioDataPlugIn
 		uint firstTrackStartLow,
 		uint firstTrackStartHigh)
 	{
+		const ulong EacHtoaStartThreshold = 0x1C2;
 		ulong start = ((ulong)firstTrackStartHigh << 32) | firstTrackStartLow;
-		return firstTrackNumber > 0 && (firstTrackFlags & 4) == 0 && start > 0;
+		return firstTrackNumber > 0 &&
+			(firstTrackFlags & 4) == 0 &&
+			start > EacHtoaStartThreshold;
 	}
 
 	private static void RequestWorkflowFolderTemplateRestore()
