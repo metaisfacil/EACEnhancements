@@ -33,6 +33,7 @@ namespace AudioDataPlugIn
         internal const int WH_GETMESSAGE = 3;
         internal const int WH_CALLWNDPROC = 4;
         internal const uint WM_SIZE = 0x0005;
+        internal const uint WM_ENABLE = 0x000A;
         internal const uint WM_CLOSE = 0x0010;
         internal const uint WM_SETTEXT = 0x000C;
         internal const uint WM_PAINT = 0x000F;

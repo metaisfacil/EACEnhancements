@@ -130,6 +130,17 @@ namespace AudioDataPlugIn
                 AssertControlText(host.Handle, 0xA321, "CD Label");
                 AssertControlText(host.Handle, 0xA31E, "CD Barcode");
                 AssertControlText(host.Handle, 0xA31F, "CD Catalog #");
+                AssertAlbumMetadataEnabledState(
+                    genre,
+                    new[]
+                    {
+                        label,
+                        barcode,
+                        catalogNumber,
+                        NativeMethods.GetDlgItem(host.Handle, 0xA321),
+                        NativeMethods.GetDlgItem(host.Handle, 0xA31E),
+                        NativeMethods.GetDlgItem(host.Handle, 0xA31F)
+                    });
                 AssertLabelsDoNotOverlap(
                     host.Handle,
                     label,
@@ -189,6 +200,33 @@ namespace AudioDataPlugIn
 
             Console.WriteLine("Album metadata UI tests passed.");
             return 0;
+        }
+
+        private static void AssertAlbumMetadataEnabledState(
+            IntPtr referenceControl,
+            IntPtr[] customControls)
+        {
+            NativeMethods.EnableWindow(referenceControl, false);
+            Application.DoEvents();
+            foreach (IntPtr control in customControls)
+            {
+                if (NativeMethods.IsWindowEnabled(control))
+                {
+                    throw new Exception(
+                        "A custom album metadata control did not mirror the disabled state.");
+                }
+            }
+
+            NativeMethods.EnableWindow(referenceControl, true);
+            Application.DoEvents();
+            foreach (IntPtr control in customControls)
+            {
+                if (!NativeMethods.IsWindowEnabled(control))
+                {
+                    throw new Exception(
+                        "A custom album metadata control did not mirror the re-enabled state.");
+                }
+            }
         }
 
         private static IntPtr CreateReferenceEdit(

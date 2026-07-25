@@ -58,6 +58,7 @@ namespace AudioDataPlugIn
         private static IntPtr albumMetadataParent;
         private static MainWindowSubclassDelegate albumMetadataParentSubclassDelegate;
         private static MainWindowSubclassDelegate albumMetadataEditSubclassDelegate;
+        private static MainWindowSubclassDelegate albumMetadataStateControlSubclassDelegate;
         private static IntPtr albumMetadataUserEditControl;
         private static int lastAlbumMetadataInstallTick;
         private static IntPtr metadataTemplateFormatterTrampoline;
@@ -727,6 +728,23 @@ namespace AudioDataPlugIn
                     Marshal.GetLastWin32Error() + ".");
             }
 
+            albumMetadataStateControlSubclassDelegate =
+                AlbumMetadataStateControlSubclass;
+            IntPtr stateSubclassProcedure = Marshal.GetFunctionPointerForDelegate(
+                albumMetadataStateControlSubclassDelegate);
+            if (!NativeMethods.SetWindowSubclass(
+                    genre,
+                    stateSubclassProcedure,
+                    new UIntPtr(246194965u),
+                    UIntPtr.Zero))
+            {
+                // The parent timer remains a fallback state synchronizer.
+                Log(
+                    "Immediate album metadata enabled-state synchronization " +
+                    "could not be installed; Win32 error " +
+                    Marshal.GetLastWin32Error() + ".");
+            }
+
             LayoutAlbumMetadataControls(albumMetadataParent);
             SetAlbumMetadataEditText(albumLabelEdit, albumLabel);
             SetAlbumMetadataEditText(albumBarcodeEdit, albumBarcode);
@@ -779,6 +797,24 @@ namespace AudioDataPlugIn
             {
                 albumMetadataUserEditControl = previousUserEditControl;
             }
+        }
+
+        private static IntPtr AlbumMetadataStateControlSubclass(
+            IntPtr hwnd,
+            uint message,
+            IntPtr wParam,
+            IntPtr lParam,
+            UIntPtr subclassId,
+            UIntPtr referenceData)
+        {
+            IntPtr result = NativeMethods.DefSubclassProc(
+                hwnd,
+                message,
+                wParam,
+                lParam);
+            if (message == NativeMethods.WM_ENABLE)
+                SetAlbumMetadataControlsEnabled(wParam != IntPtr.Zero);
+            return result;
         }
 
         private static IntPtr AlbumMetadataParentSubclass(
@@ -1210,8 +1246,18 @@ namespace AudioDataPlugIn
             IntPtr genre = NativeMethods.GetDlgItem(parent, GenreControlId);
             bool enabled = genre != IntPtr.Zero &&
                 NativeMethods.IsWindowEnabled(genre);
+            SetAlbumMetadataControlsEnabled(enabled);
+        }
+
+        private static void SetAlbumMetadataControlsEnabled(bool enabled)
+        {
+            if (!AreAlbumMetadataControlsAvailable())
+                return;
+            NativeMethods.EnableWindow(albumBarcodeLabel, enabled);
             NativeMethods.EnableWindow(albumBarcodeEdit, enabled);
+            NativeMethods.EnableWindow(albumCatalogNumberLabel, enabled);
             NativeMethods.EnableWindow(albumCatalogNumberEdit, enabled);
+            NativeMethods.EnableWindow(albumLabelLabel, enabled);
             NativeMethods.EnableWindow(albumLabelEdit, enabled);
         }
 
