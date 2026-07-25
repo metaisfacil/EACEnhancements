@@ -99,7 +99,6 @@ namespace AudioDataPlugIn
                 CheckEnabled(result, startup, "EAC Options > Tools", "Beginner mode", "EasyGUI", false, IssueCategory.Recommendation);
 
                 CheckEnabled(result, extraction, "EAC Options > Normalize", "Normalize", "Normalize", false, IssueCategory.LogScore);
-                CheckEnabled(result, extraction, "EAC Options > Filename", "Use Various Artist naming scheme", "UseVariousFileNamingConvention", true, IssueCategory.Recommendation);
 
                 CheckCompression(result, compression);
             }
