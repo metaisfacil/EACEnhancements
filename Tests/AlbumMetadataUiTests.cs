@@ -21,6 +21,8 @@ namespace AudioDataPlugIn
                     host.Handle, 996, 600, 40, 150, 24);
                 IntPtr comment = CreateReferenceEdit(
                     host.Handle, 883, 900, 40, 220, 24);
+                IntPtr freedbGenre = CreateReferenceComboBox(
+                    host.Handle, 998, 600, 72, 150, 180);
                 IntPtr composer = CreateReferenceEdit(
                     host.Handle, 880, 900, 8, 220, 24);
                 IntPtr performer = CreateReferenceEdit(
@@ -33,16 +35,27 @@ namespace AudioDataPlugIn
                     host.Handle, 955, "CD Performer", 200, 75, 100, 18);
                 IntPtr genreLabel = CreateReferenceLabel(
                     host.Handle, 953, "Genre", 530, 43, 70, 18);
+                IntPtr freedbGenreLabel = CreateReferenceLabel(
+                    host.Handle, 954, "freedb Genre", 530, 75, 70, 18);
                 IntPtr commentLabel = CreateReferenceLabel(
                     host.Handle, 959, "Comment", 800, 43, 100, 18);
                 host.Show();
                 Application.DoEvents();
                 NativeMethods.RECT originalPerformerRectangle;
+                NativeMethods.RECT originalCommentRectangle;
+                NativeMethods.RECT originalCommentLabelRectangle;
+                NativeMethods.RECT originalFreedbGenreRectangle;
                 if (!NativeMethods.GetWindowRect(
-                    performer, out originalPerformerRectangle))
+                        performer, out originalPerformerRectangle) ||
+                    !NativeMethods.GetWindowRect(
+                        comment, out originalCommentRectangle) ||
+                    !NativeMethods.GetWindowRect(
+                        commentLabel, out originalCommentLabelRectangle) ||
+                    !NativeMethods.GetWindowRect(
+                        freedbGenre, out originalFreedbGenreRectangle))
                 {
                     throw new Exception(
-                        "Could not inspect the original CD Performer slot.");
+                        "Could not inspect the original EAC metadata slots.");
                 }
                 NativeMethods.SendMessageStringW(
                     performer,
@@ -89,6 +102,14 @@ namespace AudioDataPlugIn
                     label,
                     originalPerformerRectangle,
                     "CD label");
+                AssertRectangle(
+                    comment,
+                    originalCommentRectangle,
+                    "EAC 1.8 Comment");
+                AssertRectangle(
+                    freedbGenre,
+                    originalFreedbGenreRectangle,
+                    "non-1.6 freedb Genre");
                 AssertAligned(barcode, genre, label, "barcode");
                 AssertAligned(catalogNumber, comment, label, "catalog number");
                 AssertMovedPerformer(
@@ -107,6 +128,25 @@ namespace AudioDataPlugIn
                     comment,
                     genreLabel,
                     commentLabel);
+
+                EnhancementRuntime.LayoutAlbumMetadataControls(
+                    host.Handle,
+                    true);
+                EnhancementRuntime.LayoutAlbumMetadataControls(
+                    host.Handle,
+                    true);
+                Application.DoEvents();
+                AssertEac16FreedbGenreLayout(
+                    barcode,
+                    comment,
+                    commentLabel,
+                    performer,
+                    performerLabel,
+                    freedbGenre,
+                    freedbGenreLabel,
+                    originalCommentRectangle,
+                    originalCommentLabelRectangle,
+                    originalFreedbGenreRectangle);
 
                 NativeMethods.SendMessageStringW(
                     barcode,
@@ -202,6 +242,35 @@ namespace AudioDataPlugIn
             return control;
         }
 
+        private static IntPtr CreateReferenceComboBox(
+            IntPtr parent,
+            int controlId,
+            int left,
+            int top,
+            int width,
+            int height)
+        {
+            IntPtr control = NativeMethods.CreateWindowExW(
+                0,
+                "COMBOBOX",
+                String.Empty,
+                0x50210203,
+                left,
+                top,
+                width,
+                height,
+                parent,
+                new IntPtr(controlId),
+                IntPtr.Zero,
+                IntPtr.Zero);
+            if (control == IntPtr.Zero)
+            {
+                throw new Exception(
+                    "A synthetic EAC freedb Genre combo could not be created.");
+            }
+            return control;
+        }
+
         private static void AssertAligned(
             IntPtr actual,
             IntPtr horizontalReference,
@@ -245,7 +314,7 @@ namespace AudioDataPlugIn
             {
                 throw new Exception(
                     "The " + description +
-                    " field did not occupy the original CD Performer slot.");
+                    " field did not occupy its expected slot.");
             }
         }
 
@@ -304,6 +373,88 @@ namespace AudioDataPlugIn
             StringBuilder text = new StringBuilder(128);
             NativeMethods.GetWindowTextW(control, text, text.Capacity);
             return text.ToString();
+        }
+
+        private static void AssertEac16FreedbGenreLayout(
+            IntPtr barcode,
+            IntPtr comment,
+            IntPtr commentLabel,
+            IntPtr performer,
+            IntPtr performerLabel,
+            IntPtr freedbGenre,
+            IntPtr freedbGenreLabel,
+            NativeMethods.RECT originalComment,
+            NativeMethods.RECT originalCommentLabel,
+            NativeMethods.RECT originalFreedbGenre)
+        {
+            NativeMethods.RECT barcodeRectangle;
+            NativeMethods.RECT commentRectangle;
+            NativeMethods.RECT commentLabelRectangle;
+            NativeMethods.RECT performerRectangle;
+            NativeMethods.RECT performerLabelRectangle;
+            NativeMethods.RECT freedbGenreRectangle;
+            NativeMethods.RECT freedbGenreLabelRectangle;
+            if (!NativeMethods.GetWindowRect(
+                    barcode, out barcodeRectangle) ||
+                !NativeMethods.GetWindowRect(
+                    comment, out commentRectangle) ||
+                !NativeMethods.GetWindowRect(
+                    commentLabel, out commentLabelRectangle) ||
+                !NativeMethods.GetWindowRect(
+                    performer, out performerRectangle) ||
+                !NativeMethods.GetWindowRect(
+                    performerLabel, out performerLabelRectangle) ||
+                !NativeMethods.GetWindowRect(
+                    freedbGenre, out freedbGenreRectangle) ||
+                !NativeMethods.GetWindowRect(
+                    freedbGenreLabel, out freedbGenreLabelRectangle))
+            {
+                throw new Exception(
+                    "Could not inspect the EAC 1.6 metadata layout.");
+            }
+
+            bool freedbGenreInCommentSlot =
+                freedbGenreRectangle.Left == originalComment.Left &&
+                freedbGenreRectangle.Top == originalComment.Top &&
+                freedbGenreRectangle.Right == originalComment.Right &&
+                freedbGenreRectangle.Bottom - freedbGenreRectangle.Top ==
+                    originalFreedbGenre.Bottom -
+                    originalFreedbGenre.Top &&
+                freedbGenreLabelRectangle.Left ==
+                    originalCommentLabel.Left &&
+                freedbGenreLabelRectangle.Top ==
+                    originalCommentLabel.Top &&
+                freedbGenreLabelRectangle.Right ==
+                    originalCommentLabel.Right &&
+                freedbGenreLabelRectangle.Bottom ==
+                    originalCommentLabel.Bottom;
+            bool commentBeneathPerformer =
+                commentRectangle.Left == performerRectangle.Left &&
+                commentRectangle.Right == performerRectangle.Right &&
+                commentRectangle.Top == originalComment.Top &&
+                commentRectangle.Bottom - commentRectangle.Top ==
+                    originalComment.Bottom - originalComment.Top &&
+                commentLabelRectangle.Left ==
+                    performerLabelRectangle.Left &&
+                commentLabelRectangle.Right ==
+                    performerLabelRectangle.Right &&
+                commentLabelRectangle.Top == originalCommentLabel.Top &&
+                commentLabelRectangle.Bottom - commentLabelRectangle.Top ==
+                    originalCommentLabel.Bottom -
+                    originalCommentLabel.Top;
+            bool barcodeClear =
+                barcodeRectangle.Right <= freedbGenreRectangle.Left ||
+                freedbGenreRectangle.Right <= barcodeRectangle.Left ||
+                barcodeRectangle.Bottom <= freedbGenreRectangle.Top ||
+                freedbGenreRectangle.Bottom <= barcodeRectangle.Top;
+            if (!freedbGenreInCommentSlot ||
+                !commentBeneathPerformer ||
+                !barcodeClear)
+            {
+                throw new Exception(
+                    "The EAC 1.6 freedb Genre and Comment fields were not " +
+                    "relocated without overlapping CD Barcode.");
+            }
         }
 
         private static void AssertControlText(

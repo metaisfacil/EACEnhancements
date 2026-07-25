@@ -28,6 +28,8 @@ namespace AudioDataPlugIn
         private const int CdPerformerLabelControlId = 955;
         private const int GenreLabelControlId = 953;
         private const int CommentLabelControlId = 959;
+        private const int FreedbGenreLabelControlId = 954;
+        private const int FreedbGenreControlId = 998;
         private const int GwlStyle = -16;
         private const int GwlExtendedStyle = -20;
         private const uint SwpNoZOrder = 0x0004;
@@ -644,6 +646,19 @@ namespace AudioDataPlugIn
 
         private static void LayoutAlbumMetadataControls(IntPtr parent)
         {
+            LayoutAlbumMetadataControls(
+                parent,
+                layout != null &&
+                String.Equals(
+                    layout.Name,
+                    "EAC 1.6",
+                    StringComparison.Ordinal));
+        }
+
+        internal static void LayoutAlbumMetadataControls(
+            IntPtr parent,
+            bool useEac16FreedbGenreLayout)
+        {
             if (!AreAlbumMetadataControlsAvailable())
                 return;
 
@@ -655,6 +670,12 @@ namespace AudioDataPlugIn
             NativeMethods.RECT composerLabel;
             NativeMethods.RECT genreLabel;
             NativeMethods.RECT commentLabel;
+            IntPtr genreControl =
+                NativeMethods.GetDlgItem(parent, GenreControlId);
+            IntPtr commentControl =
+                NativeMethods.GetDlgItem(parent, CommentControlId);
+            IntPtr commentLabelControl =
+                NativeMethods.GetDlgItem(parent, CommentLabelControlId);
             IntPtr performer =
                 NativeMethods.GetDlgItem(parent, CdPerformerControlId);
             IntPtr performerLabel =
@@ -663,11 +684,11 @@ namespace AudioDataPlugIn
                 return;
             if (!TryGetChildClientRectangle(
                     parent,
-                    NativeMethods.GetDlgItem(parent, GenreControlId),
+                    genreControl,
                     out genre) ||
                 !TryGetChildClientRectangle(
                     parent,
-                    NativeMethods.GetDlgItem(parent, CommentControlId),
+                    commentControl,
                     out comment) ||
                 !TryGetChildClientRectangle(
                     parent,
@@ -691,10 +712,23 @@ namespace AudioDataPlugIn
                     out genreLabel) ||
                 !TryGetChildClientRectangle(
                     parent,
-                    NativeMethods.GetDlgItem(parent, CommentLabelControlId),
+                    commentLabelControl,
                     out commentLabel))
             {
                 return;
+            }
+
+            NativeMethods.RECT commentSlot = comment;
+            NativeMethods.RECT commentLabelSlot = commentLabel;
+            if (useEac16FreedbGenreLayout)
+            {
+                // Comment is moved by the EAC 1.6 branch below. Continue to
+                // derive its original column from the unmoved CD Composer
+                // anchors so repeated WM_SIZE layouts remain idempotent.
+                commentSlot.Left = composer.Left;
+                commentSlot.Right = composer.Right;
+                commentLabelSlot.Left = composerLabel.Left;
+                commentLabelSlot.Right = composerLabel.Right;
             }
 
             int rowPitch = comment.Top - composer.Top;
@@ -734,15 +768,15 @@ namespace AudioDataPlugIn
                 thirdRowHeight);
             PositionAlbumMetadataControl(
                 albumCatalogNumberLabel,
-                commentLabel.Left,
-                thirdRowTop + commentLabel.Top - comment.Top,
-                commentLabel.Right - commentLabel.Left,
-                commentLabel.Bottom - commentLabel.Top);
+                commentLabelSlot.Left,
+                thirdRowTop + commentLabelSlot.Top - commentSlot.Top,
+                commentLabelSlot.Right - commentLabelSlot.Left,
+                commentLabelSlot.Bottom - commentLabelSlot.Top);
             PositionAlbumMetadataControl(
                 albumCatalogNumberEdit,
-                comment.Left,
+                commentSlot.Left,
                 thirdRowTop,
-                comment.Right - comment.Left,
+                commentSlot.Right - commentSlot.Left,
                 thirdRowHeight);
             PositionAlbumMetadataControl(
                 performerLabel,
@@ -756,6 +790,55 @@ namespace AudioDataPlugIn
                 composer.Top,
                 composer.Right - composer.Left,
                 composer.Bottom - composer.Top);
+
+            if (useEac16FreedbGenreLayout)
+            {
+                IntPtr freedbGenreLabel =
+                    NativeMethods.GetDlgItem(
+                        parent,
+                        FreedbGenreLabelControlId);
+                IntPtr freedbGenre =
+                    NativeMethods.GetDlgItem(parent, FreedbGenreControlId);
+                NativeMethods.RECT freedbGenreRectangle;
+                if (freedbGenreLabel != IntPtr.Zero &&
+                    freedbGenre != IntPtr.Zero &&
+                    TryGetChildClientRectangle(
+                        parent,
+                        freedbGenre,
+                        out freedbGenreRectangle))
+                {
+                    // EAC 1.6 retains a freedb-specific Genre combo in the
+                    // third-row slot now used by CD Barcode. Put it in
+                    // Comment's original slot and move Comment beneath the
+                    // relocated CD Performer. EAC 1.7/1.8 removed this
+                    // legacy combo and never enter this branch.
+                    PositionAlbumMetadataControl(
+                        commentLabelControl,
+                        performerLabelLeft,
+                        commentLabelSlot.Top,
+                        composerLabel.Right - composerLabel.Left,
+                        commentLabelSlot.Bottom - commentLabelSlot.Top);
+                    PositionAlbumMetadataControl(
+                        commentControl,
+                        performerEditLeft,
+                        commentSlot.Top,
+                        composer.Right - composer.Left,
+                        commentSlot.Bottom - commentSlot.Top);
+                    PositionAlbumMetadataControl(
+                        freedbGenreLabel,
+                        commentLabelSlot.Left,
+                        commentLabelSlot.Top,
+                        commentLabelSlot.Right - commentLabelSlot.Left,
+                        commentLabelSlot.Bottom - commentLabelSlot.Top);
+                    PositionAlbumMetadataControl(
+                        freedbGenre,
+                        commentSlot.Left,
+                        commentSlot.Top,
+                        commentSlot.Right - commentSlot.Left,
+                        freedbGenreRectangle.Bottom -
+                            freedbGenreRectangle.Top);
+                }
+            }
         }
 
         private static void PositionAlbumMetadataControl(
