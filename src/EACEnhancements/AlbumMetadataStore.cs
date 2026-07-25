@@ -21,6 +21,8 @@ namespace AudioDataPlugIn
         private const int AlbumMetadataStorePayloadLimit = 8192;
         private const int MetadataStoreSavePatchLength = 8;
         private const int MetadataStoreLoadPatchLength = 5;
+        private static readonly object AlbumMetadataStoreStateLock =
+            new object();
 
         private static readonly byte[] ExpectedMetadataStoreSavePrologue =
             { 0x55, 0x89, 0xE5, 0x57, 0x83, 0x7D, 0x0C, 0x00 };
@@ -41,6 +43,19 @@ namespace AudioDataPlugIn
         private static MetadataStoreFindDelegate hookedMetadataStoreFind;
         private static MetadataStoreNextDelegate hookedMetadataStoreNext;
         private static volatile bool albumMetadataStoreLoadPending;
+        private static IntPtr currentAlbumMetadataStoreRecord;
+        private static int currentAlbumMetadataStoreCddbId;
+        private static bool albumMetadataStoreDirty;
+        private static bool albumMetadataStoreSaveInProgress;
+
+        internal static bool HasPendingAlbumMetadataStoreChanges
+        {
+            get
+            {
+                lock (AlbumMetadataStoreStateLock)
+                    return albumMetadataStoreDirty;
+            }
+        }
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate void MetadataStoreSaveDelegate(
@@ -240,6 +255,8 @@ namespace AudioDataPlugIn
         {
             string originalExtendedDisc = null;
             bool replaced = false;
+            bool prepared = false;
+            bool saved = false;
             try
             {
                 if (metadata != IntPtr.Zero && cddbId != 0)
@@ -257,20 +274,23 @@ namespace AudioDataPlugIn
                             albumBarcode,
                             albumCatalogNumber);
                     if (storedExtendedDisc.Length <
-                            AlbumMetadataStoreExtendedDiscCapacity &&
-                        !String.Equals(
-                            storedExtendedDisc,
-                            originalExtendedDisc,
-                            StringComparison.Ordinal))
+                        AlbumMetadataStoreExtendedDiscCapacity)
                     {
-                        WriteAlbumMetadataStoreBuffer(
-                            extendedDisc,
-                            AlbumMetadataStoreExtendedDiscCapacity,
-                            storedExtendedDisc);
-                        replaced = true;
-                        Log(
-                            "Prepared CD Label, CD Barcode, and CD Catalog # " +
-                            "for EAC's local metadata database.");
+                        prepared = true;
+                        if (!String.Equals(
+                                storedExtendedDisc,
+                                originalExtendedDisc,
+                                StringComparison.Ordinal))
+                        {
+                            WriteAlbumMetadataStoreBuffer(
+                                extendedDisc,
+                                AlbumMetadataStoreExtendedDiscCapacity,
+                                storedExtendedDisc);
+                            replaced = true;
+                            Log(
+                                "Prepared CD Label, CD Barcode, and CD Catalog # " +
+                                "for EAC's local metadata database.");
+                        }
                     }
                     else if (storedExtendedDisc.Length >=
                         AlbumMetadataStoreExtendedDiscCapacity)
@@ -289,6 +309,7 @@ namespace AudioDataPlugIn
             try
             {
                 originalMetadataStoreSave(metadata, cddbId);
+                saved = true;
             }
             finally
             {
@@ -310,6 +331,8 @@ namespace AudioDataPlugIn
                             "after save failed: " + error);
                     }
                 }
+                if (saved && prepared)
+                    SetAlbumMetadataStoreSaved(metadata, cddbId);
             }
         }
 
@@ -317,7 +340,9 @@ namespace AudioDataPlugIn
             IntPtr metadata,
             int cddbId)
         {
+            PersistPendingAlbumMetadataStoreChanges();
             byte result = originalMetadataStoreFind(metadata, cddbId);
+            SetAlbumMetadataStoreContext(metadata, cddbId);
             if (result != 0)
                 LoadAlbumMetadataStorePayload(metadata);
             return result;
@@ -327,10 +352,86 @@ namespace AudioDataPlugIn
             IntPtr metadata,
             IntPtr cddbId)
         {
+            PersistPendingAlbumMetadataStoreChanges();
             uint result = originalMetadataStoreNext(metadata, cddbId);
             if ((result & 0xFF) != 0)
+            {
+                if (cddbId != IntPtr.Zero)
+                {
+                    SetAlbumMetadataStoreContext(
+                        metadata,
+                        Marshal.ReadInt32(cddbId));
+                }
                 LoadAlbumMetadataStorePayload(metadata);
+            }
             return result;
+        }
+
+        private static void SetAlbumMetadataStoreContext(
+            IntPtr metadata,
+            int cddbId)
+        {
+            lock (AlbumMetadataStoreStateLock)
+            {
+                currentAlbumMetadataStoreRecord = metadata;
+                currentAlbumMetadataStoreCddbId = cddbId;
+                albumMetadataStoreDirty = false;
+            }
+        }
+
+        private static void SetAlbumMetadataStoreDirty()
+        {
+            lock (AlbumMetadataStoreStateLock)
+                albumMetadataStoreDirty = true;
+        }
+
+        private static void SetAlbumMetadataStoreSaved(
+            IntPtr metadata,
+            int cddbId)
+        {
+            lock (AlbumMetadataStoreStateLock)
+            {
+                currentAlbumMetadataStoreRecord = metadata;
+                currentAlbumMetadataStoreCddbId = cddbId;
+                albumMetadataStoreDirty = false;
+            }
+        }
+
+        private static void PersistPendingAlbumMetadataStoreChanges()
+        {
+            IntPtr metadata;
+            int cddbId;
+            lock (AlbumMetadataStoreStateLock)
+            {
+                if (!albumMetadataStoreDirty ||
+                    albumMetadataStoreSaveInProgress ||
+                    currentAlbumMetadataStoreRecord == IntPtr.Zero ||
+                    currentAlbumMetadataStoreCddbId == 0 ||
+                    originalMetadataStoreSave == null)
+                {
+                    return;
+                }
+                metadata = currentAlbumMetadataStoreRecord;
+                cddbId = currentAlbumMetadataStoreCddbId;
+                albumMetadataStoreSaveInProgress = true;
+            }
+
+            try
+            {
+                HookedMetadataStoreSave(metadata, cddbId);
+                Log(
+                    "Automatically persisted edited CD Label, CD Barcode, " +
+                    "and CD Catalog # metadata.");
+            }
+            catch (Exception error)
+            {
+                Log("Automatically persisting album metadata failed: " + error);
+            }
+            finally
+            {
+                lock (AlbumMetadataStoreStateLock)
+                    albumMetadataStoreSaveInProgress = false;
+            }
         }
 
         private static void LoadAlbumMetadataStorePayload(IntPtr metadata)
@@ -551,6 +652,8 @@ namespace AudioDataPlugIn
             albumLabel = label ?? String.Empty;
             albumBarcode = barcode ?? String.Empty;
             albumCatalogNumber = catalogNumber ?? String.Empty;
+            lock (AlbumMetadataStoreStateLock)
+                albumMetadataStoreDirty = false;
             if (AreAlbumMetadataControlsAvailable())
             {
                 SetAlbumMetadataEditText(albumLabelEdit, albumLabel);

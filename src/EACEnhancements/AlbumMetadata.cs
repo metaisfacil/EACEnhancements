@@ -34,6 +34,8 @@ namespace AudioDataPlugIn
         private const int GwlExtendedStyle = -20;
         private const uint SwpNoZOrder = 0x0004;
         private const uint SwpNoActivate = 0x0010;
+        private const uint AlbumMetadataStoreSaveTimerId = 0xEAC5;
+        private const uint AlbumMetadataStoreSaveDelayMilliseconds = 750;
 
         private static readonly byte[] ExpectedMetadataTemplateFormatterPrologue =
             { 0x55, 0x89, 0xE5, 0x55, 0x81, 0xEC, 0xE4, 0x02, 0x00, 0x00 };
@@ -51,6 +53,8 @@ namespace AudioDataPlugIn
         private static volatile string albumLabel = String.Empty;
         private static IntPtr albumMetadataParent;
         private static MainWindowSubclassDelegate albumMetadataParentSubclassDelegate;
+        private static MainWindowSubclassDelegate albumMetadataEditSubclassDelegate;
+        private static IntPtr albumMetadataUserEditControl;
         private static int lastAlbumMetadataInstallTick;
         private static IntPtr metadataTemplateFormatterTrampoline;
         private static MetadataTemplateFormatterDelegate originalMetadataTemplateFormatter;
@@ -578,6 +582,33 @@ namespace AudioDataPlugIn
                 new IntPtr(511),
                 IntPtr.Zero);
 
+            albumMetadataEditSubclassDelegate = AlbumMetadataEditSubclass;
+            IntPtr editSubclassProcedure =
+                Marshal.GetFunctionPointerForDelegate(
+                    albumMetadataEditSubclassDelegate);
+            if (!NativeMethods.SetWindowSubclass(
+                    albumLabelEdit,
+                    editSubclassProcedure,
+                    new UIntPtr(246194964u),
+                    UIntPtr.Zero) ||
+                !NativeMethods.SetWindowSubclass(
+                    albumBarcodeEdit,
+                    editSubclassProcedure,
+                    new UIntPtr(246194964u),
+                    UIntPtr.Zero) ||
+                !NativeMethods.SetWindowSubclass(
+                    albumCatalogNumberEdit,
+                    editSubclassProcedure,
+                    new UIntPtr(246194964u),
+                    UIntPtr.Zero))
+            {
+                DestroyAlbumMetadataControls();
+                albumMetadataEditSubclassDelegate = null;
+                throw new InvalidOperationException(
+                    "SetWindowSubclass failed for EAC's album metadata edits with Win32 error " +
+                    Marshal.GetLastWin32Error() + ".");
+            }
+
             albumMetadataParentSubclassDelegate = AlbumMetadataParentSubclass;
             IntPtr subclassProcedure = Marshal.GetFunctionPointerForDelegate(
                 albumMetadataParentSubclassDelegate);
@@ -589,6 +620,7 @@ namespace AudioDataPlugIn
             {
                 DestroyAlbumMetadataControls();
                 albumMetadataParentSubclassDelegate = null;
+                albumMetadataEditSubclassDelegate = null;
                 throw new InvalidOperationException(
                     "SetWindowSubclass failed for EAC's album metadata panel with Win32 error " +
                     Marshal.GetLastWin32Error() + ".");
@@ -603,6 +635,49 @@ namespace AudioDataPlugIn
             albumMetadataStoreLoadPending = false;
             ApplyAlbumMetadataControlState(albumMetadataParent);
             Log("CD Label, CD Barcode, and CD Catalog # fields installed on EAC's main window.");
+        }
+
+        private static IntPtr AlbumMetadataEditSubclass(
+            IntPtr hwnd,
+            uint message,
+            IntPtr wParam,
+            IntPtr lParam,
+            UIntPtr subclassId,
+            UIntPtr referenceData)
+        {
+            bool userEditMessage =
+                message == NativeMethods.WM_CHAR ||
+                (message == NativeMethods.WM_KEYDOWN &&
+                    wParam.ToInt64() == 0x2E) ||
+                (message == NativeMethods.WM_IME_COMPOSITION &&
+                    (lParam.ToInt64() & 0x800) != 0) ||
+                message == NativeMethods.WM_CUT ||
+                message == NativeMethods.WM_PASTE ||
+                message == NativeMethods.WM_CLEAR ||
+                message == NativeMethods.WM_UNDO;
+            if (!userEditMessage)
+            {
+                return NativeMethods.DefSubclassProc(
+                    hwnd,
+                    message,
+                    wParam,
+                    lParam);
+            }
+
+            IntPtr previousUserEditControl = albumMetadataUserEditControl;
+            albumMetadataUserEditControl = hwnd;
+            try
+            {
+                return NativeMethods.DefSubclassProc(
+                    hwnd,
+                    message,
+                    wParam,
+                    lParam);
+            }
+            finally
+            {
+                albumMetadataUserEditControl = previousUserEditControl;
+            }
         }
 
         private static IntPtr AlbumMetadataParentSubclass(
@@ -620,6 +695,17 @@ namespace AudioDataPlugIn
                     IntPtr result = NativeMethods.DefSubclassProc(
                         hwnd, message, wParam, lParam);
                     LayoutAlbumMetadataControls(hwnd);
+                    return result;
+                }
+                if (message == NativeMethods.WM_TIMER)
+                {
+                    IntPtr result = NativeMethods.DefSubclassProc(
+                        hwnd, message, wParam, lParam);
+                    ObserveAlbumMetadataCommand(
+                        hwnd,
+                        message,
+                        wParam,
+                        lParam);
                     return result;
                 }
                 ObserveAlbumMetadataCommand(hwnd, message, wParam, lParam);
@@ -899,8 +985,34 @@ namespace AudioDataPlugIn
             IntPtr wParam,
             IntPtr lParam)
         {
+            if (message == NativeMethods.WM_CLOSE)
+            {
+                NativeMethods.KillTimer(
+                    parent,
+                    new UIntPtr(AlbumMetadataStoreSaveTimerId));
+                PersistPendingAlbumMetadataStoreChanges();
+                return;
+            }
             if (message == NativeMethods.WM_TIMER)
             {
+                if (wParam.ToInt64() == AlbumMetadataStoreSaveTimerId)
+                {
+                    NativeMethods.KillTimer(
+                        parent,
+                        new UIntPtr(AlbumMetadataStoreSaveTimerId));
+                    PersistPendingAlbumMetadataStoreChanges();
+                }
+                if (layout != null &&
+                    String.Equals(
+                        layout.Name,
+                        "EAC 1.6",
+                        StringComparison.Ordinal))
+                {
+                    // EAC 1.6's metadata refresh moves its native Performer
+                    // and freedb Genre controls back into the slots occupied
+                    // by CD Label and CD Barcode.
+                    LayoutAlbumMetadataControls(parent);
+                }
                 ApplyAlbumMetadataControlState(parent);
                 return;
             }
@@ -910,30 +1022,75 @@ namespace AudioDataPlugIn
             long commandValue = wParam.ToInt64();
             int command = (int)commandValue & 0xFFFF;
             int notification = (int)(commandValue >> 16) & 0xFFFF;
+            bool isAlbumMetadataEdit =
+                (lParam == albumBarcodeEdit &&
+                    command == AlbumBarcodeControlId) ||
+                (lParam == albumCatalogNumberEdit &&
+                    command == AlbumCatalogNumberControlId) ||
+                (lParam == albumLabelEdit &&
+                    command == AlbumLabelControlId);
+            if (isAlbumMetadataEdit &&
+                notification == NativeMethods.EN_KILLFOCUS)
+            {
+                NativeMethods.KillTimer(
+                    parent,
+                    new UIntPtr(AlbumMetadataStoreSaveTimerId));
+                PersistPendingAlbumMetadataStoreChanges();
+                return;
+            }
             if (notification != NativeMethods.EN_CHANGE)
                 return;
 
-            albumMetadataStoreLoadPending = false;
             if (lParam == albumBarcodeEdit &&
                 command == AlbumBarcodeControlId)
             {
+                if (albumMetadataUserEditControl != lParam)
+                    return;
+                albumMetadataStoreLoadPending = false;
                 albumBarcode = ReadWindowText(albumBarcodeEdit);
+                MarkAlbumMetadataStoreDirty(parent);
             }
             else if (lParam == albumCatalogNumberEdit &&
                 command == AlbumCatalogNumberControlId)
             {
+                if (albumMetadataUserEditControl != lParam)
+                    return;
+                albumMetadataStoreLoadPending = false;
                 albumCatalogNumber = ReadWindowText(albumCatalogNumberEdit);
+                MarkAlbumMetadataStoreDirty(parent);
             }
             else if (lParam == albumLabelEdit &&
                 command == AlbumLabelControlId)
             {
+                if (albumMetadataUserEditControl != lParam)
+                    return;
+                albumMetadataStoreLoadPending = false;
                 albumLabel = ReadWindowText(albumLabelEdit);
+                MarkAlbumMetadataStoreDirty(parent);
             }
             else if (command == CdTitleControlId &&
                 String.IsNullOrEmpty(ReadWindowText(lParam)))
             {
                 ClearAlbumMetadataControls();
             }
+        }
+
+        private static void MarkAlbumMetadataStoreDirty(IntPtr parent)
+        {
+            IntPtr title = NativeMethods.GetDlgItem(
+                parent,
+                CdTitleControlId);
+            if (title == IntPtr.Zero ||
+                String.IsNullOrEmpty(ReadWindowText(title)))
+            {
+                return;
+            }
+            SetAlbumMetadataStoreDirty();
+            NativeMethods.SetTimer(
+                parent,
+                new UIntPtr(AlbumMetadataStoreSaveTimerId),
+                AlbumMetadataStoreSaveDelayMilliseconds,
+                IntPtr.Zero);
         }
 
         private static string ReadWindowText(IntPtr control)
@@ -1048,6 +1205,7 @@ namespace AudioDataPlugIn
             albumLabelLabel = IntPtr.Zero;
             albumLabelEdit = IntPtr.Zero;
             albumMetadataParent = IntPtr.Zero;
+            albumMetadataUserEditControl = IntPtr.Zero;
         }
     }
 }

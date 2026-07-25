@@ -15,8 +15,13 @@ namespace AudioDataPlugIn
                 host.ClientSize = new System.Drawing.Size(1600, 180);
                 host.CreateControl();
 
-                CreateReferenceEdit(
+                IntPtr title = CreateReferenceEdit(
                     host.Handle, 992, 300, 8, 220, 24);
+                NativeMethods.SendMessageStringW(
+                    title,
+                    NativeMethods.WM_SETTEXT,
+                    IntPtr.Zero,
+                    "Loaded Album");
                 IntPtr genre = CreateReferenceEdit(
                     host.Handle, 996, 600, 40, 150, 24);
                 IntPtr comment = CreateReferenceEdit(
@@ -97,7 +102,11 @@ namespace AudioDataPlugIn
                     host.Handle,
                     EnhancementRuntime.AlbumCatalogNumberControlId,
                     "LOADED-1");
-
+                if (EnhancementRuntime.HasPendingAlbumMetadataStoreChanges)
+                {
+                    throw new Exception(
+                        "Programmatic metadata loads were marked as user edits.");
+                }
                 AssertRectangle(
                     label,
                     originalPerformerRectangle,
@@ -148,21 +157,9 @@ namespace AudioDataPlugIn
                     originalCommentLabelRectangle,
                     originalFreedbGenreRectangle);
 
-                NativeMethods.SendMessageStringW(
-                    barcode,
-                    NativeMethods.WM_SETTEXT,
-                    IntPtr.Zero,
-                    "012345678905");
-                NativeMethods.SendMessageStringW(
-                    catalogNumber,
-                    NativeMethods.WM_SETTEXT,
-                    IntPtr.Zero,
-                    "ABC-123");
-                NativeMethods.SendMessageStringW(
-                    label,
-                    NativeMethods.WM_SETTEXT,
-                    IntPtr.Zero,
-                    "Merge Records");
+                ReplaceEditTextAsUser(barcode, "012345678905");
+                ReplaceEditTextAsUser(catalogNumber, "ABC-123");
+                ReplaceEditTextAsUser(label, "Merge Records");
                 Application.DoEvents();
                 string expanded =
                     EnhancementRuntime.ExpandCurrentAlbumMetadataTokens(
@@ -171,6 +168,11 @@ namespace AudioDataPlugIn
                 {
                     throw new Exception(
                         "Album metadata edit notifications did not update token values.");
+                }
+                if (!EnhancementRuntime.HasPendingAlbumMetadataStoreChanges)
+                {
+                    throw new Exception(
+                        "Album metadata edits were not marked for persistence.");
                 }
                 Dictionary<string, string> folderMetadata =
                     EnhancementRuntime.ReadWorkflowFolderMetadata(host.Handle);
@@ -240,6 +242,25 @@ namespace AudioDataPlugIn
             if (control == IntPtr.Zero)
                 throw new Exception("A synthetic EAC reference label could not be created.");
             return control;
+        }
+
+        private static void ReplaceEditTextAsUser(
+            IntPtr control,
+            string value)
+        {
+            NativeMethods.SendMessageW(
+                control,
+                0x00B1,
+                IntPtr.Zero,
+                new IntPtr(-1));
+            foreach (char character in value)
+            {
+                NativeMethods.SendMessageW(
+                    control,
+                    NativeMethods.WM_CHAR,
+                    new IntPtr(character),
+                    IntPtr.Zero);
+            }
         }
 
         private static IntPtr CreateReferenceComboBox(
