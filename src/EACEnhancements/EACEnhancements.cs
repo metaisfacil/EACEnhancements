@@ -299,6 +299,14 @@ namespace AudioDataPlugIn
                 }
                 try
                 {
+                    InstallFilenameValidationTokenHooks();
+                }
+                catch (Exception error)
+                {
+                    Log("Album metadata filename-tag validation hook installation failed: " + error);
+                }
+                try
+                {
                     InstallAlbumMetadataFormatterHook();
                 }
                 catch (Exception error)

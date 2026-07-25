@@ -19,6 +19,10 @@ namespace AudioDataPlugIn
         private const int LiteralPercentTokenId = 0x1B;
         private const uint MetadataTemplateFormatterStaticVa = 0x0050CF80;
         private const int MetadataTemplateFormatterPatchLength = 10;
+        private const uint FilenameValidationTemplateCapacity = 0x100;
+        // The Filename pages reject only negative lexer results and token 0x12
+        // when its related option is disabled. Zero is an ordinary token ID.
+        private const int FilenameValidationAcceptedTokenId = 0;
         private const int GenreControlId = 996;
         private const int CommentControlId = 883;
         private const int CdComposerControlId = 880;
@@ -62,6 +66,9 @@ namespace AudioDataPlugIn
         private static IntPtr metadataTokenLexerTrampoline;
         private static MetadataTokenLexerDelegate originalMetadataTokenLexer;
         private static MetadataTokenLexerDelegate hookedMetadataTokenLexer;
+        private static IntPtr filenameTokenLexerTrampoline;
+        private static MetadataTokenLexerDelegate originalFilenameTokenLexer;
+        private static MetadataTokenLexerDelegate hookedFilenameTokenLexer;
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int MetadataTokenLexerDelegate(
@@ -169,6 +176,100 @@ namespace AudioDataPlugIn
                 indexPointer,
                 template,
                 templateCapacity);
+        }
+
+        private static void InstallFilenameValidationTokenHooks()
+        {
+            uint lexerStaticVa = layout.FilenameTokenLexerVa;
+            RequireBytes(
+                lexerStaticVa,
+                ExpectedMetadataTokenLexerPrologue,
+                "filename replacement-tag lexer");
+
+            IntPtr lexerAddress = AddressFromStaticVa(lexerStaticVa);
+            filenameTokenLexerTrampoline = NativeMethods.VirtualAlloc(
+                IntPtr.Zero,
+                new UIntPtr((uint)(MetadataTokenLexerPatchLength + 5)),
+                NativeMethods.MEM_COMMIT | NativeMethods.MEM_RESERVE,
+                NativeMethods.PAGE_EXECUTE_READWRITE);
+            if (filenameTokenLexerTrampoline == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    "VirtualAlloc failed for the filename replacement-tag lexer trampoline with Win32 error " +
+                    Marshal.GetLastWin32Error() + ".");
+            }
+
+            Marshal.Copy(
+                ExpectedMetadataTokenLexerPrologue,
+                0,
+                filenameTokenLexerTrampoline,
+                MetadataTokenLexerPatchLength);
+            WriteRelativeJump(
+                Add(filenameTokenLexerTrampoline, MetadataTokenLexerPatchLength),
+                Add(lexerAddress, MetadataTokenLexerPatchLength),
+                5);
+            originalFilenameTokenLexer =
+                (MetadataTokenLexerDelegate)Marshal.GetDelegateForFunctionPointer(
+                    filenameTokenLexerTrampoline,
+                    typeof(MetadataTokenLexerDelegate));
+            hookedFilenameTokenLexer = HookedFilenameTokenLexer;
+            IntPtr hook = Marshal.GetFunctionPointerForDelegate(
+                hookedFilenameTokenLexer);
+            WriteJumpPatch(
+                lexerStaticVa,
+                Pointer32(hook),
+                MetadataTokenLexerPatchLength);
+
+            Log(
+                "Album metadata filename validation hook active for " +
+                layout.Name + " at 0x" +
+                lexerAddress.ToInt64().ToString("X8") + ".");
+        }
+
+        private static int HookedFilenameTokenLexer(
+            IntPtr indexPointer,
+            IntPtr template,
+            uint templateCapacity)
+        {
+            try
+            {
+                if (indexPointer != IntPtr.Zero &&
+                    template != IntPtr.Zero)
+                {
+                    int index = Marshal.ReadInt32(indexPointer);
+                    string text =
+                        Marshal.PtrToStringUni(template) ?? String.Empty;
+                    int tokenLength =
+                        MatchFilenameValidationAlbumMetadataToken(
+                            text,
+                            index,
+                            templateCapacity);
+                    if (tokenLength > 0)
+                    {
+                        Marshal.WriteInt32(indexPointer, index + tokenLength);
+                        return FilenameValidationAcceptedTokenId;
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                Log("Album metadata filename-tag validation failed: " + error);
+            }
+
+            return originalFilenameTokenLexer(
+                indexPointer,
+                template,
+                templateCapacity);
+        }
+
+        internal static int MatchFilenameValidationAlbumMetadataToken(
+            string template,
+            int index,
+            uint templateCapacity)
+        {
+            return templateCapacity == FilenameValidationTemplateCapacity
+                ? MatchCustomAlbumMetadataToken(template, index)
+                : 0;
         }
 
         internal static int MatchCustomAlbumMetadataToken(

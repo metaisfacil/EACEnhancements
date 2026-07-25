@@ -84,6 +84,27 @@ namespace AudioDataPlugIn
                     "%barcode%",
                     -1),
                 "invalid token index");
+            AssertEqual(
+                15,
+                EnhancementRuntime.MatchFilenameValidationAlbumMetadataToken(
+                    "%catalognumber%",
+                    0,
+                    0x100),
+                "Filename-page catalog-number token");
+            AssertEqual(
+                0,
+                EnhancementRuntime.MatchFilenameValidationAlbumMetadataToken(
+                    "%catalognumber%",
+                    0,
+                    0x230),
+                "filename normalizer remains native");
+            AssertEqual(
+                0,
+                EnhancementRuntime.MatchFilenameValidationAlbumMetadataToken(
+                    "%catalognumber%",
+                    0,
+                    0x1FFF),
+                "filename formatter remains native");
 
             Console.WriteLine("Album metadata token tests passed.");
             return 0;

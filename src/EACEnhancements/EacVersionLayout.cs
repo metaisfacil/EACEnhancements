@@ -89,6 +89,7 @@ namespace AudioDataPlugIn
         internal readonly uint PluginSetCurrentPluginPointerVa;
         internal readonly uint PluginGetPluginNamePointerVa;
         internal readonly uint PluginGetPluginGuidPointerVa;
+        internal readonly uint FilenameTokenLexerVa;
         internal readonly byte[] ExpectedDispatch;
         internal readonly byte[] ExpectedOldHandler;
         internal readonly byte[] ExpectedGapsEndpoint;
@@ -189,6 +190,7 @@ namespace AudioDataPlugIn
             uint pluginSetCurrentPluginPointerVa,
             uint pluginGetPluginNamePointerVa,
             uint pluginGetPluginGuidPointerVa,
+            uint filenameTokenLexerVa,
             string expectedOldHandler,
             string expectedGapsEndpoint,
             string expectedCueEndpoint,
@@ -277,6 +279,7 @@ namespace AudioDataPlugIn
             PluginSetCurrentPluginPointerVa = pluginSetCurrentPluginPointerVa;
             PluginGetPluginNamePointerVa = pluginGetPluginNamePointerVa;
             PluginGetPluginGuidPointerVa = pluginGetPluginGuidPointerVa;
+            FilenameTokenLexerVa = filenameTokenLexerVa;
             ExpectedDispatch = Hex("3D 10 03 00 00 75 23");
             ExpectedOldHandler = Hex(expectedOldHandler);
             ExpectedGapsEndpoint = Hex(expectedGapsEndpoint);
@@ -455,6 +458,7 @@ namespace AudioDataPlugIn
             0x007D01FC,
             0x007D0200,
             0x007D0204,
+            0x0048AAE0,
             "C6 05 F9 60 D2 00 01 6A 00 68 3C 02 00 00 68 11 01 00 00 FF 35 C8 8F 7F 00 E8 20 9F 25 00",
             "C6 05 F9 60 D2 00 00 6A 00 68 02 03 00 00 68 11 01 00 00 FF 35 C8 8F 7F 00 E8 60 75 25 00",
             "6A 00 68 1B 02 00 00 68 11 01 00 00 FF 35 C8 8F 7F 00 E8 39 6D 25 00",
@@ -546,6 +550,7 @@ namespace AudioDataPlugIn
             0x0074C1EC,
             0x0074C1F0,
             0x0074C1F4,
+            0x00487530,
             "C6 05 1F 69 A8 00 01 6A 00 68 3C 02 00 00 68 11 01 00 00 FF 35 B8 4F 77 00 E8 9C 6C 25 00",
             "C6 05 1F 69 A8 00 00 6A 00 68 02 03 00 00 68 11 01 00 00 FF 35 B8 4F 77 00 E8 DE 42 25 00",
             "6A 00 68 1B 02 00 00 68 11 01 00 00 FF 35 B8 4F 77 00 E8 B7 3A 25 00",
