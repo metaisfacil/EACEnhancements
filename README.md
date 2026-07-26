@@ -125,8 +125,8 @@ respectively, in both external compressor arguments and the EAC Enhancements fol
 template. The three new values are retained with EAC's local disc database entry
 and restored when that entry is loaded.
 
-If you want these fields tagged, pass them as additional command-line arguments.
-The example provided below is for FLAC:
+If you want these fields tagged, pass them as additional command-line arguments
+for the external compressor. The example provided below is for FLAC:
 
 ```text
 -T "LABEL=%label%" -T "BARCODE=%barcode%" -T "CATALOGNUMBER=%catalognumber%"
