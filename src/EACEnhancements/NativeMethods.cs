@@ -32,6 +32,7 @@ namespace AudioDataPlugIn
         internal const uint MF_DISABLED = 0x00000002;
         internal const int WH_GETMESSAGE = 3;
         internal const int WH_CALLWNDPROC = 4;
+        internal const uint WM_NULL = 0x0000;
         internal const uint WM_SIZE = 0x0005;
         internal const uint WM_ENABLE = 0x000A;
         internal const uint WM_CLOSE = 0x0010;
@@ -44,6 +45,7 @@ namespace AudioDataPlugIn
         internal const uint WM_SYSCOMMAND = 0x0112;
         internal const uint WM_TIMER = 0x0113;
         internal const uint WM_KEYDOWN = 0x0100;
+        internal const uint WM_SYSKEYDOWN = 0x0104;
         internal const uint WM_CHAR = 0x0102;
         internal const uint WM_IME_COMPOSITION = 0x010F;
         internal const uint WM_LBUTTONUP = 0x0202;
@@ -61,6 +63,10 @@ namespace AudioDataPlugIn
         internal const uint SC_CLOSE = 0xF060;
         internal const int IDCANCEL = 2;
         internal const uint VK_ESCAPE = 0x1B;
+        internal const uint VK_SHIFT = 0x10;
+        internal const uint VK_CONTROL = 0x11;
+        internal const uint VK_MENU = 0x12;
+        internal const uint VK_1 = 0x31;
         internal const uint MB_OK = 0x00000000;
         internal const uint MB_ICONWARNING = 0x00000030;
         internal const uint LVM_GETITEMCOUNT = 0x1004;
@@ -397,6 +403,13 @@ namespace AudioDataPlugIn
         internal static extern uint GetWindowThreadProcessId(
             IntPtr hwnd,
             IntPtr processId);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool IsChild(IntPtr parent, IntPtr window);
+
+        [DllImport("user32.dll")]
+        internal static extern short GetKeyState(int virtualKey);
 
         [DllImport("user32.dll")]
         internal static extern IntPtr GetMenu(IntPtr hwnd);

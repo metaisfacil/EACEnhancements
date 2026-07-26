@@ -1736,6 +1736,36 @@ namespace AudioDataPlugIn
 			if (code >= 0 && lParam != IntPtr.Zero)
 			{
 				NativeMethods.MSG mSG = (NativeMethods.MSG)Marshal.PtrToStructure(lParam, typeof(NativeMethods.MSG));
+				IntPtr mainWindow = ReadAbsolutePointer(layout.MainWindowGlobalVa);
+				bool inMainWindow =
+					mainWindow != IntPtr.Zero &&
+					(mSG.hwnd == mainWindow ||
+					 NativeMethods.IsChild(mainWindow, mSG.hwnd));
+				bool shortcut = IsWorkflowShortcutMessage(
+					mSG.message,
+					mSG.wParam,
+					wParam,
+					IsKeyDown(NativeMethods.VK_CONTROL),
+					IsKeyDown(NativeMethods.VK_MENU),
+					IsKeyDown(NativeMethods.VK_SHIFT));
+				if (inMainWindow && shortcut)
+				{
+					// Remove the keystroke before EAC's accelerator/dialog
+					// processing. Repeats are consumed but only the initial
+					// keydown starts the workflow.
+					bool repeated =
+						(mSG.lParam.ToInt64() & (1L << 30)) != 0;
+					mSG.message = NativeMethods.WM_NULL;
+					Marshal.StructureToPtr(mSG, lParam, false);
+					if (!repeated)
+					{
+						NativeMethods.PostMessageW(
+							mainWindow,
+							NativeMethods.WM_COMMAND,
+							new IntPtr((int)CustomWorkflowCommand),
+							IntPtr.Zero);
+					}
+				}
 				InspectWorkflowMessage(mSG.hwnd, mSG.message, mSG.wParam, mSG.lParam, "queue");
 			}
 		}
@@ -1744,6 +1774,29 @@ namespace AudioDataPlugIn
 			Log("100% log queued-message guard failed: " + ex.Message);
 		}
 		return NativeMethods.CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
+	}
+
+	private static bool IsKeyDown(uint virtualKey)
+	{
+		return (NativeMethods.GetKeyState((int)virtualKey) & 0x8000) != 0;
+	}
+
+	internal static bool IsWorkflowShortcutMessage(
+		uint message,
+		IntPtr key,
+		IntPtr hookAction,
+		bool control,
+		bool alt,
+		bool shift)
+	{
+		return
+			(hookAction.ToInt64() & NativeMethods.PM_REMOVE) != 0 &&
+			(message == NativeMethods.WM_KEYDOWN ||
+			 message == NativeMethods.WM_SYSKEYDOWN) &&
+			key.ToInt64() == NativeMethods.VK_1 &&
+			control &&
+			alt &&
+			shift;
 	}
 
 	private static void InspectWorkflowMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, string source)

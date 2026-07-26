@@ -28,6 +28,7 @@ namespace AudioDataPlugIn
                         "The workflow-button tooltip text is incorrect.");
                 }
                 AssertClickNotificationFiltering();
+                AssertWorkflowShortcutFiltering();
                 AssertWorkflowInvocationGate();
                 AssertHtoaDetection();
                 AssertHtoaTrackHighlighting();
@@ -131,6 +132,47 @@ namespace AudioDataPlugIn
             {
                 throw new InvalidOperationException(
                     "A menu command was mistaken for a workflow-button click.");
+            }
+        }
+
+        private static void AssertWorkflowShortcutFiltering()
+        {
+            if (!EnhancementRuntime.IsWorkflowShortcutMessage(
+                NativeMethods.WM_SYSKEYDOWN,
+                new IntPtr(NativeMethods.VK_1),
+                new IntPtr(NativeMethods.PM_REMOVE),
+                true,
+                true,
+                true))
+            {
+                throw new InvalidOperationException(
+                    "Ctrl+Alt+Shift+1 was not recognized as the workflow shortcut.");
+            }
+
+            if (EnhancementRuntime.IsWorkflowShortcutMessage(
+                    NativeMethods.WM_KEYDOWN,
+                    new IntPtr(NativeMethods.VK_1),
+                    IntPtr.Zero,
+                    true,
+                    true,
+                    true) ||
+                EnhancementRuntime.IsWorkflowShortcutMessage(
+                    NativeMethods.WM_KEYDOWN,
+                    new IntPtr(NativeMethods.VK_1),
+                    new IntPtr(NativeMethods.PM_REMOVE),
+                    true,
+                    false,
+                    true) ||
+                EnhancementRuntime.IsWorkflowShortcutMessage(
+                    NativeMethods.WM_KEYDOWN,
+                    new IntPtr('2'),
+                    new IntPtr(NativeMethods.PM_REMOVE),
+                    true,
+                    true,
+                    true))
+            {
+                throw new InvalidOperationException(
+                    "A partial, different, or non-removed keystroke matched the workflow shortcut.");
             }
         }
 

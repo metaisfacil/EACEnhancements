@@ -133,7 +133,8 @@ namespace AudioDataPlugIn
         private const uint OutputSettingsCommand = 0xA312;
         private const uint RefreshOutputSettingsCommand = 0x0314;
         private const uint ReferenceRipCommand = 0x0303;
-        private const string CustomWorkflowMenuText = "&Test && Copy + Cue (100% Log)";
+        private const string CustomWorkflowMenuText =
+            "&Test && Copy + Cue (100% Log)\tCtrl+Alt+Shift+1";
         private const string HtoaWorkflowMenuText = "Test && Copy &HTOA (100% Log)";
         private const string TitleCaseTransformMenuText =
             "&Title Case (EAC Enhancements)";
