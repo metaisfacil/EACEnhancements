@@ -5,15 +5,25 @@ EAC Enhancements adds these arguments:
 ```text
 --eace-metadata=d1.<payload>
 --eace-100-log
+--eace-drive=J:
+--eace-dest=C:\Rips\%albumartist% - %albumtitle% (((%year%)))
 ```
 
 `--eace-metadata` loads disc and track metadata into EAC. `--eace-100-log`
 starts the usual EAC Enhancements workflow after that metadata has been loaded.
-It requires `--eace-metadata`; the rip will not start with blank metadata.
+Metadata is required; the rip will not start without it.
+`--eace-drive` selects the requested optical drive before the disc is validated
+or metadata is loaded. It accepts a drive letter or a portion of the drive name.
+`--eace-dest` optionally supplies the fully qualified album-folder destination.
+It may contain the same metadata tokens and conditional delimiters as the
+regular EAC Enhancements folder template.
 
-The destination prompt, gap and ISRC detection, cue sheet, Test & Copy, folder
-template, and error alert behave exactly as they do when the workflow is chosen
-from EAC's Action menu.
+When `--eace-dest` is present, the path is the folder that directly receives the
+audio, CUE, playlist, and log - not its parent. This means the default standard
+extraction directory and folder template settings are overrided.
+
+After a command-line request completes, EAC should close automatically.
+Any log issues found afterward are written to stderr.
 
 ## The `d1.` payload
 
@@ -21,7 +31,7 @@ Create the payload by encoding a JSON document as UTF-8, compressing it as a
 raw DEFLATE stream (RFC 1951), and encoding the result as unpadded Base64url
 (RFC 4648 section 5). Prefix the result with `d1.`.
 
-The JSON shape is:
+An example of the JSON format follows:
 
 ```json
 {
@@ -34,7 +44,9 @@ The JSON shape is:
     "albumTitle": "Example Album",
     "year": 2026,
     "mp3V2Type": "Rock",
-    "extendedDiscInformation": "Catalog number or other notes"
+    "label": "Example Records",
+    "barcode": "012345678905",
+    "catalogNumber": "ABC-123"
   },
   "tracks": [
     { "number": 1, "title": "First Track", "artist": "Example Artist" },
@@ -54,7 +66,8 @@ Available `disc` fields are:
 trackCount, cddbId, leadoutPosition, trackStartPositions,
 albumArtist, albumTitle, cddbMusicType, year, revision, mp3Type,
 extendedDiscInformation, mp3V2Type, firstTrackNumber, albumInterpret,
-cdNumber, totalNumberOfCds, albumComposer, coverImageUrl, coverImageBase64
+cdNumber, totalNumberOfCds, albumComposer, label, barcode, catalogNumber,
+coverImageUrl, coverImageBase64
 ```
 
 Available track fields are:
@@ -69,6 +82,6 @@ Omitted text fields are loaded as empty strings. The defaults for `year`,
 use EAC's normal single-disc defaults. Unknown fields are rejected so a typo
 cannot silently produce incorrectly tagged files.
 
-Only one instance of either argument may be supplied. Metadata is validated
-before EAC starts the workflow, and the metadata provider selected in EAC is
-restored immediately afterward.
+Only one instance of each argument may be supplied. Metadata is validated
+before EAC starts the workflow, and the metadata provider and normal
+existing-metadata confirmation behavior are restored immediately afterward.

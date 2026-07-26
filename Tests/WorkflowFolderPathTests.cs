@@ -123,6 +123,18 @@ namespace AudioDataPlugIn
                     characterReplacements),
                 "Literal & A： ''B''  and  C");
 
+            AssertEqual(
+                WorkflowFolderPath.ResolveAbsoluteDestinationTemplate(
+                    "C:\\Command Line Rips\\%albumartist%\\" +
+                    "%albumtitle% {{{%catalognumber%}}}",
+                    metadata,
+                    characterReplacements),
+                Path.Combine(
+                    "C:\\Command Line Rips",
+                    "GULLET",
+                    "A" + characterReplacements[':'] +
+                    " ''B''  and  C {CPCS-004}"));
+
             Console.WriteLine("Workflow folder path tests passed.");
             return 0;
         }

@@ -100,6 +100,48 @@ namespace AudioDataPlugIn
             return destination;
         }
 
+        internal static string ResolveAbsoluteDestinationTemplate(
+            string destinationTemplate,
+            IDictionary<string, string> metadata,
+            IDictionary<char, string> characterReplacements)
+        {
+            if (!CommandLineInvocation.IsFullyQualifiedDestination(
+                    destinationTemplate))
+            {
+                throw new ArgumentException(
+                    "The command-line destination must be fully qualified.",
+                    "destinationTemplate");
+            }
+
+            string fullTemplate = Path.GetFullPath(destinationTemplate);
+            string root = Path.GetPathRoot(fullTemplate);
+            string relativeTemplate = fullTemplate.Substring(root.Length);
+            if (String.IsNullOrWhiteSpace(
+                    relativeTemplate.Trim('\\', '/')))
+            {
+                throw new ArgumentException(
+                    "The command-line destination must name an album folder, not a filesystem root.",
+                    "destinationTemplate");
+            }
+            string relative = Resolve(
+                relativeTemplate,
+                metadata,
+                characterReplacements);
+            string destination = Path.GetFullPath(
+                Path.Combine(root, relative));
+            string rootedPrefix = root.EndsWith("\\", StringComparison.Ordinal)
+                ? root
+                : root + "\\";
+            if (!destination.StartsWith(
+                    rootedPrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The generated command-line destination is outside its absolute root.");
+            }
+            return destination.TrimEnd('\\');
+        }
+
         private static bool HasValue(IDictionary<string, string> metadata, string key)
         {
             string value;

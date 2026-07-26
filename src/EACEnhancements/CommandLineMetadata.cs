@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -16,12 +17,16 @@ namespace AudioDataPlugIn
     internal sealed class CommandLineInvocation
     {
         internal bool RunHundredPercentLog;
+        internal string Drive;
+        internal string Destination;
         internal CommandLineMetadata Metadata;
 
         internal static CommandLineInvocation Parse(string[] arguments)
         {
             CommandLineInvocation result = new CommandLineInvocation();
             string encodedMetadata = null;
+            string drive = null;
+            string destination = null;
 
             for (int i = 1; i < arguments.Length; i++)
             {
@@ -38,13 +43,54 @@ namespace AudioDataPlugIn
                         throw new FormatException("--eace-metadata was specified more than once.");
                     encodedMetadata = argument.Substring("--eace-metadata=".Length);
                 }
+                else if (argument.StartsWith("--eace-drive=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (drive != null)
+                        throw new FormatException("--eace-drive was specified more than once.");
+                    drive = argument.Substring("--eace-drive=".Length).Trim();
+                    if (drive.Length == 0)
+                        throw new FormatException("--eace-drive requires a drive letter or EAC drive name.");
+                }
+                else if (argument.StartsWith("--eace-dest=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (destination != null)
+                        throw new FormatException("--eace-dest was specified more than once.");
+                    destination = argument.Substring("--eace-dest=".Length).Trim();
+                    if (destination.Length == 0)
+                        throw new FormatException("--eace-dest requires an absolute album-folder path.");
+                    if (!IsFullyQualifiedDestination(destination))
+                        throw new FormatException("--eace-dest must be a fully qualified path.");
+                }
             }
 
             if (encodedMetadata != null)
                 result.Metadata = D1MetadataCodec.Decode(encodedMetadata);
+            result.Drive = drive;
+            result.Destination = destination;
             if (result.RunHundredPercentLog && result.Metadata == null)
                 throw new FormatException("--eace-100-log requires --eace-metadata=d1.<payload>.");
+            if (result.Drive != null && result.Metadata == null)
+                throw new FormatException("--eace-drive requires --eace-metadata=d1.<payload>.");
+            if (result.Destination != null &&
+                (!result.RunHundredPercentLog || result.Metadata == null))
+            {
+                throw new FormatException(
+                    "--eace-dest requires --eace-100-log and --eace-metadata=d1.<payload>.");
+            }
             return result;
+        }
+
+        internal static bool IsFullyQualifiedDestination(string value)
+        {
+            string text = (value ?? String.Empty).Trim();
+            if (Regex.IsMatch(text, "^[A-Za-z]:[\\\\/]"))
+                return true;
+            if (!text.StartsWith(@"\\", StringComparison.Ordinal))
+                return false;
+            string[] components = text.Substring(2).Split(
+                new[] { '\\', '/' },
+                StringSplitOptions.RemoveEmptyEntries);
+            return components.Length >= 2;
         }
 
         internal bool HasWork
@@ -72,6 +118,9 @@ namespace AudioDataPlugIn
         internal int CdNumber = 1;
         internal int TotalNumberOfCds = 1;
         internal string AlbumComposer = String.Empty;
+        internal string Label = String.Empty;
+        internal string Barcode = String.Empty;
+        internal string CatalogNumber = String.Empty;
         internal string CoverImageUrl = String.Empty;
         internal byte[] CoverImage;
         internal CommandLineTrackMetadata[] Tracks;
@@ -101,6 +150,7 @@ namespace AudioDataPlugIn
             "albumArtist", "albumTitle", "cddbMusicType", "year", "revision",
             "mp3Type", "extendedDiscInformation", "mp3V2Type", "firstTrackNumber",
             "albumInterpret", "cdNumber", "totalNumberOfCds", "albumComposer",
+            "label", "barcode", "catalogNumber",
             "coverImageUrl", "coverImageBase64");
         private static readonly HashSet<string> TrackFields = Fields(
             "number", "title", "extendedInformation", "artist", "composer", "lyrics",
@@ -174,6 +224,9 @@ namespace AudioDataPlugIn
             result.CdNumber = GetInt(disc, "cdNumber", 1);
             result.TotalNumberOfCds = GetInt(disc, "totalNumberOfCds", 1);
             result.AlbumComposer = GetString(disc, "albumComposer");
+            result.Label = GetString(disc, "label");
+            result.Barcode = GetString(disc, "barcode");
+            result.CatalogNumber = GetString(disc, "catalogNumber");
             result.CoverImageUrl = GetString(disc, "coverImageUrl");
             string cover = GetString(disc, "coverImageBase64");
             if (cover.Length != 0)
@@ -378,22 +431,61 @@ namespace AudioDataPlugIn
     {
         internal const string CommandLineMetadataProviderGuid =
             "2D2235AB-0876-44F9-9CD2-DF2D3D06EB3C";
-        private const uint BeginCommandLineMetadataCommand = 0xA316;
-        private const uint FinishCommandLineMetadataCommand = 0xA317;
-        private const uint FailCommandLineMetadataCommand = 0xA318;
+        internal const uint StartCommandLineRequestCommand = 0xA322;
+        internal const uint BeginCommandLineMetadataCommand = 0xA323;
+        internal const uint FinishCommandLineMetadataCommand = 0xA324;
+        internal const uint FailCommandLineMetadataCommand = 0xA325;
+        internal const uint FinishCommandLineRunCommand = 0xA326;
+        private const int DriveSelectorControlId = 5;
+        private const int DriveReadyWaitAttempts = 600;
+        private const uint Eac18MetadataReplacementGuardVa = 0x0040875A;
+        private const uint Eac18MetadataReplacementAcceptedVa = 0x0040879D;
+        private const uint Eac16MetadataReplacementGuardVa = 0x00408576;
+        private const uint Eac16MetadataReplacementAcceptedVa = 0x004085B9;
         private const int MetadataLookupCommand = 525;
+        private static readonly byte[] ExpectedMetadataReplacementGuard =
+            { 0x3C, 0x00, 0x75, 0x0B, 0x80, 0x3D };
+        private static readonly object CommandLineReplacementPatchLock =
+            new object();
         private const string InternetOptionsKey = @"Software\AWSoftware\EACU\Internet Options";
         private static CommandLineInvocation commandLineInvocation;
+        private static bool commandLineRequestPresent;
         private static string commandLineError;
         private static int commandLineStartPosted;
+        private static int commandLineLookupPosted;
         private static int commandLineProviderCalled;
         private static int commandLineOriginalProviderIndex = -1;
+        private static uint commandLineReplacementPatchVa;
+        private static byte[] commandLineReplacementOriginalBytes;
 
         private static void InitializeCommandLine()
         {
+            string[] arguments = Environment.GetCommandLineArgs();
+            for (int i = 1; i < arguments.Length; i++)
+            {
+                string argument = arguments[i] ?? String.Empty;
+                if (String.Equals(
+                        argument,
+                        "--eace-100-log",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    argument.StartsWith(
+                        "--eace-metadata=",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    argument.StartsWith(
+                        "--eace-drive=",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    argument.StartsWith(
+                        "--eace-dest=",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    commandLineRequestPresent = true;
+                    break;
+                }
+            }
             try
             {
-                commandLineInvocation = CommandLineInvocation.Parse(Environment.GetCommandLineArgs());
+                commandLineInvocation =
+                    CommandLineInvocation.Parse(arguments);
             }
             catch (Exception error)
             {
@@ -407,25 +499,72 @@ namespace AudioDataPlugIn
             if (commandLineError == null && (commandLineInvocation == null || !commandLineInvocation.HasWork))
                 return;
 
+            if (Interlocked.CompareExchange(ref commandLineStartPosted, 1, 0) == 0)
+            {
+                NativeMethods.PostMessageW(mainWindow, NativeMethods.WM_COMMAND,
+                    new IntPtr(StartCommandLineRequestCommand), IntPtr.Zero);
+            }
+        }
+
+        private static void StartCommandLineRequest(IntPtr mainWindow)
+        {
+            if (commandLineError != null)
+            {
+                ShowCommandLineError(mainWindow);
+                return;
+            }
+
+            try
+            {
+                if (!String.IsNullOrEmpty(commandLineInvocation.Drive))
+                {
+                    SelectCommandLineDrive(mainWindow, commandLineInvocation.Drive);
+                    EnsureCommandLineDriveHasMedia(commandLineInvocation.Drive);
+                }
+            }
+            catch (Exception error)
+            {
+                commandLineError = error.Message;
+                Log("Command-line drive selection failed: " + error);
+                ShowCommandLineError(mainWindow);
+                return;
+            }
+
             Thread thread = new Thread(delegate()
             {
-                for (int i = 0; i < 600 && NativeMethods.IsWindow(mainWindow); i++)
+                for (int i = 0;
+                    i < DriveReadyWaitAttempts && NativeMethods.IsWindow(mainWindow);
+                    i++)
                 {
-                    if (commandLineError != null || IsReferenceRipCommandEnabled(mainWindow))
+                    if (IsReferenceRipCommandEnabled(mainWindow))
                     {
-                        if (Interlocked.CompareExchange(ref commandLineStartPosted, 1, 0) == 0)
-                            NativeMethods.PostMessageW(mainWindow, NativeMethods.WM_COMMAND,
-                                new IntPtr(BeginCommandLineMetadataCommand), IntPtr.Zero);
+                        if (Interlocked.CompareExchange(
+                                ref commandLineLookupPosted,
+                                1,
+                                0) == 0)
+                        {
+                            NativeMethods.PostMessageW(
+                                mainWindow,
+                                NativeMethods.WM_COMMAND,
+                                new IntPtr(BeginCommandLineMetadataCommand),
+                                IntPtr.Zero);
+                        }
                         return;
                     }
                     Thread.Sleep(200);
                 }
-                commandLineError = "No ready audio CD was detected within two minutes.";
-                NativeMethods.PostMessageW(mainWindow, NativeMethods.WM_COMMAND,
-                    new IntPtr(BeginCommandLineMetadataCommand), IntPtr.Zero);
+                commandLineError = "No ready audio CD was detected within two minutes" +
+                    (String.IsNullOrEmpty(commandLineInvocation.Drive)
+                        ? "."
+                        : " in drive '" + commandLineInvocation.Drive + "'.");
+                NativeMethods.PostMessageW(
+                    mainWindow,
+                    NativeMethods.WM_COMMAND,
+                    new IntPtr(FailCommandLineMetadataCommand),
+                    IntPtr.Zero);
             });
             thread.IsBackground = true;
-            thread.Name = "EAC Enhancements command-line starter";
+            thread.Name = "EAC Enhancements command-line drive waiter";
             thread.Start();
         }
 
@@ -464,9 +603,28 @@ namespace AudioDataPlugIn
             }
 
             Interlocked.Exchange(ref commandLineProviderCalled, 0);
+            try
+            {
+                InstallCommandLineMetadataReplacementBypass();
+            }
+            catch (Exception bypassError)
+            {
+                MetadataProviderBridge.Restore(
+                    commandLineOriginalProviderIndex);
+                commandLineOriginalProviderIndex = -1;
+                commandLineError =
+                    "EAC's metadata replacement confirmation could not be " +
+                    "safely bypassed. " + bypassError.Message;
+                Log(
+                    "Command-line metadata replacement bypass failed: " +
+                    bypassError);
+                ShowCommandLineError(mainWindow);
+                return;
+            }
             if (!NativeMethods.PostMessageW(mainWindow, NativeMethods.WM_COMMAND,
                 new IntPtr(MetadataLookupCommand), IntPtr.Zero))
             {
+                RestoreCommandLineMetadataReplacementBypass();
                 MetadataProviderBridge.Restore(commandLineOriginalProviderIndex);
                 commandLineError = "EAC rejected the metadata lookup command.";
                 ShowCommandLineError(mainWindow);
@@ -486,6 +644,88 @@ namespace AudioDataPlugIn
             watchdog.IsBackground = true;
             watchdog.Name = "EAC Enhancements metadata watchdog";
             watchdog.Start();
+        }
+
+        private static void InstallCommandLineMetadataReplacementBypass()
+        {
+            lock (CommandLineReplacementPatchLock)
+            {
+                if (commandLineReplacementOriginalBytes != null)
+                    return;
+                uint guard;
+                uint accepted;
+                SelectCommandLineMetadataReplacementAddresses(
+                    layout == null ? null : layout.Name,
+                    out guard,
+                    out accepted);
+                RequireBytes(
+                    guard,
+                    ExpectedMetadataReplacementGuard,
+                    "metadata replacement confirmation guard");
+                commandLineReplacementOriginalBytes = ReadBytes(
+                    guard,
+                    ExpectedMetadataReplacementGuard.Length);
+                commandLineReplacementPatchVa = guard;
+                try
+                {
+                    WriteJumpPatch(
+                        guard,
+                        accepted,
+                        ExpectedMetadataReplacementGuard.Length);
+                }
+                catch
+                {
+                    commandLineReplacementOriginalBytes = null;
+                    commandLineReplacementPatchVa = 0;
+                    throw;
+                }
+                Log(
+                    "Temporarily bypassed EAC's existing-metadata " +
+                    "confirmation for the command-line request.");
+            }
+        }
+
+        private static void RestoreCommandLineMetadataReplacementBypass()
+        {
+            lock (CommandLineReplacementPatchLock)
+            {
+                if (commandLineReplacementOriginalBytes == null)
+                    return;
+                WriteMemoryPatch(
+                    commandLineReplacementPatchVa,
+                    commandLineReplacementOriginalBytes);
+                commandLineReplacementOriginalBytes = null;
+                commandLineReplacementPatchVa = 0;
+                Log(
+                    "Restored EAC's existing-metadata confirmation guard.");
+            }
+        }
+
+        internal static void SelectCommandLineMetadataReplacementAddresses(
+            string version,
+            out uint guard,
+            out uint accepted)
+        {
+            if (String.Equals(
+                    version,
+                    "EAC 1.8",
+                    StringComparison.Ordinal))
+            {
+                guard = Eac18MetadataReplacementGuardVa;
+                accepted = Eac18MetadataReplacementAcceptedVa;
+                return;
+            }
+            if (String.Equals(
+                    version,
+                    "EAC 1.6",
+                    StringComparison.Ordinal))
+            {
+                guard = Eac16MetadataReplacementGuardVa;
+                accepted = Eac16MetadataReplacementAcceptedVa;
+                return;
+            }
+            throw new NotSupportedException(
+                "The EAC metadata replacement confirmation layout is unsupported.");
         }
 
         internal static bool ProvideCommandLineMetadata(CCDMetadata data, bool cdinfo, bool cover, bool lyrics)
@@ -582,6 +822,7 @@ namespace AudioDataPlugIn
 
         private static void FinishCommandLineMetadata(IntPtr mainWindow, bool failed)
         {
+            RestoreCommandLineMetadataReplacementBypass();
             MetadataProviderBridge.Restore(commandLineOriginalProviderIndex);
             commandLineOriginalProviderIndex = -1;
             if (failed || commandLineError != null)
@@ -590,18 +831,75 @@ namespace AudioDataPlugIn
                 return;
             }
             Log("Command-line metadata was applied successfully.");
+            ApplyStoredAlbumMetadataValues(
+                commandLineInvocation.Metadata.Label,
+                commandLineInvocation.Metadata.Barcode,
+                commandLineInvocation.Metadata.CatalogNumber);
+            SetAlbumMetadataStoreDirty();
+            PersistPendingAlbumMetadataStoreChanges();
+            Log("Command-line custom album metadata was applied successfully.");
             if (commandLineInvocation.RunHundredPercentLog)
                 ShowWorkflowDestinationDialog(mainWindow);
+            else
+                RequestCommandLineShutdown(mainWindow);
         }
 
         private static void ShowCommandLineError(IntPtr mainWindow)
         {
+            RestoreCommandLineMetadataReplacementBypass();
             MetadataProviderBridge.Restore(commandLineOriginalProviderIndex);
             commandLineOriginalProviderIndex = -1;
+            if (commandLineRequestPresent)
+            {
+                WriteCommandLineStandardError(
+                    "EAC Enhancements: " +
+                    (commandLineError ?? "Unknown command-line error."));
+                RequestCommandLineShutdown(mainWindow);
+                return;
+            }
             NativeMethods.MessageBoxW(mainWindow,
                 "The EAC Enhancements command-line request could not be completed.\r\n\r\n" +
                 (commandLineError ?? "Unknown error."),
                 "EAC Enhancements", NativeMethods.MB_OK | NativeMethods.MB_ICONWARNING);
+        }
+
+        internal static bool IsCommandLineWorkflow()
+        {
+            return commandLineInvocation != null &&
+                commandLineInvocation.RunHundredPercentLog;
+        }
+
+        internal static string GetCommandLineDestination()
+        {
+            return IsCommandLineWorkflow()
+                ? commandLineInvocation.Destination
+                : null;
+        }
+
+        internal static void WriteCommandLineStandardError(string text)
+        {
+            try
+            {
+                Console.Error.WriteLine(text ?? String.Empty);
+                Console.Error.Flush();
+            }
+            catch (Exception error)
+            {
+                Log("Writing command-line stderr failed: " + error.Message);
+            }
+        }
+
+        private static void RequestCommandLineShutdown(IntPtr mainWindow)
+        {
+            if (mainWindow != IntPtr.Zero &&
+                NativeMethods.IsWindow(mainWindow))
+            {
+                NativeMethods.PostMessageW(
+                    mainWindow,
+                    NativeMethods.WM_COMMAND,
+                    new IntPtr((int)FinishCommandLineRunCommand),
+                    IntPtr.Zero);
+            }
         }
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

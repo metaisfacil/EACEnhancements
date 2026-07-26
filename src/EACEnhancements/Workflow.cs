@@ -963,6 +963,11 @@ namespace AudioDataPlugIn
 				StartCommandLineMetadataLookup(hwnd);
 				return IntPtr.Zero;
 			}
+			if (message == NativeMethods.WM_COMMAND && command == (int)StartCommandLineRequestCommand)
+			{
+				StartCommandLineRequest(hwnd);
+				return IntPtr.Zero;
+			}
 			if (message == NativeMethods.WM_COMMAND && command == (int)FinishCommandLineMetadataCommand)
 			{
 				FinishCommandLineMetadata(hwnd, false);
@@ -971,6 +976,15 @@ namespace AudioDataPlugIn
 			if (message == NativeMethods.WM_COMMAND && command == (int)FailCommandLineMetadataCommand)
 			{
 				FinishCommandLineMetadata(hwnd, true);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND && command == (int)FinishCommandLineRunCommand)
+			{
+				NativeMethods.PostMessageW(
+					hwnd,
+					NativeMethods.WM_CLOSE,
+					IntPtr.Zero,
+					IntPtr.Zero);
 				return IntPtr.Zero;
 			}
 		}
@@ -1324,54 +1338,65 @@ namespace AudioDataPlugIn
 			if (!ConfirmWorkflowSetup(mainWindow))
 				return;
 
-			bool askEveryTime =
-				Marshal.ReadInt32(AddressFromStaticVa(layout.OutputPathModeVa)) == 1;
-			if (askEveryTime)
+			string commandLineDestination = GetCommandLineDestination();
+			if (!String.IsNullOrEmpty(commandLineDestination))
 			{
-				OutputTemplateSettings settings = LoadOutputTemplateSettings();
-				using (FolderBrowserDialog dialog = new FolderBrowserDialog())
-				{
-					dialog.Description = settings.CreateWorkflowFolders
-						? "Choose the parent folder for this rip. EAC Enhancements will create " +
-						  "the album folder inside it using your folder template."
-						: "Choose the folder that should receive the contents of this rip.";
-					dialog.ShowNewFolderButton = true;
-					string initialPath = settings.RootFolder.TrimEnd('\\');
-					if (Directory.Exists(initialPath))
-						dialog.SelectedPath = initialPath;
-					if (dialog.ShowDialog(new WindowHandleOwner(mainWindow)) != DialogResult.OK)
-					{
-						Log("100% log destination selection cancelled before preparation began.");
-						return;
-					}
-
-					OutputTemplateSettings selectedSettings = new OutputTemplateSettings(
-						dialog.SelectedPath,
-						settings.FolderTemplate,
-						settings.ShowRipErrorAlert,
-						settings.ShowWorkflowSetupAlert,
-						settings.CreateWorkflowFolders,
-						settings.EnableLogging);
-					SaveOutputTemplateSettings(selectedSettings);
-					if (settings.CreateWorkflowFolders)
-					{
-						PrepareDedicatedWorkflowFolder(
-							mainWindow,
-							selectedSettings,
-							"100% log destination prepared");
-					}
-					else
-					{
-						PrepareDirectWorkflowDestination(selectedSettings.RootFolder);
-					}
-				}
+				PrepareCommandLineWorkflowDestination(
+					mainWindow,
+					commandLineDestination);
 			}
 			else
 			{
-				PrepareDedicatedWorkflowFolder(
-					mainWindow,
-					LoadOutputTemplateSettings(),
-					"100% log standard-directory destination prepared");
+				bool askEveryTime =
+					Marshal.ReadInt32(
+						AddressFromStaticVa(layout.OutputPathModeVa)) == 1;
+				if (askEveryTime)
+				{
+					OutputTemplateSettings settings = LoadOutputTemplateSettings();
+					using (FolderBrowserDialog dialog = new FolderBrowserDialog())
+					{
+						dialog.Description = settings.CreateWorkflowFolders
+							? "Choose the parent folder for this rip. EAC Enhancements will create " +
+							  "the album folder inside it using your folder template."
+							: "Choose the folder that should receive the contents of this rip.";
+						dialog.ShowNewFolderButton = true;
+						string initialPath = settings.RootFolder.TrimEnd('\\');
+						if (Directory.Exists(initialPath))
+							dialog.SelectedPath = initialPath;
+						if (dialog.ShowDialog(new WindowHandleOwner(mainWindow)) != DialogResult.OK)
+						{
+							Log("100% log destination selection cancelled before preparation began.");
+							return;
+						}
+
+						OutputTemplateSettings selectedSettings = new OutputTemplateSettings(
+							dialog.SelectedPath,
+							settings.FolderTemplate,
+							settings.ShowRipErrorAlert,
+							settings.ShowWorkflowSetupAlert,
+							settings.CreateWorkflowFolders,
+							settings.EnableLogging);
+						SaveOutputTemplateSettings(selectedSettings);
+						if (settings.CreateWorkflowFolders)
+						{
+							PrepareDedicatedWorkflowFolder(
+								mainWindow,
+								selectedSettings,
+								"100% log destination prepared");
+						}
+						else
+						{
+							PrepareDirectWorkflowDestination(selectedSettings.RootFolder);
+						}
+					}
+				}
+				else
+				{
+					PrepareDedicatedWorkflowFolder(
+						mainWindow,
+						LoadOutputTemplateSettings(),
+						"100% log standard-directory destination prepared");
+				}
 			}
 
 			NativeMethods.PostMessageW(
@@ -1384,12 +1409,22 @@ namespace AudioDataPlugIn
 		{
 			RequestWorkflowFolderTemplateRestore();
 			Log("100% log destination setup failed: " + ex);
-			MessageBox.Show(
-				new WindowHandleOwner(mainWindow),
-				"The extraction destination could not be prepared.\r\n\r\n" + ex.Message,
-				"EAC Enhancements",
-				MessageBoxButtons.OK,
-				MessageBoxIcon.Error);
+			if (IsCommandLineWorkflow())
+			{
+				WriteCommandLineStandardError(
+					"EAC Enhancements: the extraction destination could not be prepared. " +
+					ex.Message);
+				RequestCommandLineShutdown(mainWindow);
+			}
+			else
+			{
+				MessageBox.Show(
+					new WindowHandleOwner(mainWindow),
+					"The extraction destination could not be prepared.\r\n\r\n" + ex.Message,
+					"EAC Enhancements",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Error);
+			}
 		}
 		finally
 		{
@@ -1426,6 +1461,13 @@ namespace AudioDataPlugIn
 		catch (Exception ex)
 		{
 			Log("100% log setup could not be verified before workflow start: " + ex);
+		}
+
+		if (IsCommandLineWorkflow())
+		{
+			Log(
+				"100% log setup warning suppressed for the command-line workflow.");
+			return true;
 		}
 
 		DialogResult result = MessageBox.Show(
@@ -1586,6 +1628,25 @@ namespace AudioDataPlugIn
 		WriteEacPathBuffer(layout.StandardDirectoryPathVa, normalized);
 		WriteEacPathBuffer(layout.ActualPathVa, normalized);
 		Log("100% log contents destination prepared: '" + normalized + "'.");
+	}
+
+	private static void PrepareCommandLineWorkflowDestination(
+		IntPtr mainWindow,
+		string destinationTemplate)
+	{
+		Dictionary<string, string> metadata =
+			ReadWorkflowFolderMetadata(mainWindow);
+		Dictionary<char, string> characterReplacements =
+			ReadEacFilenameCharacterReplacements();
+		string destination =
+			WorkflowFolderPath.ResolveAbsoluteDestinationTemplate(
+				destinationTemplate,
+				metadata,
+				characterReplacements);
+		PrepareDirectWorkflowDestination(destination);
+		Log(
+			"100% log command-line album destination prepared: '" +
+			destination + "'.");
 	}
 
 	private static void PrepareDedicatedWorkflowFolder(

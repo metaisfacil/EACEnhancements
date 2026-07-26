@@ -82,7 +82,9 @@ namespace AudioDataPlugIn
 			htoaRipStartedUtc = default(DateTime);
 			Interlocked.Exchange(ref htoaRipSuspiciousCount, 0);
 		}
-		bool reportErrors = IsRipErrorAlertEnabled();
+		bool commandLineWorkflow = IsCommandLineWorkflow();
+		bool reportErrors =
+			commandLineWorkflow || IsRipErrorAlertEnabled();
 		if (!reportErrors)
 		{
 			Log("Rip error alert skipped because it is disabled in EAC Enhancements options.");
@@ -156,9 +158,10 @@ namespace AudioDataPlugIn
 		bool htoaWorkflowReport)
 	{
 		bool restorationRequested = false;
+		bool commandLineWorkflow = IsCommandLineWorkflow();
+		IntPtr intPtr = IntPtr.Zero;
 		try
 		{
-			IntPtr intPtr = IntPtr.Zero;
 			DateTime dateTime = DateTime.UtcNow.AddSeconds(15.0);
 			while (DateTime.UtcNow < dateTime)
 			{
@@ -243,18 +246,68 @@ namespace AudioDataPlugIn
 				stringBuilder.AppendLine();
 				stringBuilder.Append("Log: ").Append(fileInfo.FullName);
 			}
-			Log("Rip error alert displayed: " + string.Join("; ", list.ToArray()) + ((fileInfo == null) ? "." : ("; log='" + fileInfo.FullName + "'.")));
-			NativeMethods.MessageBoxW(intPtr, stringBuilder.ToString(), "EAC Rip Completed with Errors", 48u);
+			if (commandLineWorkflow)
+			{
+				WriteCommandLineStandardError(
+					FormatCommandLineRipErrors(
+						list,
+						fileInfo == null ? null : fileInfo.FullName));
+				Log(
+					"Rip errors reported to command-line stderr: " +
+					string.Join("; ", list.ToArray()) +
+					((fileInfo == null)
+						? "."
+						: ("; log='" + fileInfo.FullName + "'.")));
+			}
+			else
+			{
+				Log(
+					"Rip error alert displayed: " +
+					string.Join("; ", list.ToArray()) +
+					((fileInfo == null)
+						? "."
+						: ("; log='" + fileInfo.FullName + "'.")));
+				NativeMethods.MessageBoxW(
+					intPtr,
+					stringBuilder.ToString(),
+					"EAC Rip Completed with Errors",
+					48u);
+			}
 		}
 		catch (Exception ex)
 		{
 			Log("Rip error reporter failed: " + ex);
+			if (commandLineWorkflow)
+			{
+				WriteCommandLineStandardError(
+					"EAC Enhancements: rip error reporting failed. " +
+					ex.Message);
+			}
 		}
 		finally
 		{
 			if (!restorationRequested)
 				RequestWorkflowRestoreForGeneration(generation, restoreWorkflowDestination);
+			if (commandLineWorkflow)
+				RequestCommandLineShutdown(intPtr);
 		}
+	}
+
+	internal static string FormatCommandLineRipErrors(
+		IEnumerable<string> errors,
+		string logPath)
+	{
+		StringBuilder stderr = new StringBuilder();
+		stderr.AppendLine(
+			"EAC Enhancements: rip completed with errors:");
+		if (errors != null)
+		{
+			foreach (string error in errors)
+				stderr.AppendLine(error);
+		}
+		if (!String.IsNullOrEmpty(logPath))
+			stderr.Append("Log: ").Append(logPath);
+		return stderr.ToString().TrimEnd();
 	}
 
 	private static bool RequestWorkflowRestoreForGeneration(

@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 
 namespace AudioDataPlugIn
 {
@@ -58,6 +59,12 @@ namespace AudioDataPlugIn
         internal const uint WM_SETFONT = 0x0030;
         internal const uint WM_GETFONT = 0x0031;
         internal const uint EM_SETLIMITTEXT = 0x00C5;
+        internal const uint CB_GETCOUNT = 0x0146;
+        internal const uint CB_GETCURSEL = 0x0147;
+        internal const uint CB_GETLBTEXT = 0x0148;
+        internal const uint CB_GETLBTEXTLEN = 0x0149;
+        internal const uint CB_SETCURSEL = 0x014E;
+        internal const int CBN_SELCHANGE = 1;
         internal const int EN_KILLFOCUS = 0x0200;
         internal const int EN_CHANGE = 0x0300;
         internal const uint SC_CLOSE = 0xF060;
@@ -413,6 +420,28 @@ namespace AudioDataPlugIn
 
         [DllImport("user32.dll")]
         internal static extern IntPtr GetMenu(IntPtr hwnd);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        internal static extern SafeFileHandle CreateFileW(
+            string fileName,
+            uint desiredAccess,
+            uint shareMode,
+            IntPtr securityAttributes,
+            uint creationDisposition,
+            uint flagsAndAttributes,
+            IntPtr templateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool DeviceIoControl(
+            SafeFileHandle device,
+            uint controlCode,
+            byte[] input,
+            uint inputLength,
+            byte[] output,
+            uint outputLength,
+            out uint bytesReturned,
+            IntPtr overlapped);
 
         [DllImport("user32.dll")]
         internal static extern int GetMenuItemCount(IntPtr menu);
