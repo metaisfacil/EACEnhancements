@@ -161,6 +161,20 @@ namespace AudioDataPlugIn
             return true;
         }
 
+        internal static string ResolveLiteralFilename(
+            string value,
+            IDictionary<char, string> characterReplacements)
+        {
+            string resolved = SanitizeComponent(
+                ApplyCharacterReplacements(
+                    value,
+                    characterReplacements));
+            if (String.IsNullOrWhiteSpace(resolved))
+                throw new InvalidOperationException(
+                    "The HTOA filename is empty after applying EAC's Character Replacements.");
+            return resolved;
+        }
+
         private static string SanitizeComponent(string value)
         {
             HashSet<char> invalid = new HashSet<char>(Path.GetInvalidFileNameChars());

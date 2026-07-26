@@ -92,6 +92,7 @@ namespace AudioDataPlugIn
 		uint num = Pointer32(workflowData);
 		uint address = num + 100;
 		uint htoaStateAddress = num + 101;
+		uint commandLineHtoaAddress = num + 102;
 		uint htoaEjectCountersAddress = num + 104;
 		uint htoaBeepCountersAddress = num + 116;
 		uint htoaDefaultFilenameAddress = num + 128;
@@ -105,6 +106,8 @@ namespace AudioDataPlugIn
 		workflowSelectionBackupAddress = num;
 		workflowAutoCloseFlagAddress = address;
 		htoaWorkflowStateAddress = htoaStateAddress;
+		commandLineHtoaFlagAddress = commandLineHtoaAddress;
+		EnhancementRuntime.htoaOutputPathAddress = htoaOutputPathAddress;
 		htoaEjectCounterAddress = htoaEjectCountersAddress;
 		htoaBeepCounterAddress = htoaBeepCountersAddress;
 		X86CodeBuilder x86CodeBuilder = new X86CodeBuilder(workflowCode);
@@ -236,11 +239,23 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.Emit(Hex("68 FF 0F 00 00"));
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveResumeVa));
 		int useHtoaDefaultFilename = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(commandLineHtoaAddress, 0);
+		int interactiveHtoaFilenameBranch =
+			x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
+			htoaOutputPathAddress,
+			RuntimeVa(layout.RangeOutputPathVa),
+			RangeOutputPathBufferBytes);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveBypassVa));
+		int interactiveHtoaFilename = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
 			htoaDefaultFilenameAddress,
 			RuntimeVa(layout.RangeOutputPathVa),
 			htoaDefaultFilenameBytes.Length);
 		x86CodeBuilder.EmitJmp(x86CodeBuilder.AddressOf(promptWithCurrentFilename));
+		x86CodeBuilder.PatchBranch(
+			interactiveHtoaFilenameBranch,
+			x86CodeBuilder.AddressOf(interactiveHtoaFilename));
 		int reuseHtoaOutputPath = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
 			htoaOutputPathAddress,
@@ -271,36 +286,42 @@ namespace AudioDataPlugIn
 		int rangeEjectHook1 = EmitRangeEjectHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			commandLineHtoaAddress,
 			htoaEjectCountersAddress,
 			layout.RangeEjectResume1Va,
 			layout.RangeEjectSkip1Va);
 		int rangeEjectHook2 = EmitRangeEjectHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			commandLineHtoaAddress,
 			htoaEjectCountersAddress + 4,
 			layout.RangeEjectResume2Va,
 			layout.RangeEjectSkip2Va);
 		int rangeEjectHook3 = EmitRangeEjectHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			commandLineHtoaAddress,
 			htoaEjectCountersAddress + 8,
 			layout.RangeEjectResume3Va,
 			layout.RangeEjectSkip3Va);
 		int rangeBeepHook1 = EmitRangeBeepHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			commandLineHtoaAddress,
 			htoaBeepCountersAddress,
 			layout.RangeBeepResume1Va,
 			layout.RangeBeepSkip1Va);
 		int rangeBeepHook2 = EmitRangeBeepHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			commandLineHtoaAddress,
 			htoaBeepCountersAddress + 4,
 			layout.RangeBeepResume2Va,
 			layout.RangeBeepSkip2Va);
 		int rangeBeepHook3 = EmitRangeBeepHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			commandLineHtoaAddress,
 			htoaBeepCountersAddress + 8,
 			layout.RangeBeepResume3Va,
 			layout.RangeBeepSkip3Va);
@@ -343,6 +364,7 @@ namespace AudioDataPlugIn
 	private static int EmitRangeEjectHook(
 		X86CodeBuilder code,
 		uint htoaStateAddress,
+		uint commandLineHtoaAddress,
 		uint counterAddress,
 		uint normalResumeVa,
 		uint suppressEjectVa)
@@ -352,6 +374,9 @@ namespace AudioDataPlugIn
 		int suppressDuringPass1 = code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
 		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(commandLineHtoaAddress, 2);
+		int suppressBetweenCommandLineWorkflows =
+			code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(RuntimeVa(layout.EjectWhenDoneVa), 0);
 		code.EmitJmp(RuntimeVa(normalResumeVa));
 		int suppress = code.Offset;
@@ -359,12 +384,16 @@ namespace AudioDataPlugIn
 		code.EmitJmp(RuntimeVa(suppressEjectVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		code.PatchBranch(
+			suppressBetweenCommandLineWorkflows,
+			code.AddressOf(suppress));
 		return hook;
 	}
 
 	private static int EmitRangeBeepHook(
 		X86CodeBuilder code,
 		uint htoaStateAddress,
+		uint commandLineHtoaAddress,
 		uint counterAddress,
 		uint normalResumeVa,
 		uint suppressBeepVa)
@@ -374,6 +403,9 @@ namespace AudioDataPlugIn
 		int suppressDuringPass1 = code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
 		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(commandLineHtoaAddress, 2);
+		int suppressBetweenCommandLineWorkflows =
+			code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(RuntimeVa(layout.BeepWhenDoneVa), 0);
 		code.EmitJmp(RuntimeVa(normalResumeVa));
 		int suppress = code.Offset;
@@ -381,6 +413,9 @@ namespace AudioDataPlugIn
 		code.EmitJmp(RuntimeVa(suppressBeepVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		code.PatchBranch(
+			suppressBetweenCommandLineWorkflows,
+			code.AddressOf(suppress));
 		return hook;
 	}
 
@@ -978,6 +1013,11 @@ namespace AudioDataPlugIn
 				FinishCommandLineMetadata(hwnd, true);
 				return IntPtr.Zero;
 			}
+			if (message == NativeMethods.WM_COMMAND && command == (int)ContinueCommandLineActionsCommand)
+			{
+				ContinueCommandLineActions(hwnd);
+				return IntPtr.Zero;
+			}
 			if (message == NativeMethods.WM_COMMAND && command == (int)FinishCommandLineRunCommand)
 			{
 				NativeMethods.PostMessageW(
@@ -1201,26 +1241,31 @@ namespace AudioDataPlugIn
 			(itemState & interactiveState) == 0;
 	}
 
-	private static void StartHtoaWorkflow(IntPtr mainWindow)
+	private static bool StartHtoaWorkflow(IntPtr mainWindow)
 	{
 		if (htoaWorkflowStateAddress == 0 || !IsHtoaAvailable() ||
 			!IsCompressedCopyRangeEnabled(NativeMethods.GetMenu(mainWindow)))
 		{
 			Log("HTOA workflow invocation ignored because no rip-capable HTOA is currently available.");
-			return;
+			return false;
 		}
 		if (Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress)) != 0 ||
 			Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa)) != 0 ||
 			ripSessionActive)
 		{
 			Log("HTOA workflow invocation ignored because another extraction workflow is active.");
-			return;
+			if (IsCommandLineHtoaRequested())
+				throw new InvalidOperationException(
+					"The HTOA workflow could not start because another extraction workflow is active.");
+			return false;
 		}
 		if (!ConfirmWorkflowSetup(mainWindow))
-			return;
+			return false;
 
 		try
 		{
+			if (IsCommandLineHtoaRequested())
+				PrepareCommandLineHtoaOutput(mainWindow);
 			ulong trackOneStart = ReadUInt64(
 				layout.FirstTocTrackStartLowVa,
 				layout.FirstTocTrackStartHighVa);
@@ -1242,18 +1287,87 @@ namespace AudioDataPlugIn
 				new IntPtr((int)CompressedCopyRangeCommand),
 				IntPtr.Zero);
 			Log("HTOA 100% log pass 1 queued for sectors 0-" + rangeEnd + ".");
+			return true;
 		}
 		catch (Exception ex)
 		{
 			Marshal.WriteByte(new IntPtr((int)htoaWorkflowStateAddress), 0);
+			if (commandLineHtoaFlagAddress != 0)
+				Marshal.WriteByte(
+					new IntPtr((int)commandLineHtoaFlagAddress),
+					0);
 			Log("HTOA workflow could not be started: " + ex);
+			if (IsCommandLineHtoaRequested())
+				throw;
 			MessageBox.Show(
 				new WindowHandleOwner(mainWindow),
 				"The HTOA extraction could not be started.\r\n\r\n" + ex.Message,
 				"EAC Enhancements",
 				MessageBoxButtons.OK,
 				MessageBoxIcon.Error);
+			return false;
 		}
+	}
+
+	private static void PrepareCommandLineHtoaOutput(IntPtr mainWindow)
+	{
+		if (commandLineHtoaFlagAddress == 0 ||
+			htoaOutputPathAddress == 0)
+		{
+			throw new InvalidOperationException(
+				"The command-line HTOA output hook is unavailable.");
+		}
+
+		string commandLineDestination = GetCommandLineDestination();
+		string directory;
+		if (!String.IsNullOrEmpty(commandLineDestination))
+		{
+			PrepareCommandLineWorkflowDestination(
+				mainWindow,
+				commandLineDestination);
+			directory = workflowOutputDirectory;
+		}
+		else
+		{
+			directory = null;
+			using (RegistryKey extraction = Registry.CurrentUser.OpenSubKey(
+				"Software\\AWSoftware\\EACU\\Extraction Options"))
+			{
+				if (extraction != null)
+				directory = extraction.GetValue(
+					"DirectorySpecification",
+					String.Empty) as string;
+			}
+			if (String.IsNullOrWhiteSpace(directory))
+				directory = LoadOutputTemplateSettings().RootFolder;
+			directory = Path.GetFullPath(directory);
+			Directory.CreateDirectory(directory);
+		}
+
+		string filename = WorkflowFolderPath.ResolveLiteralFilename(
+			GetCommandLineHtoaFilename(),
+			ReadEacFilenameCharacterReplacements());
+		string outputPath = Path.Combine(directory, filename);
+		byte[] encoded = Encoding.Unicode.GetBytes(outputPath + "\0");
+		if (encoded.Length > RangeOutputPathBufferBytes)
+			throw new PathTooLongException(
+				"The HTOA output path is too long for EAC.");
+
+		byte[] buffer = new byte[RangeOutputPathBufferBytes];
+		Buffer.BlockCopy(encoded, 0, buffer, 0, encoded.Length);
+		Marshal.Copy(
+			buffer,
+			0,
+			new IntPtr((int)htoaOutputPathAddress),
+			buffer.Length);
+		Marshal.WriteByte(
+			new IntPtr((int)commandLineHtoaFlagAddress),
+			HasCommandLineWorkflowAfterHtoa()
+				? (byte)2
+				: (byte)1);
+		Log(
+			"Command-line HTOA output prepared: '" +
+			outputPath + "'.");
 	}
 
 	private static void StartHtoaSecondPass(IntPtr mainWindow)
@@ -1319,12 +1433,24 @@ namespace AudioDataPlugIn
 		{
 			RequestWorkflowButtonState(mainWindow, false);
 			Log("100% log invocation ignored because EAC has no loaded audio-CD TOC.");
+			if (IsCommandLineWorkflow())
+			{
+				WriteCommandLineStandardError(
+					"EAC Enhancements: the 100% log workflow could not start because EAC has no loaded audio-CD TOC.");
+				RequestCommandLineShutdown(mainWindow);
+			}
 			return;
 		}
 		if (!IsReferenceRipCommandEnabled(mainWindow))
 		{
 			RequestWorkflowButtonState(mainWindow, false);
 			Log("100% log invocation ignored because EAC command 0x303 is disabled or unavailable.");
+			if (IsCommandLineWorkflow())
+			{
+				WriteCommandLineStandardError(
+					"EAC Enhancements: the 100% log workflow could not start because EAC's reference rip command is unavailable.");
+				RequestCommandLineShutdown(mainWindow);
+			}
 			return;
 		}
 

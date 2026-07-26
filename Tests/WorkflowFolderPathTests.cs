@@ -134,6 +134,11 @@ namespace AudioDataPlugIn
                     "GULLET",
                     "A" + characterReplacements[':'] +
                     " ''B''  and  C {CPCS-004}"));
+            AssertEqual(
+                WorkflowFolderPath.ResolveLiteralFilename(
+                    "HTOA: hidden.flac",
+                    characterReplacements),
+                "HTOA" + characterReplacements[':'] + " hidden.flac");
 
             Console.WriteLine("Workflow folder path tests passed.");
             return 0;

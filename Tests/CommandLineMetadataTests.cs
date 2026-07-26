@@ -32,17 +32,36 @@ namespace AudioDataPlugIn
             CommandLineInvocation invocation = CommandLineInvocation.Parse(new[]
             {
                 "EAC.exe", "--eace-100-log", "--eace-drive=j:",
+                "--eace-htoa=Pregap.flac",
                 "--eace-dest=C:\\Rips\\%albumartist% - %albumtitle%",
                 "--eace-metadata=" + d1
             });
             Assert(invocation.RunHundredPercentLog && invocation.Metadata != null, "combined invocation");
             Assert(invocation.Drive == "j:", "drive selector");
+            Assert(invocation.HtoaFilename == "Pregap.flac", "HTOA filename");
             Assert(
                 invocation.Destination ==
                     "C:\\Rips\\%albumartist% - %albumtitle%",
                 "destination template");
             AssertThrows(delegate { CommandLineInvocation.Parse(new[] { "EAC.exe", "--eace-100-log" }); });
             AssertThrows(delegate { CommandLineInvocation.Parse(new[] { "EAC.exe", "--eace-drive=J:" }); });
+            CommandLineInvocation htoaOnly = CommandLineInvocation.Parse(
+                new[] { "EAC.exe", "--eace-drive=J:", "--eace-htoa=HTOA.flac" });
+            Assert(
+                htoaOnly.HasWork &&
+                htoaOnly.Metadata == null &&
+                htoaOnly.HtoaFilename == "HTOA.flac",
+                "HTOA-only invocation");
+            AssertThrows(delegate
+            {
+                CommandLineInvocation.Parse(
+                    new[] { "EAC.exe", "--eace-htoa=C:\\Rips\\HTOA.flac" });
+            });
+            AssertThrows(delegate
+            {
+                CommandLineInvocation.Parse(
+                    new[] { "EAC.exe", "--eace-htoa=one.flac", "--eace-htoa=two.flac" });
+            });
             AssertThrows(delegate
             {
                 CommandLineInvocation.Parse(new[]
@@ -134,7 +153,8 @@ namespace AudioDataPlugIn
                 EnhancementRuntime.BeginCommandLineMetadataCommand,
                 EnhancementRuntime.FinishCommandLineMetadataCommand,
                 EnhancementRuntime.FailCommandLineMetadataCommand,
-                EnhancementRuntime.FinishCommandLineRunCommand
+                EnhancementRuntime.FinishCommandLineRunCommand,
+                EnhancementRuntime.ContinueCommandLineActionsCommand
             };
             uint[] occupied =
             {

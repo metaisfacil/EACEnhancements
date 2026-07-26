@@ -289,7 +289,32 @@ namespace AudioDataPlugIn
 			if (!restorationRequested)
 				RequestWorkflowRestoreForGeneration(generation, restoreWorkflowDestination);
 			if (commandLineWorkflow)
-				RequestCommandLineShutdown(intPtr);
+			{
+				if (htoaWorkflowReport &&
+					IsCommandLineHtoaRequested())
+				ContinueAfterCommandLineHtoa(intPtr);
+				else
+					RequestCommandLineShutdown(intPtr);
+			}
+		}
+	}
+
+	private static void ContinueAfterCommandLineHtoa(IntPtr mainWindow)
+	{
+		if (commandLineHtoaFlagAddress != 0)
+		{
+			Marshal.WriteByte(
+				new IntPtr((int)commandLineHtoaFlagAddress),
+				0);
+		}
+		if (mainWindow != IntPtr.Zero &&
+			NativeMethods.IsWindow(mainWindow))
+		{
+			NativeMethods.PostMessageW(
+				mainWindow,
+				NativeMethods.WM_COMMAND,
+				new IntPtr((int)ContinueCommandLineActionsCommand),
+				IntPtr.Zero);
 		}
 	}
 

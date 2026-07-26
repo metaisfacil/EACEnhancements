@@ -5,13 +5,18 @@ EAC Enhancements adds these arguments:
 ```text
 --eace-metadata=d1.<payload>
 --eace-100-log
+--eace-htoa="00 HTOA.flac"
 --eace-drive=J:
 --eace-dest=C:\Rips\%albumartist% - %albumtitle% (((%year%)))
 ```
 
 `--eace-metadata` loads disc and track metadata into EAC. `--eace-100-log`
 starts the usual EAC Enhancements workflow after that metadata has been loaded.
-Metadata is required; the rip will not start without it.
+Metadata is required for `--eace-100-log`; that rip will not start without it.
+`--eace-htoa` optionally runs the two-pass HTOA workflow using the supplied
+output filename. It runs before `--eace-100-log` when both are supplied. If the
+disc has no rip-capable HTOA, the HTOA step is skipped without error. An
+HTOA-only invocation does not require a metadata payload.
 `--eace-drive` selects the requested optical drive before the disc is validated
 or metadata is loaded. It accepts a drive letter or a portion of the drive name.
 `--eace-dest` optionally supplies the fully qualified album-folder destination.

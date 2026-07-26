@@ -17,6 +17,7 @@ namespace AudioDataPlugIn
     internal sealed class CommandLineInvocation
     {
         internal bool RunHundredPercentLog;
+        internal string HtoaFilename;
         internal string Drive;
         internal string Destination;
         internal CommandLineMetadata Metadata;
@@ -27,6 +28,7 @@ namespace AudioDataPlugIn
             string encodedMetadata = null;
             string drive = null;
             string destination = null;
+            string htoaFilename = null;
 
             for (int i = 1; i < arguments.Length; i++)
             {
@@ -42,6 +44,14 @@ namespace AudioDataPlugIn
                     if (encodedMetadata != null)
                         throw new FormatException("--eace-metadata was specified more than once.");
                     encodedMetadata = argument.Substring("--eace-metadata=".Length);
+                }
+                else if (argument.StartsWith("--eace-htoa=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (htoaFilename != null)
+                        throw new FormatException("--eace-htoa was specified more than once.");
+                    htoaFilename = argument.Substring("--eace-htoa=".Length).Trim();
+                    if (!IsValidHtoaFilename(htoaFilename))
+                        throw new FormatException("--eace-htoa requires a filename without a directory path.");
                 }
                 else if (argument.StartsWith("--eace-drive=", StringComparison.OrdinalIgnoreCase))
                 {
@@ -67,10 +77,16 @@ namespace AudioDataPlugIn
                 result.Metadata = D1MetadataCodec.Decode(encodedMetadata);
             result.Drive = drive;
             result.Destination = destination;
+            result.HtoaFilename = htoaFilename;
             if (result.RunHundredPercentLog && result.Metadata == null)
                 throw new FormatException("--eace-100-log requires --eace-metadata=d1.<payload>.");
-            if (result.Drive != null && result.Metadata == null)
-                throw new FormatException("--eace-drive requires --eace-metadata=d1.<payload>.");
+            if (result.Drive != null &&
+                result.Metadata == null &&
+                result.HtoaFilename == null)
+            {
+                throw new FormatException(
+                    "--eace-drive requires --eace-metadata=d1.<payload> or --eace-htoa=FILENAME.ext.");
+            }
             if (result.Destination != null &&
                 (!result.RunHundredPercentLog || result.Metadata == null))
             {
@@ -78,6 +94,24 @@ namespace AudioDataPlugIn
                     "--eace-dest requires --eace-100-log and --eace-metadata=d1.<payload>.");
             }
             return result;
+        }
+
+        internal static bool IsValidHtoaFilename(string value)
+        {
+            string text = (value ?? String.Empty).Trim();
+            if (text.Length == 0 ||
+                text == "." ||
+                text == ".." ||
+                Path.IsPathRooted(text) ||
+                text.IndexOf('\\') >= 0 ||
+                text.IndexOf('/') >= 0)
+            {
+                return false;
+            }
+            return String.Equals(
+                Path.GetFileName(text),
+                text,
+                StringComparison.Ordinal);
         }
 
         internal static bool IsFullyQualifiedDestination(string value)
@@ -95,7 +129,7 @@ namespace AudioDataPlugIn
 
         internal bool HasWork
         {
-            get { return Metadata != null; }
+            get { return Metadata != null || HtoaFilename != null; }
         }
     }
 
@@ -436,6 +470,7 @@ namespace AudioDataPlugIn
         internal const uint FinishCommandLineMetadataCommand = 0xA324;
         internal const uint FailCommandLineMetadataCommand = 0xA325;
         internal const uint FinishCommandLineRunCommand = 0xA326;
+        internal const uint ContinueCommandLineActionsCommand = 0xA327;
         private const int DriveSelectorControlId = 5;
         private const int DriveReadyWaitAttempts = 600;
         private const uint Eac18MetadataReplacementGuardVa = 0x0040875A;
@@ -454,6 +489,7 @@ namespace AudioDataPlugIn
         private static int commandLineStartPosted;
         private static int commandLineLookupPosted;
         private static int commandLineProviderCalled;
+        private static int commandLineHtoaAttempted;
         private static int commandLineOriginalProviderIndex = -1;
         private static uint commandLineReplacementPatchVa;
         private static byte[] commandLineReplacementOriginalBytes;
@@ -473,6 +509,9 @@ namespace AudioDataPlugIn
                         StringComparison.OrdinalIgnoreCase) ||
                     argument.StartsWith(
                         "--eace-drive=",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    argument.StartsWith(
+                        "--eace-htoa=",
                         StringComparison.OrdinalIgnoreCase) ||
                     argument.StartsWith(
                         "--eace-dest=",
@@ -546,7 +585,10 @@ namespace AudioDataPlugIn
                             NativeMethods.PostMessageW(
                                 mainWindow,
                                 NativeMethods.WM_COMMAND,
-                                new IntPtr(BeginCommandLineMetadataCommand),
+                                new IntPtr(
+                                    commandLineInvocation.Metadata == null
+                                        ? ContinueCommandLineActionsCommand
+                                        : BeginCommandLineMetadataCommand),
                                 IntPtr.Zero);
                         }
                         return;
@@ -838,10 +880,34 @@ namespace AudioDataPlugIn
             SetAlbumMetadataStoreDirty();
             PersistPendingAlbumMetadataStoreChanges();
             Log("Command-line custom album metadata was applied successfully.");
-            if (commandLineInvocation.RunHundredPercentLog)
-                ShowWorkflowDestinationDialog(mainWindow);
-            else
-                RequestCommandLineShutdown(mainWindow);
+            ContinueCommandLineActions(mainWindow);
+        }
+
+        private static void ContinueCommandLineActions(IntPtr mainWindow)
+        {
+            try
+            {
+                if (!String.IsNullOrEmpty(commandLineInvocation.HtoaFilename) &&
+                    Interlocked.CompareExchange(
+                        ref commandLineHtoaAttempted,
+                        1,
+                        0) == 0 &&
+                    StartHtoaWorkflow(mainWindow))
+                {
+                    return;
+                }
+
+                if (commandLineInvocation.RunHundredPercentLog)
+                    ShowWorkflowDestinationDialog(mainWindow);
+                else
+                    RequestCommandLineShutdown(mainWindow);
+            }
+            catch (Exception error)
+            {
+                commandLineError = error.Message;
+                Log("Command-line action sequencing failed: " + error);
+                ShowCommandLineError(mainWindow);
+            }
         }
 
         private static void ShowCommandLineError(IntPtr mainWindow)
@@ -864,6 +930,26 @@ namespace AudioDataPlugIn
         }
 
         internal static bool IsCommandLineWorkflow()
+        {
+            return commandLineInvocation != null &&
+                (commandLineInvocation.RunHundredPercentLog ||
+                 !String.IsNullOrEmpty(commandLineInvocation.HtoaFilename));
+        }
+
+        internal static bool IsCommandLineHtoaRequested()
+        {
+            return commandLineInvocation != null &&
+                !String.IsNullOrEmpty(commandLineInvocation.HtoaFilename);
+        }
+
+        internal static string GetCommandLineHtoaFilename()
+        {
+            return IsCommandLineHtoaRequested()
+                ? commandLineInvocation.HtoaFilename
+                : null;
+        }
+
+        internal static bool HasCommandLineWorkflowAfterHtoa()
         {
             return commandLineInvocation != null &&
                 commandLineInvocation.RunHundredPercentLog;

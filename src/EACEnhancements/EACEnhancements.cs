@@ -170,6 +170,8 @@ namespace AudioDataPlugIn
         private static uint workflowSelectionBackupAddress;
         private static uint workflowAutoCloseFlagAddress;
         private static uint htoaWorkflowStateAddress;
+        private static uint commandLineHtoaFlagAddress;
+        private static uint htoaOutputPathAddress;
         private static uint htoaEjectCounterAddress;
         private static uint htoaBeepCounterAddress;
         private static uint htoaRangeEndLow;
