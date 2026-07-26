@@ -485,6 +485,7 @@ namespace AudioDataPlugIn
         private const string InternetOptionsKey = @"Software\AWSoftware\EACU\Internet Options";
         private static CommandLineInvocation commandLineInvocation;
         private static bool commandLineRequestPresent;
+        private static bool commandLineMetadataArgumentPresent;
         private static string commandLineError;
         private static int commandLineStartPosted;
         private static int commandLineLookupPosted;
@@ -518,8 +519,11 @@ namespace AudioDataPlugIn
                         StringComparison.OrdinalIgnoreCase))
                 {
                     commandLineRequestPresent = true;
-                    break;
                 }
+                if (argument.StartsWith(
+                        "--eace-metadata=",
+                        StringComparison.OrdinalIgnoreCase))
+                    commandLineMetadataArgumentPresent = true;
             }
             try
             {
@@ -531,6 +535,11 @@ namespace AudioDataPlugIn
                 commandLineError = error.Message;
                 Log("Command-line validation failed: " + error);
             }
+        }
+
+        internal static bool IsCommandLineMetadataProviderRequired()
+        {
+            return commandLineMetadataArgumentPresent;
         }
 
         private static void BeginCommandLineWhenReady(IntPtr mainWindow)

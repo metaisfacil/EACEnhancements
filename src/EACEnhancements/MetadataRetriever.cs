@@ -17,6 +17,15 @@ namespace MetadataPlugIn
             try
             {
                 AudioDataPlugIn.EnhancementRuntime.Initialize();
+                if (!AudioDataPlugIn.EnhancementRuntime
+                        .IsCommandLineMetadataProviderRequired())
+                {
+                    // PluginHandler catches constructor failures and omits the
+                    // retriever from its provider array. The audio-transfer
+                    // entry point in this same assembly remains available.
+                    throw new NotSupportedException(
+                        "The command-line metadata provider is inactive.");
+                }
                 AudioDataPlugIn.EnhancementRuntime.Log("Command-line metadata provider loaded.");
             }
             catch (NotSupportedException)

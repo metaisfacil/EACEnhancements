@@ -20,6 +20,20 @@ namespace AudioDataPlugIn
                 throw new Exception("AudioDataTransfer does not implement EAC's audio-transfer contract.");
             if (!typeof(IMetadataRetriever).IsAssignableFrom(typeof(MetadataRetriever)))
                 throw new Exception("MetadataRetriever does not implement EAC's metadata contract.");
+            bool hiddenWithoutCommandLineMetadata = false;
+            try
+            {
+                new MetadataRetriever();
+            }
+            catch (NotSupportedException)
+            {
+                hiddenWithoutCommandLineMetadata = true;
+            }
+            if (!hiddenWithoutCommandLineMetadata)
+            {
+                throw new Exception(
+                    "The command-line metadata provider loaded without a command-line metadata request.");
+            }
 
             Console.WriteLine("Plugin identity and EAC contract tests passed: " + expected);
             return 0;
