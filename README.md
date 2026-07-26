@@ -4,7 +4,7 @@
 > This is experimental and proof-of-concept software that relies on memory hacking.
 > It has not yet been extensively battle-tested. Proceed at your own risk.
 
-<p align="center"><img width="800" alt="image" src="https://github.com/user-attachments/assets/e26b8d83-df72-4bfd-993c-89fe6b12d487" /></p>
+<p align="center"><img width="800" alt="image" src="https://github.com/user-attachments/assets/78a003f4-5379-4af5-8725-2fdc052f1932" /></p>
 
 EAC Enhancements is a third-party plugin for
 Exact Audio Copy that adds a number of quality-of-life features:
