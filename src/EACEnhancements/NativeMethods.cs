@@ -43,6 +43,7 @@ namespace AudioDataPlugIn
         internal const uint WM_DRAWITEM = 0x002B;
         internal const uint WM_NOTIFY = 0x004E;
         internal const uint WM_COMMAND = 0x0111;
+        internal const uint WM_CTLCOLOREDIT = 0x0133;
         internal const uint WM_SYSCOMMAND = 0x0112;
         internal const uint WM_TIMER = 0x0113;
         internal const uint WM_KEYDOWN = 0x0100;
@@ -322,6 +323,12 @@ namespace AudioDataPlugIn
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool InvalidateRect(IntPtr hwnd, IntPtr rectangle, bool erase);
+
+        [DllImport("gdi32.dll", SetLastError = true)]
+        internal static extern IntPtr CreateSolidBrush(uint color);
+
+        [DllImport("gdi32.dll")]
+        internal static extern uint SetBkColor(IntPtr deviceContext, uint color);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

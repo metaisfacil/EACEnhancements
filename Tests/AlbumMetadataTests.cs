@@ -105,9 +105,39 @@ namespace AudioDataPlugIn
                     0,
                     0x1FFF),
                 "filename formatter remains native");
+            AssertTrue(
+                EnhancementRuntime.IsValidMusicBrainzBarcode("96385074"),
+                "valid EAN-8");
+            AssertTrue(
+                EnhancementRuntime.IsValidMusicBrainzBarcode("036000291452"),
+                "valid UPC-A");
+            AssertTrue(
+                EnhancementRuntime.IsValidMusicBrainzBarcode("4006381333931"),
+                "valid EAN-13");
+            AssertTrue(
+                EnhancementRuntime.IsValidMusicBrainzBarcode("10012345000017"),
+                "valid GTIN-14");
+            AssertTrue(
+                !EnhancementRuntime.IsValidMusicBrainzBarcode("4006381333932"),
+                "invalid check digit");
+            AssertTrue(
+                !EnhancementRuntime.IsValidMusicBrainzBarcode("03600 291452"),
+                "non-digit barcode");
+            AssertTrue(
+                !EnhancementRuntime.IsValidMusicBrainzBarcode("12345678901"),
+                "unsupported barcode length");
+            AssertTrue(
+                !EnhancementRuntime.IsValidMusicBrainzBarcode(String.Empty),
+                "empty barcode");
 
             Console.WriteLine("Album metadata token tests passed.");
             return 0;
+        }
+
+        private static void AssertTrue(bool value, string description)
+        {
+            if (!value)
+                throw new Exception("Failed " + description + ".");
         }
 
         private static void AssertEqual(

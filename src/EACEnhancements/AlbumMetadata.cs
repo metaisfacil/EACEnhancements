@@ -40,6 +40,8 @@ namespace AudioDataPlugIn
         private const uint SwpNoActivate = 0x0010;
         private const uint AlbumMetadataStoreSaveTimerId = 0xEAC5;
         private const uint AlbumMetadataStoreSaveDelayMilliseconds = 750;
+        // COLORREF stores RGB as 0x00BBGGRR. This is RGB(226, 246, 230).
+        internal const uint ValidBarcodeBackgroundColor = 0x00E6F6E2;
 
         private static readonly byte[] ExpectedMetadataTemplateFormatterPrologue =
             { 0x55, 0x89, 0xE5, 0x55, 0x81, 0xEC, 0xE4, 0x02, 0x00, 0x00 };
@@ -60,6 +62,7 @@ namespace AudioDataPlugIn
         private static MainWindowSubclassDelegate albumMetadataEditSubclassDelegate;
         private static MainWindowSubclassDelegate albumMetadataStateControlSubclassDelegate;
         private static IntPtr albumMetadataUserEditControl;
+        private static IntPtr validBarcodeBackgroundBrush;
         private static int lastAlbumMetadataInstallTick;
         private static IntPtr metadataTemplateFormatterTrampoline;
         private static MetadataTemplateFormatterDelegate originalMetadataTemplateFormatter;
@@ -638,6 +641,17 @@ namespace AudioDataPlugIn
                     "CreateWindowExW failed for the album metadata fields with Win32 error " +
                     Marshal.GetLastWin32Error() + ".");
             }
+            if (validBarcodeBackgroundBrush == IntPtr.Zero)
+            {
+                validBarcodeBackgroundBrush = NativeMethods.CreateSolidBrush(
+                    ValidBarcodeBackgroundColor);
+                if (validBarcodeBackgroundBrush == IntPtr.Zero)
+                {
+                    Log(
+                        "The valid-barcode background brush could not be created; Win32 error " +
+                        Marshal.GetLastWin32Error() + ".");
+                }
+            }
 
             IntPtr font = NativeMethods.SendMessageW(
                 comment,
@@ -828,6 +842,17 @@ namespace AudioDataPlugIn
         {
             try
             {
+                if (message == NativeMethods.WM_CTLCOLOREDIT &&
+                    lParam == albumBarcodeEdit &&
+                    validBarcodeBackgroundBrush != IntPtr.Zero &&
+                    IsValidMusicBrainzBarcode(
+                        ReadWindowText(albumBarcodeEdit)))
+                {
+                    NativeMethods.SetBkColor(
+                        wParam,
+                        ValidBarcodeBackgroundColor);
+                    return validBarcodeBackgroundBrush;
+                }
                 if (message == NativeMethods.WM_SIZE)
                 {
                     IntPtr result = NativeMethods.DefSubclassProc(
@@ -1182,6 +1207,10 @@ namespace AudioDataPlugIn
             if (lParam == albumBarcodeEdit &&
                 command == AlbumBarcodeControlId)
             {
+                NativeMethods.InvalidateRect(
+                    albumBarcodeEdit,
+                    IntPtr.Zero,
+                    true);
                 if (albumMetadataUserEditControl != lParam)
                     return;
                 albumMetadataStoreLoadPending = false;
@@ -1218,6 +1247,33 @@ namespace AudioDataPlugIn
                     CompletePendingAlbumMetadataStoreLoadIfReady(parent);
                 }
             }
+        }
+
+        internal static bool IsValidMusicBrainzBarcode(string value)
+        {
+            string barcode = value ?? String.Empty;
+            if (barcode.Length != 8 &&
+                barcode.Length != 12 &&
+                barcode.Length != 13 &&
+                barcode.Length != 14)
+            {
+                return false;
+            }
+            for (int index = 0; index < barcode.Length; index++)
+            {
+                if (barcode[index] < '0' || barcode[index] > '9')
+                    return false;
+            }
+
+            int trunkLength = barcode.Length - 1;
+            int calculated = 0;
+            for (int index = 0; index < trunkLength; index++)
+            {
+                int digit = barcode[trunkLength - 1 - index] - '0';
+                calculated += digit * (index % 2 == 1 ? 1 : 3);
+            }
+            int checkDigit = (10 - (calculated % 10)) % 10;
+            return checkDigit == barcode[barcode.Length - 1] - '0';
         }
 
         private static void CompletePendingAlbumMetadataStoreLoadIfReady(
