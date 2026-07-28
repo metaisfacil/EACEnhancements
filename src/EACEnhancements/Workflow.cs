@@ -858,10 +858,6 @@ namespace AudioDataPlugIn
 					EnsureMainWindowSubclass(intPtr);
 				}
 				MaybeInstallExtendedCompressorArguments(cWPSTRUCT.hwnd);
-				MaybeStageExtendedCompressorArgumentsBeforePropertySheetCommand(
-					cWPSTRUCT.hwnd,
-					cWPSTRUCT.message,
-					cWPSTRUCT.wParam);
 				InspectWorkflowMessage(cWPSTRUCT.hwnd, cWPSTRUCT.message, cWPSTRUCT.wParam, cWPSTRUCT.lParam, "call");
 			}
 		}

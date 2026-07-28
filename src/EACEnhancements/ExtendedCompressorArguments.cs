@@ -22,7 +22,6 @@ namespace AudioDataPlugIn
         private const int PsnSetActive = -200;
         private const int PsnKillActive = -201;
         private const int PsnApply = -202;
-        private const uint RestoreExtendedCompressorArgumentsTimerId = 0xEAC6;
         private const uint HydrateExtendedCompressorArgumentsTimerId = 0xEAC7;
         private const uint ExtendedCompressorArgumentsTimerDelayMs = 100;
         private const uint ExtendedCompressorArgumentsSubclassId = 246194966u;
@@ -48,6 +47,7 @@ namespace AudioDataPlugIn
         private static IntPtr extendedCompressorArgumentsPage;
         private static IntPtr extendedCompressorArgumentsEdit;
         private static bool updatingExtendedCompressorArgumentsEdit;
+        private static int extendedCompressorArgumentsRedrawSuspendDepth;
         private static bool extendedCompressorArgumentsEditHydrated;
         private static bool extendedCompressorArgumentsUserEdited;
         private static string nativeExternalEncoderOptionsFallback =
@@ -108,10 +108,6 @@ namespace AudioDataPlugIn
             if (extendedCompressorArgumentsPage != IntPtr.Zero &&
                 NativeMethods.IsWindow(extendedCompressorArgumentsPage))
             {
-                NativeMethods.KillTimer(
-                    extendedCompressorArgumentsPage,
-                    new UIntPtr(
-                        RestoreExtendedCompressorArgumentsTimerId));
                 NativeMethods.KillTimer(
                     extendedCompressorArgumentsPage,
                     new UIntPtr(
@@ -505,6 +501,8 @@ namespace AudioDataPlugIn
                             string previous =
                                 SetTransientExtendedCompressorArguments(
                                     displayed);
+                            bool redrawSuspended =
+                                BeginHiddenExtendedCompressorArgumentsEdit();
                             SetExtendedCompressorArgumentsEdit(
                                 ExtendedExternalEncoderOptionsMarker);
                             try
@@ -519,14 +517,10 @@ namespace AudioDataPlugIn
                             {
                                 SetTransientExtendedCompressorArguments(
                                     previous);
-                                if (extendedCompressorArgumentsEdit !=
-                                        IntPtr.Zero &&
-                                    NativeMethods.IsWindow(
-                                        extendedCompressorArgumentsEdit))
-                                {
-                                    SetExtendedCompressorArgumentsEdit(
-                                        displayed);
-                                }
+                                RestoreExtendedCompressorArgumentsEdit(
+                                    displayed,
+                                    false,
+                                    redrawSuspended);
                             }
                         }
                     }
@@ -673,10 +667,6 @@ namespace AudioDataPlugIn
                             SetTransientExtendedCompressorArguments(
                                 String.Empty);
                         }
-                        NativeMethods.KillTimer(
-                            hwnd,
-                            new UIntPtr(
-                                RestoreExtendedCompressorArgumentsTimerId));
                     }
                 }
 
@@ -746,22 +736,6 @@ namespace AudioDataPlugIn
                     return IntPtr.Zero;
                 }
 
-                if (message == NativeMethods.WM_TIMER &&
-                    wParam.ToInt64() ==
-                        RestoreExtendedCompressorArgumentsTimerId)
-                {
-                    NativeMethods.KillTimer(
-                        hwnd,
-                        new UIntPtr(
-                            RestoreExtendedCompressorArgumentsTimerId));
-                    string pending =
-                        pendingExtendedCompressorArgumentsDisplay;
-                    if (pending.Length != 0)
-                        SetExtendedCompressorArgumentsEdit(pending);
-                    RefreshExtendedCompressorArgumentsEditLimit();
-                    return IntPtr.Zero;
-                }
-
                 if (message == NativeMethods.WM_NCDESTROY)
                 {
                     IntPtr result = NativeMethods.DefSubclassProc(
@@ -772,6 +746,7 @@ namespace AudioDataPlugIn
                     extendedCompressorArgumentsPage = IntPtr.Zero;
                     extendedCompressorArgumentsEdit = IntPtr.Zero;
                     updatingExtendedCompressorArgumentsEdit = false;
+                    extendedCompressorArgumentsRedrawSuspendDepth = 0;
                     extendedCompressorArgumentsEditHydrated = false;
                     extendedCompressorArgumentsUserEdited = false;
                     nativeExternalEncoderOptionsFallback = String.Empty;
@@ -796,56 +771,6 @@ namespace AudioDataPlugIn
             return defaultResult;
         }
 
-        private static void
-            MaybeStageExtendedCompressorArgumentsBeforePropertySheetCommand(
-                IntPtr messageWindow,
-                uint message,
-                IntPtr wParam)
-        {
-            if (!IsExtendedCompressorArgumentsEnabled())
-                return;
-            if (messageWindow == IntPtr.Zero)
-            {
-                return;
-            }
-
-            int command = (int)wParam.ToInt64() & 0xFFFF;
-            int notification =
-                (int)(wParam.ToInt64() >> 16) & 0xFFFF;
-            bool isApplyBoundary =
-                messageWindow == extendedCompressorArgumentsParent &&
-                message == NativeMethods.WM_COMMAND &&
-                (command == 1 ||
-                 command == PropertySheetApplyControlId);
-            bool isEditFocusBoundary =
-                messageWindow == extendedCompressorArgumentsEdit &&
-                message == NativeMethods.WM_KILLFOCUS;
-            bool isPageFocusBoundary =
-                messageWindow == extendedCompressorArgumentsPage &&
-                message == NativeMethods.WM_COMMAND &&
-                command == ExternalEncoderOptionsControlId &&
-                notification == NativeMethods.EN_KILLFOCUS;
-            if (!isApplyBoundary &&
-                !isEditFocusBoundary &&
-                !isPageFocusBoundary)
-            {
-                return;
-            }
-
-            string displayed = ReadExtendedCompressorArgumentsEdit(
-                extendedCompressorArgumentsEdit);
-            if (!RequiresExtendedCompressorArguments(displayed))
-                return;
-
-            pendingExtendedCompressorArgumentsDisplay = displayed;
-            SetTransientExtendedCompressorArguments(displayed);
-            SetExtendedCompressorArgumentsEdit(
-                ExtendedExternalEncoderOptionsMarker);
-            Log(
-                "Staged " + displayed.Length +
-                " external-compressor argument characters before native dialog processing.");
-        }
-
         private static IntPtr TestExtendedCompressorArguments(
             IntPtr hwnd,
             uint message,
@@ -868,6 +793,8 @@ namespace AudioDataPlugIn
 
             string previous =
                 SetTransientExtendedCompressorArguments(displayed);
+            bool redrawSuspended =
+                BeginHiddenExtendedCompressorArgumentsEdit();
             SetExtendedCompressorArgumentsEdit(
                 ExtendedExternalEncoderOptionsMarker);
             try
@@ -881,12 +808,10 @@ namespace AudioDataPlugIn
             finally
             {
                 SetTransientExtendedCompressorArguments(previous);
-                if (extendedCompressorArgumentsEdit != IntPtr.Zero &&
-                    NativeMethods.IsWindow(
-                        extendedCompressorArgumentsEdit))
-                {
-                    SetExtendedCompressorArgumentsEdit(displayed);
-                }
+                RestoreExtendedCompressorArgumentsEdit(
+                    displayed,
+                    false,
+                    redrawSuspended);
             }
         }
 
@@ -900,6 +825,8 @@ namespace AudioDataPlugIn
             pendingExtendedCompressorArgumentsDisplay = displayed;
             string previous =
                 SetTransientExtendedCompressorArguments(displayed);
+            bool redrawSuspended =
+                BeginHiddenExtendedCompressorArgumentsEdit();
             SetExtendedCompressorArgumentsEdit(
                 ExtendedExternalEncoderOptionsMarker);
             IntPtr result;
@@ -914,15 +841,12 @@ namespace AudioDataPlugIn
             finally
             {
                 SetTransientExtendedCompressorArguments(previous);
-                RestoreNativeExternalEncoderOptionsFallback();
+                RestoreExtendedCompressorArgumentsEdit(
+                    displayed,
+                    true,
+                    redrawSuspended);
             }
 
-            if (extendedCompressorArgumentsPage != IntPtr.Zero &&
-                NativeMethods.IsWindow(extendedCompressorArgumentsPage))
-            {
-                ScheduleExtendedCompressorArgumentsRestore(
-                    extendedCompressorArgumentsPage);
-            }
             Log(
                 "Staged " + displayed.Length +
                 " external-compressor argument characters before native focus-loss processing.");
@@ -964,6 +888,8 @@ namespace AudioDataPlugIn
             pendingExtendedCompressorArgumentsDisplay = displayed;
             string previous =
                 SetTransientExtendedCompressorArguments(displayed);
+            bool redrawSuspended =
+                BeginHiddenExtendedCompressorArgumentsEdit();
             SetExtendedCompressorArgumentsEdit(
                 ExtendedExternalEncoderOptionsMarker);
             IntPtr result;
@@ -978,10 +904,12 @@ namespace AudioDataPlugIn
             finally
             {
                 SetTransientExtendedCompressorArguments(previous);
-                RestoreNativeExternalEncoderOptionsFallback();
+                RestoreExtendedCompressorArgumentsEdit(
+                    displayed,
+                    true,
+                    redrawSuspended);
             }
 
-            ScheduleExtendedCompressorArgumentsRestore(hwnd);
             return result;
         }
 
@@ -1014,21 +942,39 @@ namespace AudioDataPlugIn
                 pendingExtendedCompressorArgumentsDisplay.Length +
                 ", extended=" + useExtended + ").");
 
+            bool redrawSuspended = false;
             if (useExtended)
+            {
+                redrawSuspended =
+                    BeginHiddenExtendedCompressorArgumentsEdit();
                 RestoreNativeExternalEncoderOptionsFallback();
+            }
 
-            IntPtr result = NativeMethods.DefSubclassProc(
-                hwnd,
-                message,
-                wParam,
-                lParam);
-            SetTransientExtendedCompressorArguments(String.Empty);
+            IntPtr result;
+            try
+            {
+                result = NativeMethods.DefSubclassProc(
+                    hwnd,
+                    message,
+                    wParam,
+                    lParam);
+            }
+            finally
+            {
+                SetTransientExtendedCompressorArguments(String.Empty);
+                if (useExtended)
+                {
+                    RestoreExtendedCompressorArgumentsEdit(
+                        displayed,
+                        false,
+                        redrawSuspended);
+                }
+            }
 
             if (useExtended)
             {
                 PersistExtendedCompressorArguments(displayed);
                 pendingExtendedCompressorArgumentsDisplay = displayed;
-                ScheduleExtendedCompressorArgumentsRestore(hwnd);
             }
             else
             {
@@ -1037,10 +983,6 @@ namespace AudioDataPlugIn
                 extendedCompressorArgumentsEditHydrated = true;
                 extendedCompressorArgumentsUserEdited = false;
                 pendingExtendedCompressorArgumentsDisplay = String.Empty;
-                NativeMethods.KillTimer(
-                    hwnd,
-                    new UIntPtr(
-                        RestoreExtendedCompressorArgumentsTimerId));
             }
             RefreshExtendedCompressorArgumentsEditLimit();
 
@@ -1093,16 +1035,6 @@ namespace AudioDataPlugIn
                 0,
                 AddressFromStaticVa(staticVa),
                 bytes.Length);
-        }
-
-        private static void ScheduleExtendedCompressorArgumentsRestore(
-            IntPtr hwnd)
-        {
-            NativeMethods.SetTimer(
-                hwnd,
-                new UIntPtr(RestoreExtendedCompressorArgumentsTimerId),
-                ExtendedCompressorArgumentsTimerDelayMs,
-                IntPtr.Zero);
         }
 
         private static void HydrateExtendedCompressorArgumentsEdit(
@@ -1202,6 +1134,73 @@ namespace AudioDataPlugIn
                 value,
                 value.Capacity);
             return value.ToString();
+        }
+
+        private static bool BeginHiddenExtendedCompressorArgumentsEdit()
+        {
+            IntPtr edit = extendedCompressorArgumentsEdit;
+            if (edit == IntPtr.Zero || !NativeMethods.IsWindow(edit))
+                return false;
+
+            if (extendedCompressorArgumentsRedrawSuspendDepth == 0)
+            {
+                NativeMethods.SendMessageW(
+                    edit,
+                    NativeMethods.WM_SETREDRAW,
+                    IntPtr.Zero,
+                    IntPtr.Zero);
+            }
+            extendedCompressorArgumentsRedrawSuspendDepth++;
+            return true;
+        }
+
+        private static void RestoreExtendedCompressorArgumentsEdit(
+            string displayed,
+            bool restoreNativeFallback,
+            bool redrawSuspended)
+        {
+            try
+            {
+                if (restoreNativeFallback)
+                    RestoreNativeExternalEncoderOptionsFallback();
+            }
+            finally
+            {
+                try
+                {
+                    SetExtendedCompressorArgumentsEdit(displayed);
+                }
+                finally
+                {
+                    EndHiddenExtendedCompressorArgumentsEdit(
+                        redrawSuspended);
+                }
+            }
+        }
+
+        private static void EndHiddenExtendedCompressorArgumentsEdit(
+            bool redrawSuspended)
+        {
+            if (!redrawSuspended)
+                return;
+            if (extendedCompressorArgumentsRedrawSuspendDepth <= 0)
+                return;
+
+            extendedCompressorArgumentsRedrawSuspendDepth--;
+            if (extendedCompressorArgumentsRedrawSuspendDepth != 0)
+                return;
+
+            IntPtr edit = extendedCompressorArgumentsEdit;
+            if (edit == IntPtr.Zero || !NativeMethods.IsWindow(edit))
+                return;
+
+            NativeMethods.SendMessageW(
+                edit,
+                NativeMethods.WM_SETREDRAW,
+                new IntPtr(1),
+                IntPtr.Zero);
+            NativeMethods.InvalidateRect(edit, IntPtr.Zero, true);
+            NativeMethods.UpdateWindow(edit);
         }
 
         private static void SetExtendedCompressorArgumentsEdit(string value)

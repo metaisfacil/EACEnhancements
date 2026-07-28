@@ -37,6 +37,7 @@ namespace AudioDataPlugIn
         internal const uint WM_SIZE = 0x0005;
         internal const uint WM_KILLFOCUS = 0x0008;
         internal const uint WM_ENABLE = 0x000A;
+        internal const uint WM_SETREDRAW = 0x000B;
         internal const uint WM_CLOSE = 0x0010;
         internal const uint WM_NCDESTROY = 0x0082;
         internal const uint WM_SETTEXT = 0x000C;

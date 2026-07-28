@@ -2,10 +2,12 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Windows.Forms;
 using AudioDataPlugIn;
 
 internal static class ExtendedCompressorArgumentsTests
 {
+    [STAThread]
     private static int Main()
     {
         Assert(
@@ -93,9 +95,88 @@ internal static class ExtendedCompressorArgumentsTests
             "Disabling the feature should remove its marker from token validation.");
 
         AssertDisabledPreferenceRetainsSavedArguments();
+        AssertMarkerPresentationIsSynchronousAndHidden();
 
         Console.WriteLine("Extended compressor argument tests passed.");
         return 0;
+    }
+
+    private static void AssertMarkerPresentationIsSynchronousAndHidden()
+    {
+        Type runtime = typeof(EnhancementRuntime);
+        Assert(
+            runtime.GetMethod(
+                "MaybeStageExtendedCompressorArgumentsBeforePropertySheetCommand",
+                BindingFlags.NonPublic | BindingFlags.Static) == null,
+            "A pre-dispatch path can leave the private marker in the editor.");
+        Assert(
+            runtime.GetMethod(
+                "ScheduleExtendedCompressorArgumentsRestore",
+                BindingFlags.NonPublic | BindingFlags.Static) == null,
+            "The private marker must not rely on a delayed UI restoration.");
+
+        FieldInfo editField = runtime.GetField(
+            "extendedCompressorArgumentsEdit",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        FieldInfo depthField = runtime.GetField(
+            "extendedCompressorArgumentsRedrawSuspendDepth",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        MethodInfo beginHidden = runtime.GetMethod(
+            "BeginHiddenExtendedCompressorArgumentsEdit",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        MethodInfo endHidden = runtime.GetMethod(
+            "EndHiddenExtendedCompressorArgumentsEdit",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        MethodInfo setEditor = runtime.GetMethod(
+            "SetExtendedCompressorArgumentsEdit",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert(
+            editField != null &&
+            depthField != null &&
+            beginHidden != null &&
+            endHidden != null &&
+            setEditor != null,
+            "The hidden marker presentation boundary is incomplete.");
+
+        using (TextBox editor = new TextBox())
+        {
+            string displayed = new string('a', 700);
+            editor.Text = displayed;
+            editor.CreateControl();
+            try
+            {
+                editField.SetValue(null, editor.Handle);
+                bool redrawSuspended = (bool)beginHidden.Invoke(
+                    null,
+                    null);
+                Assert(
+                    redrawSuspended,
+                    "The editor redraw was not suspended.");
+                setEditor.Invoke(
+                    null,
+                    new object[]
+                    {
+                        EnhancementRuntime.ExtendedExternalEncoderOptionsMarker
+                    });
+                setEditor.Invoke(null, new object[] { displayed });
+                endHidden.Invoke(
+                    null,
+                    new object[] { redrawSuspended });
+                Application.DoEvents();
+
+                Assert(
+                    editor.Text == displayed,
+                    "The original extended arguments were not restored synchronously.");
+                Assert(
+                    (int)depthField.GetValue(null) == 0,
+                    "The editor remained redraw-suspended.");
+            }
+            finally
+            {
+                editField.SetValue(null, IntPtr.Zero);
+                depthField.SetValue(null, 0);
+            }
+        }
     }
 
     private static void AssertDisabledPreferenceRetainsSavedArguments()
