@@ -44,6 +44,14 @@ namespace AudioDataPlugIn
                     host.Handle, 954, "freedb Genre", 530, 75, 70, 18);
                 IntPtr commentLabel = CreateReferenceLabel(
                     host.Handle, 959, "Comment", 800, 43, 100, 18);
+                IntPtr firstTrackNumber = CreateReferenceEdit(
+                    host.Handle, 674, 1450, 105, 40, 24);
+                CreateReferenceEdit(
+                    host.Handle, 882, 1450, 133, 40, 24);
+                CreateReferenceEdit(
+                    host.Handle, 881, 1450, 161, 40, 24);
+                CreateReferenceTrackList(
+                    host.Handle, 14, 200, 105, 920, 50);
                 host.Show();
                 Application.DoEvents();
                 NativeMethods.RECT originalPerformerRectangle;
@@ -130,6 +138,19 @@ namespace AudioDataPlugIn
                 AssertControlText(host.Handle, 0xA321, "CD Label");
                 AssertControlText(host.Handle, 0xA31E, "CD Barcode");
                 AssertControlText(host.Handle, 0xA31F, "CD Catalog #");
+                AssertAlbumMetadataTabOrder(
+                    host.Handle,
+                    comment,
+                    barcode,
+                    catalogNumber,
+                    label);
+                AssertEacAlbumMetadataTabBridge(
+                    host.Handle,
+                    comment,
+                    barcode,
+                    catalogNumber,
+                    label,
+                    firstTrackNumber);
                 AssertAlbumMetadataEnabledState(
                     genre,
                     new[]
@@ -300,6 +321,211 @@ namespace AudioDataPlugIn
             }
         }
 
+        private static void AssertEacAlbumMetadataTabBridge(
+            IntPtr parent,
+            IntPtr comment,
+            IntPtr barcode,
+            IntPtr catalogNumber,
+            IntPtr label,
+            IntPtr firstTrackNumber)
+        {
+            NativeMethods.SetFocus(comment);
+            NativeMethods.SendMessageW(
+                parent,
+                0x0D88,
+                comment,
+                IntPtr.Zero);
+            if (NativeMethods.GetFocus() != label)
+            {
+                throw new Exception(
+                    "EAC's forward myedit navigation did not enter CD Label.");
+            }
+
+            NativeMethods.SendMessageW(
+                label,
+                NativeMethods.WM_KEYDOWN,
+                new IntPtr(0x09),
+                IntPtr.Zero);
+            if (NativeMethods.GetFocus() != label)
+            {
+                throw new Exception(
+                    "CD Label navigation changed focus while Tab was still down.");
+            }
+            Application.DoEvents();
+            if (NativeMethods.GetFocus() != label)
+            {
+                throw new Exception(
+                    "CD Label navigation advanced before Tab was released.");
+            }
+            NativeMethods.SendMessageW(
+                label,
+                NativeMethods.WM_KEYUP,
+                new IntPtr(0x09),
+                IntPtr.Zero);
+            Application.DoEvents();
+            if (NativeMethods.GetFocus() != barcode)
+            {
+                throw new Exception(
+                    "Tab release did not advance from CD Label to CD Barcode.");
+            }
+
+            NativeMethods.SendMessageW(
+                barcode,
+                NativeMethods.WM_KEYDOWN,
+                new IntPtr(0x09),
+                IntPtr.Zero);
+            if (NativeMethods.GetFocus() != barcode)
+            {
+                throw new Exception(
+                    "CD Barcode navigation changed focus while Tab was still down.");
+            }
+            Application.DoEvents();
+            if (NativeMethods.GetFocus() != barcode)
+            {
+                throw new Exception(
+                    "CD Barcode navigation advanced before Tab was released.");
+            }
+            NativeMethods.SendMessageW(
+                barcode,
+                NativeMethods.WM_KEYUP,
+                new IntPtr(0x09),
+                IntPtr.Zero);
+            Application.DoEvents();
+            if (NativeMethods.GetFocus() != catalogNumber)
+            {
+                throw new Exception(
+                    "Tab release did not advance from CD Barcode to CD Catalog #.");
+            }
+
+            NativeMethods.SendMessageW(
+                catalogNumber,
+                NativeMethods.WM_KEYDOWN,
+                new IntPtr(0x09),
+                IntPtr.Zero);
+            if (NativeMethods.GetFocus() != catalogNumber)
+            {
+                throw new Exception(
+                    "CD Catalog # navigation changed focus while Tab was still down.");
+            }
+            Application.DoEvents();
+            if (NativeMethods.GetFocus() != catalogNumber)
+            {
+                throw new Exception(
+                    "CD Catalog # navigation advanced before Tab was released.");
+            }
+            // A repeated keydown from the same physical keypress must not
+            // advance again after focus is transferred.
+            NativeMethods.SendMessageW(
+                catalogNumber,
+                NativeMethods.WM_KEYDOWN,
+                new IntPtr(0x09),
+                new IntPtr(0x40000000));
+            Application.DoEvents();
+            if (NativeMethods.GetFocus() != catalogNumber)
+            {
+                throw new Exception(
+                    "A repeated Tab keydown advanced CD Catalog # early.");
+            }
+            NativeMethods.SendMessageW(
+                catalogNumber,
+                NativeMethods.WM_KEYUP,
+                new IntPtr(0x09),
+                IntPtr.Zero);
+            Application.DoEvents();
+            if (NativeMethods.GetFocus() != firstTrackNumber)
+            {
+                throw new Exception(
+                    "Tab release did not continue from CD Catalog # to First track number.");
+            }
+
+            IntPtr dialogCode = NativeMethods.SendMessageW(
+                catalogNumber,
+                NativeMethods.WM_GETDLGCODE,
+                IntPtr.Zero,
+                IntPtr.Zero);
+            if ((dialogCode.ToInt64() & 0x0002) == 0)
+            {
+                throw new Exception(
+                    "The custom metadata edits did not request Tab key delivery.");
+            }
+
+            NativeMethods.SetFocus(firstTrackNumber);
+            NativeMethods.SendMessageW(
+                parent,
+                0x0D88,
+                firstTrackNumber,
+                new IntPtr(0x8000));
+            if (NativeMethods.GetFocus() != catalogNumber)
+            {
+                throw new Exception(
+                    "EAC's reverse myedit navigation did not enter CD Catalog #.");
+            }
+        }
+
+        private static void AssertAlbumMetadataTabOrder(
+            IntPtr parent,
+            IntPtr comment,
+            IntPtr barcode,
+            IntPtr catalogNumber,
+            IntPtr label)
+        {
+            AssertNextTabControl(
+                parent,
+                comment,
+                label,
+                false,
+                "EAC's Comment to CD Label");
+            AssertNextTabControl(
+                parent,
+                label,
+                barcode,
+                false,
+                "CD Label to CD Barcode");
+            AssertNextTabControl(
+                parent,
+                barcode,
+                catalogNumber,
+                false,
+                "CD Barcode to CD Catalog #");
+            AssertNextTabControl(
+                parent,
+                catalogNumber,
+                barcode,
+                true,
+                "CD Catalog # back to CD Barcode");
+            AssertNextTabControl(
+                parent,
+                barcode,
+                label,
+                true,
+                "CD Barcode back to CD Label");
+            AssertNextTabControl(
+                parent,
+                label,
+                comment,
+                true,
+                "CD Label back to EAC's Comment");
+        }
+
+        private static void AssertNextTabControl(
+            IntPtr parent,
+            IntPtr current,
+            IntPtr expected,
+            bool previous,
+            string description)
+        {
+            IntPtr actual = NativeMethods.GetNextDlgTabItem(
+                parent,
+                current,
+                previous);
+            if (actual != expected)
+            {
+                throw new Exception(
+                    "Unexpected album metadata tab order for " +
+                    description + ".");
+            }
+        }
+
         private static IntPtr CreateReferenceEdit(
             IntPtr parent,
             int controlId,
@@ -323,6 +549,35 @@ namespace AudioDataPlugIn
                 IntPtr.Zero);
             if (control == IntPtr.Zero)
                 throw new Exception("A synthetic EAC reference field could not be created.");
+            return control;
+        }
+
+        private static IntPtr CreateReferenceTrackList(
+            IntPtr parent,
+            int controlId,
+            int left,
+            int top,
+            int width,
+            int height)
+        {
+            IntPtr control = NativeMethods.CreateWindowExW(
+                0x00000200,
+                "SysListView32",
+                String.Empty,
+                0x50010000,
+                left,
+                top,
+                width,
+                height,
+                parent,
+                new IntPtr(controlId),
+                IntPtr.Zero,
+                IntPtr.Zero);
+            if (control == IntPtr.Zero)
+            {
+                throw new Exception(
+                    "A synthetic EAC track list could not be created.");
+            }
             return control;
         }
 

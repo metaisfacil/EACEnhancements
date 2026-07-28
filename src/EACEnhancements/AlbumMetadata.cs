@@ -34,10 +34,17 @@ namespace AudioDataPlugIn
         private const int CommentLabelControlId = 959;
         private const int FreedbGenreLabelControlId = 954;
         private const int FreedbGenreControlId = 998;
+        private const int FirstTrackNumberControlId = 674;
         private const int GwlStyle = -16;
         private const int GwlExtendedStyle = -20;
+        private const uint SwpNoSize = 0x0001;
+        private const uint SwpNoMove = 0x0002;
         private const uint SwpNoZOrder = 0x0004;
         private const uint SwpNoActivate = 0x0010;
+        private const uint EacEditNavigateMessage = 0x0D88;
+        private const int DlgcWantTab = 0x0002;
+        private const int VkTab = 0x09;
+        private const int VkShift = 0x10;
         private const uint AlbumMetadataStoreSaveTimerId = 0xEAC5;
         private const uint AlbumMetadataStoreSaveDelayMilliseconds = 750;
         // COLORREF stores RGB as 0x00BBGGRR. This is RGB(226, 246, 230).
@@ -54,6 +61,8 @@ namespace AudioDataPlugIn
         private static IntPtr albumCatalogNumberEdit;
         private static IntPtr albumLabelLabel;
         private static IntPtr albumLabelEdit;
+        private static IntPtr albumMetadataCommentControl;
+        private static IntPtr albumMetadataFirstTrackNumberControl;
         private static volatile string albumBarcode = String.Empty;
         private static volatile string albumCatalogNumber = String.Empty;
         private static volatile string albumLabel = String.Empty;
@@ -62,6 +71,8 @@ namespace AudioDataPlugIn
         private static MainWindowSubclassDelegate albumMetadataEditSubclassDelegate;
         private static MainWindowSubclassDelegate albumMetadataStateControlSubclassDelegate;
         private static IntPtr albumMetadataUserEditControl;
+        private static IntPtr albumMetadataPendingTabSource;
+        private static IntPtr albumMetadataPendingTabShiftState;
         private static IntPtr validBarcodeBackgroundBrush;
         private static int lastAlbumMetadataInstallTick;
         private static IntPtr metadataTemplateFormatterTrampoline;
@@ -549,6 +560,11 @@ namespace AudioDataPlugIn
                 NativeMethods.GetWindowLongW(commentLabel, GwlStyle);
             int performerLabelStyle =
                 NativeMethods.GetWindowLongW(performerLabel, GwlStyle);
+            albumMetadataCommentControl = comment;
+            albumMetadataFirstTrackNumberControl =
+                NativeMethods.GetDlgItem(
+                    albumMetadataParent,
+                    FirstTrackNumberControlId);
 
             albumBarcodeLabel = NativeMethods.CreateWindowExW(
                 0,
@@ -641,6 +657,7 @@ namespace AudioDataPlugIn
                     "CreateWindowExW failed for the album metadata fields with Win32 error " +
                     Marshal.GetLastWin32Error() + ".");
             }
+            PlaceAlbumMetadataControlsAfterComment(comment);
             if (validBarcodeBackgroundBrush == IntPtr.Zero)
             {
                 validBarcodeBackgroundBrush = NativeMethods.CreateSolidBrush(
@@ -771,6 +788,40 @@ namespace AudioDataPlugIn
             Log("CD Label, CD Barcode, and CD Catalog # fields installed on EAC's main window.");
         }
 
+        private static void PlaceAlbumMetadataControlsAfterComment(
+            IntPtr comment)
+        {
+            IntPtr[] controls =
+            {
+                albumLabelLabel,
+                albumLabelEdit,
+                albumBarcodeLabel,
+                albumBarcodeEdit,
+                albumCatalogNumberLabel,
+                albumCatalogNumberEdit
+            };
+            IntPtr insertAfter = comment;
+            foreach (IntPtr control in controls)
+            {
+                if (!NativeMethods.SetWindowPos(
+                        control,
+                        insertAfter,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SwpNoSize | SwpNoMove | SwpNoActivate))
+                {
+                    Log(
+                        "Could not place the album metadata fields after " +
+                        "EAC's Comment field in tab order; Win32 error " +
+                        Marshal.GetLastWin32Error() + ".");
+                    return;
+                }
+                insertAfter = control;
+            }
+        }
+
         private static IntPtr AlbumMetadataEditSubclass(
             IntPtr hwnd,
             uint message,
@@ -779,6 +830,57 @@ namespace AudioDataPlugIn
             UIntPtr subclassId,
             UIntPtr referenceData)
         {
+            if (message == NativeMethods.WM_GETDLGCODE)
+            {
+                IntPtr result = NativeMethods.DefSubclassProc(
+                    hwnd,
+                    message,
+                    wParam,
+                    lParam);
+                return new IntPtr(result.ToInt64() | DlgcWantTab);
+            }
+
+            if (message == NativeMethods.WM_KEYDOWN &&
+                wParam.ToInt64() == VkTab &&
+                IsAlbumMetadataEdit(hwnd))
+            {
+                // Do not move focus while the physical Tab key is still down.
+                // EAC's newly focused myedit can otherwise see a later message
+                // from the same keypress and immediately advance a second time.
+                albumMetadataPendingTabSource = hwnd;
+                albumMetadataPendingTabShiftState =
+                    new IntPtr(NativeMethods.GetKeyState(VkShift));
+                return IntPtr.Zero;
+            }
+
+            if (message == NativeMethods.WM_CHAR &&
+                wParam.ToInt64() == VkTab &&
+                IsAlbumMetadataEdit(hwnd))
+            {
+                return IntPtr.Zero;
+            }
+
+            if (message == NativeMethods.WM_KEYUP &&
+                wParam.ToInt64() == VkTab &&
+                IsAlbumMetadataEdit(hwnd))
+            {
+                if (albumMetadataPendingTabSource == hwnd)
+                {
+                    IntPtr shiftState = albumMetadataPendingTabShiftState;
+                    albumMetadataPendingTabSource = IntPtr.Zero;
+                    albumMetadataPendingTabShiftState = IntPtr.Zero;
+                    PostAlbumMetadataEditNavigation(hwnd, shiftState);
+                }
+                return IntPtr.Zero;
+            }
+
+            if (message == NativeMethods.WM_KILLFOCUS &&
+                albumMetadataPendingTabSource == hwnd)
+            {
+                albumMetadataPendingTabSource = IntPtr.Zero;
+                albumMetadataPendingTabShiftState = IntPtr.Zero;
+            }
+
             bool userEditMessage =
                 message == NativeMethods.WM_CHAR ||
                 (message == NativeMethods.WM_KEYDOWN &&
@@ -814,6 +916,38 @@ namespace AudioDataPlugIn
             }
         }
 
+        private static bool IsAlbumMetadataEdit(IntPtr control)
+        {
+            return control == albumLabelEdit ||
+                control == albumBarcodeEdit ||
+                control == albumCatalogNumberEdit;
+        }
+
+        private static bool PostAlbumMetadataEditNavigation(
+            IntPtr source,
+            IntPtr shiftState)
+        {
+            return NativeMethods.PostMessageW(
+                albumMetadataParent,
+                EacEditNavigateMessage,
+                source,
+                shiftState);
+        }
+
+        private static bool TryFocusAlbumMetadataControl(IntPtr control)
+        {
+            if (control == IntPtr.Zero ||
+                !NativeMethods.IsWindow(control) ||
+                !NativeMethods.IsWindowEnabled(control) ||
+                !NativeMethods.IsWindowVisible(control))
+            {
+                return false;
+            }
+
+            NativeMethods.SetFocus(control);
+            return true;
+        }
+
         private static IntPtr AlbumMetadataStateControlSubclass(
             IntPtr hwnd,
             uint message,
@@ -842,6 +976,11 @@ namespace AudioDataPlugIn
         {
             try
             {
+                if (message == EacEditNavigateMessage &&
+                    TryBridgeEacAlbumMetadataNavigation(wParam, lParam))
+                {
+                    return IntPtr.Zero;
+                }
                 if (message == NativeMethods.WM_CTLCOLOREDIT &&
                     lParam == albumBarcodeEdit &&
                     validBarcodeBackgroundBrush != IntPtr.Zero &&
@@ -879,6 +1018,39 @@ namespace AudioDataPlugIn
             }
             return NativeMethods.DefSubclassProc(
                 hwnd, message, wParam, lParam);
+        }
+
+        private static bool TryBridgeEacAlbumMetadataNavigation(
+            IntPtr source,
+            IntPtr shiftState)
+        {
+            bool previous = (shiftState.ToInt64() & 0x8000) != 0;
+            if (source == albumMetadataCommentControl && !previous)
+                return TryFocusAlbumMetadataControl(albumLabelEdit);
+            if (source == albumLabelEdit)
+            {
+                return TryFocusAlbumMetadataControl(
+                    previous
+                        ? albumMetadataCommentControl
+                        : albumBarcodeEdit);
+            }
+            if (source == albumBarcodeEdit)
+            {
+                return TryFocusAlbumMetadataControl(
+                    previous
+                        ? albumLabelEdit
+                        : albumCatalogNumberEdit);
+            }
+            if (source == albumCatalogNumberEdit)
+            {
+                return TryFocusAlbumMetadataControl(
+                    previous
+                        ? albumBarcodeEdit
+                        : albumMetadataFirstTrackNumberControl);
+            }
+            if (source == albumMetadataFirstTrackNumberControl && previous)
+                return TryFocusAlbumMetadataControl(albumCatalogNumberEdit);
+            return false;
         }
 
         private static void SetAlbumMetadataControlFont(IntPtr control, IntPtr font)
@@ -1438,8 +1610,12 @@ namespace AudioDataPlugIn
             albumCatalogNumberEdit = IntPtr.Zero;
             albumLabelLabel = IntPtr.Zero;
             albumLabelEdit = IntPtr.Zero;
+            albumMetadataCommentControl = IntPtr.Zero;
+            albumMetadataFirstTrackNumberControl = IntPtr.Zero;
             albumMetadataParent = IntPtr.Zero;
             albumMetadataUserEditControl = IntPtr.Zero;
+            albumMetadataPendingTabSource = IntPtr.Zero;
+            albumMetadataPendingTabShiftState = IntPtr.Zero;
         }
     }
 }

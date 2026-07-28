@@ -35,6 +35,7 @@ namespace AudioDataPlugIn
         internal const int WH_CALLWNDPROC = 4;
         internal const uint WM_NULL = 0x0000;
         internal const uint WM_SIZE = 0x0005;
+        internal const uint WM_KILLFOCUS = 0x0008;
         internal const uint WM_ENABLE = 0x000A;
         internal const uint WM_CLOSE = 0x0010;
         internal const uint WM_SETTEXT = 0x000C;
@@ -42,11 +43,13 @@ namespace AudioDataPlugIn
         internal const uint WM_ERASEBKGND = 0x0014;
         internal const uint WM_DRAWITEM = 0x002B;
         internal const uint WM_NOTIFY = 0x004E;
+        internal const uint WM_GETDLGCODE = 0x0087;
         internal const uint WM_COMMAND = 0x0111;
         internal const uint WM_CTLCOLOREDIT = 0x0133;
         internal const uint WM_SYSCOMMAND = 0x0112;
         internal const uint WM_TIMER = 0x0113;
         internal const uint WM_KEYDOWN = 0x0100;
+        internal const uint WM_KEYUP = 0x0101;
         internal const uint WM_SYSKEYDOWN = 0x0104;
         internal const uint WM_CHAR = 0x0102;
         internal const uint WM_IME_COMPOSITION = 0x010F;
@@ -296,6 +299,18 @@ namespace AudioDataPlugIn
 
         [DllImport("user32.dll")]
         internal static extern IntPtr GetParent(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetFocus();
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr SetFocus(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetNextDlgTabItem(
+            IntPtr dialog,
+            IntPtr control,
+            [MarshalAs(UnmanagedType.Bool)] bool previous);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
