@@ -174,7 +174,12 @@ namespace AudioDataPlugIn
                     string text =
                         Marshal.PtrToStringUni(template) ?? String.Empty;
                     int tokenLength =
-                        MatchCustomAlbumMetadataToken(text, index);
+                        MatchExtendedCompressorArgumentsToken(text, index);
+                    if (tokenLength == 0)
+                    {
+                        tokenLength =
+                            MatchCustomAlbumMetadataToken(text, index);
+                    }
                     if (tokenLength > 0)
                     {
                         Marshal.WriteInt32(indexPointer, index + tokenLength);
@@ -394,7 +399,9 @@ namespace AudioDataPlugIn
                 string original = template == IntPtr.Zero
                     ? String.Empty
                     : Marshal.PtrToStringUni(template) ?? String.Empty;
-                string expanded = ExpandCurrentAlbumMetadataTokens(original);
+                string expanded = ExpandCurrentAlbumMetadataTokens(
+                    original,
+                    template);
                 if (!String.Equals(original, expanded, StringComparison.Ordinal))
                 {
                     expandedTemplate = Marshal.StringToHGlobalUni(expanded);
@@ -458,6 +465,16 @@ namespace AudioDataPlugIn
 
         internal static string ExpandCurrentAlbumMetadataTokens(string template)
         {
+            return ExpandCurrentAlbumMetadataTokens(template, IntPtr.Zero);
+        }
+
+        private static string ExpandCurrentAlbumMetadataTokens(
+            string template,
+            IntPtr templatePointer)
+        {
+            template = ExpandCurrentExtendedCompressorArguments(
+                template,
+                templatePointer);
             return ExpandAlbumMetadataTokens(
                 template,
                 albumBarcode,

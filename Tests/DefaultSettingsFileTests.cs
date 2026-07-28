@@ -34,6 +34,9 @@ namespace AudioDataPlugIn
                 AssertContains(contents, "ShowRipErrorAlert=1");
                 AssertContains(contents, "ShowWorkflowSetupAlert=1");
                 AssertContains(contents, "CreateWorkflowFolders=1");
+                AssertContains(
+                    contents,
+                    "IncreaseExternalCompressorArgumentsLimit=1");
                 AssertContains(contents, "EnableLogging=0");
 
                 const string sentinel = "[OutputTemplate]\r\nEnableLogging=1\r\nCustom=keep\r\n";

@@ -16,6 +16,7 @@ Exact Audio Copy that adds a number of quality-of-life features:
 - Auto-generated album folders with dynamic naming
 - Improved responsiveness of progress window during secure mode rips
 - Album-level CD label, barcode, and catalog-number fields for external compressor tags
+- External compressor argument templates up to 1,000 characters
 
 Exact Audio Copy 1.6 and 1.8 are supported. No patches or launcher needed.
 
@@ -131,6 +132,16 @@ for the external compressor. The example provided below is for FLAC:
 ```text
 -T "LABEL=%label%" -T "BARCODE=%barcode%" -T "CATALOGNUMBER=%catalognumber%"
 ```
+
+## Extended compressor arguments
+
+EAC normally limits **Compression Options > External Compression > Additional
+command-line options** to 500 characters. EAC Enhancements raises this length
+limit to 1,000 characters. Templates over EAC's native limit are stored only in
+`EACEnhancements.ini` and substituted immediately before EAC formats the
+compressor command line. The plugin only intervenes if the arguments exceed
+500 characters - if not, EAC saves the value to its registry key as usual.
+You may choose to disable the feature entirely in the plugin's options.
 
 ## Troubleshooting
 
