@@ -22,13 +22,16 @@ internal sealed class OutputTemplateSettings
 
 	internal bool EnableLogging { get; private set; }
 
+	internal bool IncreaseExternalCompressorArgumentsLimit { get; private set; }
+
 	internal OutputTemplateSettings(
 		string rootFolder,
 		string folderTemplate,
 		bool showRipErrorAlert,
 		bool showWorkflowSetupAlert,
 		bool createWorkflowFolders,
-		bool enableLogging)
+		bool enableLogging,
+		bool increaseExternalCompressorArgumentsLimit)
 	{
 		RootFolder = rootFolder;
 		FolderTemplate = folderTemplate;
@@ -36,6 +39,8 @@ internal sealed class OutputTemplateSettings
 		ShowWorkflowSetupAlert = showWorkflowSetupAlert;
 		CreateWorkflowFolders = createWorkflowFolders;
 		EnableLogging = enableLogging;
+		IncreaseExternalCompressorArgumentsLimit =
+			increaseExternalCompressorArgumentsLimit;
 	}
 }
 
@@ -67,6 +72,8 @@ internal sealed class OutputTemplateDialog : Form
 
 	private readonly CheckBox loggingCheckBox;
 
+	private readonly CheckBox increaseExternalCompressorArgumentsLimitCheckBox;
+
 	private readonly ToolTip createWorkflowFoldersToolTip;
 
 	private readonly Button updateCheckButton;
@@ -86,7 +93,7 @@ internal sealed class OutputTemplateDialog : Form
 		base.ShowInTaskbar = false;
 		Font = SystemFonts.MessageBoxFont;
 		base.AutoScaleMode = AutoScaleMode.Font;
-		base.ClientSize = new Size(680, 384);
+		base.ClientSize = new Size(680, 414);
 		base.Padding = new Padding(16);
 
 		TableLayoutPanel layout = new TableLayoutPanel
@@ -95,7 +102,7 @@ internal sealed class OutputTemplateDialog : Form
 			Margin = Padding.Empty,
 			Padding = Padding.Empty,
 			ColumnCount = 3,
-			RowCount = 10
+			RowCount = 11
 		};
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 97F));
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -104,6 +111,7 @@ internal sealed class OutputTemplateDialog : Form
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
@@ -215,6 +223,23 @@ internal sealed class OutputTemplateDialog : Form
 			"This option does nothing if 'Standard directory for extraction' is set to 'Use this directory'.\r\n" +
 			"This setting controls whether or not the 100% log workflow creates a dedicated folder for each rip.");
 
+		increaseExternalCompressorArgumentsLimitCheckBox = new CheckBox
+		{
+			AutoSize = true,
+			Anchor = AnchorStyles.Left,
+			Margin = Padding.Empty,
+			Text = "Increase limit of external compressor arguments from 500 to 1000 characters",
+			Checked = settings.IncreaseExternalCompressorArgumentsLimit,
+			UseVisualStyleBackColor = true
+		};
+		layout.Controls.Add(
+			increaseExternalCompressorArgumentsLimitCheckBox,
+			1,
+			7);
+		layout.SetColumnSpan(
+			increaseExternalCompressorArgumentsLimitCheckBox,
+			2);
+
 		loggingCheckBox = new CheckBox
 		{
 			AutoSize = true,
@@ -224,7 +249,7 @@ internal sealed class OutputTemplateDialog : Form
 			Checked = settings.EnableLogging,
 			UseVisualStyleBackColor = true
 		};
-		layout.Controls.Add(loggingCheckBox, 1, 7);
+		layout.Controls.Add(loggingCheckBox, 1, 8);
 		layout.SetColumnSpan(loggingCheckBox, 2);
 
 		Button setupCheckButton = new Button
@@ -281,7 +306,7 @@ internal sealed class OutputTemplateDialog : Form
 		bottomRow.Controls.Add(updateCheckButton, 1, 0);
 		bottomRow.Controls.Add(saveButton, 3, 0);
 		bottomRow.Controls.Add(cancelButton, 4, 0);
-		layout.Controls.Add(bottomRow, 0, 9);
+		layout.Controls.Add(bottomRow, 0, 10);
 		layout.SetColumnSpan(bottomRow, 3);
 
 		base.Controls.Add(layout);
@@ -430,7 +455,8 @@ internal sealed class OutputTemplateDialog : Form
 				errorAlertCheckBox.Checked,
 				workflowSetupAlertCheckBox.Checked,
 				createWorkflowFoldersCheckBox.Checked,
-				loggingCheckBox.Checked);
+				loggingCheckBox.Checked,
+				increaseExternalCompressorArgumentsLimitCheckBox.Checked);
 			base.DialogResult = DialogResult.OK;
 		}
 		catch (Exception ex)

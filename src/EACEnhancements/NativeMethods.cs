@@ -37,7 +37,9 @@ namespace AudioDataPlugIn
         internal const uint WM_SIZE = 0x0005;
         internal const uint WM_ENABLE = 0x000A;
         internal const uint WM_CLOSE = 0x0010;
+        internal const uint WM_NCDESTROY = 0x0082;
         internal const uint WM_SETTEXT = 0x000C;
+        internal const uint WM_KILLFOCUS = 0x0008;
         internal const uint WM_PAINT = 0x000F;
         internal const uint WM_ERASEBKGND = 0x0014;
         internal const uint WM_DRAWITEM = 0x002B;
@@ -60,6 +62,7 @@ namespace AudioDataPlugIn
         internal const uint WM_SETFONT = 0x0030;
         internal const uint WM_GETFONT = 0x0031;
         internal const uint EM_SETLIMITTEXT = 0x00C5;
+        internal const uint EM_GETLIMITTEXT = 0x00D5;
         internal const uint CB_GETCOUNT = 0x0146;
         internal const uint CB_GETCURSEL = 0x0147;
         internal const uint CB_GETLBTEXT = 0x0148;

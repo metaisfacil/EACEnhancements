@@ -146,6 +146,9 @@ namespace AudioDataPlugIn
 				writer.WriteLine("ShowRipErrorAlert=1");
 				writer.WriteLine("ShowWorkflowSetupAlert=1");
 				writer.WriteLine("CreateWorkflowFolders=1");
+				writer.WriteLine(
+					IncreaseExternalCompressorArgumentsLimitIniKey +
+					"=1");
 				writer.WriteLine("EnableLogging=0");
 			}
 		}
@@ -224,6 +227,12 @@ namespace AudioDataPlugIn
 		bool enableLogging = ParseIniBoolean(
 			ReadIniValue(text, "EnableLogging", "0"),
 			false);
+		bool increaseExternalCompressorArgumentsLimit = ParseIniBoolean(
+			ReadIniValue(
+				text,
+				IncreaseExternalCompressorArgumentsLimitIniKey,
+				"1"),
+			true);
 		using (RegistryKey registryKey = Registry.CurrentUser.OpenSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
 		{
 			if (string.IsNullOrWhiteSpace(value) && registryKey != null)
@@ -241,7 +250,8 @@ namespace AudioDataPlugIn
 			showRipErrorAlert,
 			showWorkflowSetupAlert,
 			createWorkflowFolders,
-			enableLogging);
+			enableLogging,
+			increaseExternalCompressorArgumentsLimit);
 	}
 
 	private static bool IsRipErrorAlertEnabled()
@@ -335,6 +345,13 @@ namespace AudioDataPlugIn
 				text4) ||
 			!NativeMethods.WritePrivateProfileStringW(
 				"OutputTemplate",
+				IncreaseExternalCompressorArgumentsLimitIniKey,
+				settings.IncreaseExternalCompressorArgumentsLimit
+					? "1"
+					: "0",
+				text4) ||
+			!NativeMethods.WritePrivateProfileStringW(
+				"OutputTemplate",
 				"EnableLogging",
 				settings.EnableLogging ? "1" : "0",
 				text4))
@@ -348,6 +365,8 @@ namespace AudioDataPlugIn
 				error);
 		}
 		UpdateLoggingPreference(settings.EnableLogging);
+		UpdateExtendedCompressorArgumentsPreference(
+			settings.IncreaseExternalCompressorArgumentsLimit);
 		string[] array = new string[4] { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
 		string[] array2 = new string[4] { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
 		using (RegistryKey registryKey = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
@@ -384,6 +403,8 @@ namespace AudioDataPlugIn
 			"', ripErrorAlert=" + settings.ShowRipErrorAlert +
 			", workflowSetupAlert=" + settings.ShowWorkflowSetupAlert +
 			", createWorkflowFolders=" + settings.CreateWorkflowFolders +
+			", extendedCompressorArguments=" +
+			settings.IncreaseExternalCompressorArgumentsLimit +
 			", logging=" + settings.EnableLogging + ".");
 	}
 

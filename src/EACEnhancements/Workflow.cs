@@ -857,6 +857,11 @@ namespace AudioDataPlugIn
 				{
 					EnsureMainWindowSubclass(intPtr);
 				}
+				MaybeInstallExtendedCompressorArguments(cWPSTRUCT.hwnd);
+				MaybeStageExtendedCompressorArgumentsBeforePropertySheetCommand(
+					cWPSTRUCT.hwnd,
+					cWPSTRUCT.message,
+					cWPSTRUCT.wParam);
 				InspectWorkflowMessage(cWPSTRUCT.hwnd, cWPSTRUCT.message, cWPSTRUCT.wParam, cWPSTRUCT.lParam, "call");
 			}
 		}
@@ -1501,7 +1506,8 @@ namespace AudioDataPlugIn
 							settings.ShowRipErrorAlert,
 							settings.ShowWorkflowSetupAlert,
 							settings.CreateWorkflowFolders,
-							settings.EnableLogging);
+							settings.EnableLogging,
+							settings.IncreaseExternalCompressorArgumentsLimit);
 						SaveOutputTemplateSettings(selectedSettings);
 						if (settings.CreateWorkflowFolders)
 						{

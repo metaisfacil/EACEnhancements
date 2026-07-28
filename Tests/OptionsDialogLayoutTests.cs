@@ -15,7 +15,8 @@ namespace AudioDataPlugIn
                 true,
                 true,
                 true,
-                false);
+                false,
+                true);
             using (OutputTemplateDialog dialog = new OutputTemplateDialog(settings, IntPtr.Zero))
             {
                 dialog.CreateControl();
@@ -38,6 +39,15 @@ namespace AudioDataPlugIn
                     "Enable EAC Enhancements diagnostic logging");
                 if (loggingOption == null || loggingOption.Checked)
                     throw new Exception("Diagnostic logging is not disabled by default.");
+                CheckBox compressorLimitOption = FindCheckBox(
+                    dialog,
+                    "Increase limit of external compressor arguments from 500 to 1000 characters");
+                if (compressorLimitOption == null ||
+                    !compressorLimitOption.Checked)
+                {
+                    throw new Exception(
+                        "The external-compressor argument limit option is not enabled by default.");
+                }
                 dialog.Show();
                 Application.DoEvents();
                 Button save = FindButton(dialog, "Save");
