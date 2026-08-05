@@ -15,6 +15,7 @@ namespace AudioDataPlugIn
             AssertTrackCountMismatch();
             AssertDataTrackDetection();
             AssertTwoLogComparison();
+            AssertPeakComparison();
             AssertMultiDiscOrderMapping();
             Console.WriteLine("CD TOC comparison tests passed.");
             return 0;
@@ -34,6 +35,22 @@ namespace AudioDataPlugIn
             Assert(parsed[0].Count == 2, "Parsed EAC TOC track count");
             Assert(parsed[0][1].StartSector == 15847, "Parsed start sector");
             Assert(parsed[0][1].NextStartSector == 30859, "Parsed end sector");
+
+            parsed = CdTocLogParser.ParseTables(
+                table + "\r\nPeak level 99.9 %\r\nPeak level 100.0 %\r\n",
+                out error);
+            Assert(parsed.Count == 1 &&
+                parsed[0][0].HasPeak && parsed[0][0].Peak == 999.0 &&
+                parsed[0][1].HasPeak && parsed[0][1].Peak == 1000.0,
+                "EAC percentage peak levels were not parsed per track.");
+
+            parsed = CdTocLogParser.ParseTables(
+                table + "\r\nPeak: 0.998000\r\nPeak: 1.000000\r\n",
+                out error);
+            Assert(parsed.Count == 1 &&
+                parsed[0][0].HasPeak && parsed[0][0].Peak == 998.0 &&
+                parsed[0][1].HasPeak && parsed[0][1].Peak == 1000.0,
+                "Fractional peak levels were not parsed per track.");
 
             parsed = CdTocLogParser.ParseTables(table + "\r\n" + table, out error);
             Assert(parsed.Count == 2, "Stacked log TOCs were not separated.");
@@ -192,6 +209,67 @@ namespace AudioDataPlugIn
                 "A failed multi-disc mapping did not explain its pairwise failures.");
         }
 
+        private static void AssertPeakComparison()
+        {
+            IList<CdTocEntry> first = Entries(
+                PeakEntry(1, 0, 1000, 999.0, 3),
+                PeakEntry(2, 1000, 2000, 998.0, 3));
+            IList<CdTocEntry> second = Entries(
+                PeakEntry(1, 0, 1000, 1000.0, 3),
+                PeakEntry(2, 1000, 2000, 1000.0, 3));
+
+            CdTocReleaseComparisonResult peakAware = CdTocReleaseComparer.Compare(
+                Tables(first),
+                Tables(second),
+                true);
+            Assert(!peakAware.IsMatch &&
+                peakAware.Reason.IndexOf("peak", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                peakAware.Reason.IndexOf("track 2", StringComparison.OrdinalIgnoreCase) >= 0,
+                "A peak difference above the script threshold was accepted.");
+
+            CdTocReleaseComparisonResult tocOnly = CdTocReleaseComparer.Compare(
+                Tables(first),
+                Tables(second));
+            Assert(tocOnly.IsMatch && tocOnly.IsExact,
+                "The opt-in peak check changed TOC-only comparison behavior.");
+
+            IList<CdTocEntry> rounded = Entries(
+                PeakEntry(1, 0, 1000, 1000.0, 3),
+                PeakEntry(2, 1000, 2000, 1000.0, 3));
+            CdTocReleaseComparisonResult compatible = CdTocReleaseComparer.Compare(
+                Tables(Entries(
+                    PeakEntry(1, 0, 1000, 999.0, 3),
+                    PeakEntry(2, 1000, 2000, 1000.0, 3))),
+                Tables(rounded),
+                true);
+            Assert(compatible.IsMatch && !compatible.IsExact &&
+                ContainsDetail(compatible, "peak levels differ"),
+                "Progressive peak rounding compatibility was not reported.");
+
+            IList<CdTocEntry> incomplete = Entries(
+                PeakEntry(1, 0, 1000, 1000.0, 3),
+                Entry(2, 1000, 2000));
+            CdTocReleaseComparisonResult skipped = CdTocReleaseComparer.Compare(
+                Tables(first),
+                Tables(incomplete),
+                true);
+            Assert(skipped.IsMatch,
+                "Peak comparison was not skipped for incomplete per-track peak data.");
+
+            IList<IList<CdTocEntry>> firstMultiDisc = Tables(
+                Entries(PeakEntry(1, 0, 1000, 900.0, 3)),
+                Entries(PeakEntry(1, 0, 1000, 800.0, 3)));
+            IList<IList<CdTocEntry>> secondMultiDisc = Tables(
+                Entries(PeakEntry(1, 0, 1000, 800.0, 3)),
+                Entries(PeakEntry(1, 0, 1000, 900.0, 3)));
+            CdTocReleaseComparisonResult mapped = CdTocReleaseComparer.Compare(
+                firstMultiDisc,
+                secondMultiDisc,
+                true);
+            Assert(mapped.IsMatch && ContainsDetail(mapped, "table 2"),
+                "Peak levels were not used to map identical multi-disc TOCs.");
+        }
+
         private static bool ContainsDetail(CdTocComparisonResult result, string value)
         {
             foreach (string detail in result.Details)
@@ -230,6 +308,20 @@ namespace AudioDataPlugIn
                 StartSector = start,
                 NextStartSector = nextStart
             };
+        }
+
+        private static CdTocEntry PeakEntry(
+            int number,
+            long start,
+            long nextStart,
+            double peak,
+            int precision)
+        {
+            CdTocEntry entry = Entry(number, start, nextStart);
+            entry.HasPeak = true;
+            entry.Peak = peak;
+            entry.PeakPrecision = precision;
+            return entry;
         }
 
         private static void Assert(bool condition, string message)

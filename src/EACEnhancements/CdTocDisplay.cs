@@ -15,6 +15,10 @@ namespace AudioDataPlugIn
         internal int TrackNumber;
         internal long StartSector;
         internal long NextStartSector;
+        internal bool HasPeak;
+        // Matches the userscript's normalized 0..1000 representation.
+        internal double Peak;
+        internal int PeakPrecision;
     }
 
     internal sealed class CdTocLabels
@@ -262,7 +266,7 @@ namespace AudioDataPlugIn
                 cdTocWindow.MinimumSize = new Size(420, 240);
                 cdTocWindow.ShowIcon = false;
                 cdTocWindow.StartPosition = FormStartPosition.CenterParent;
-                cdTocWindow.Text = "CD TOC (EAC Enhancements)";
+                cdTocWindow.Text = "CD Table-of-Contents (TOC)";
                 cdTocWindow.FormClosed += delegate
                 {
                     if (cdTocTextBox != null)
@@ -465,11 +469,12 @@ namespace AudioDataPlugIn
                 IList<IList<CdTocEntry>> secondTables = ReadLogTocTables(paths[1]);
                 CdTocReleaseComparisonResult result = CdTocReleaseComparer.Compare(
                     firstTables,
-                    secondTables);
+                    secondTables,
+                    true);
                 StringBuilder message = new StringBuilder();
                 message.Append(result.IsMatch
                     ? result.Reason
-                    : "The logs' TOCs do not match.\r\n\r\nReason: " + result.Reason);
+                    : "The logs do not match.\r\n\r\nReason: " + result.Reason);
                 AppendComparisonDetails(message, result);
                 message.Append("\r\n\r\nFirst log: ").Append(paths[0])
                     .Append("\r\nSecond log: ").Append(paths[1]);

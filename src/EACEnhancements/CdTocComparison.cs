@@ -58,6 +58,16 @@ namespace AudioDataPlugIn
                 RegexOptions.Multiline | RegexOptions.CultureInvariant)
         };
 
+        private static readonly Regex PercentPeakPattern = new Regex(
+            @"^\s*(?:Peak level|Пиковый уровень|Ïèêîâûé óðîâåíü|峰值电平|ピークレベル|Spitzenpegel|" +
+            @"Pauze lengte|Livello di picco|Peak-nivå|Nivel Pico|Пиково ниво|Poziom wysterowania|" +
+            @"Vršni nivo|[Šš]pičková úroveň|Nível de Pico)\s+(?<peak>\d+(?:\.\d+)?)\s*%\s*$",
+            RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        private static readonly Regex FractionPeakPattern = new Regex(
+            @"^\s*Peak(?: level)?\s*:\s*(?<peak>\d+(?:\.\d+)?)\s*$",
+            RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
         internal static IList<IList<CdTocEntry>> ParseTables(string logText, out string error)
         {
             error = String.Empty;
@@ -126,7 +136,76 @@ namespace AudioDataPlugIn
                 tables.Add(table);
             if (tables.Count == 0)
                 error = "No supported CD TOC table was found in the selected log.";
+            else
+                AttachPeakLevels(logText, tables);
             return tables;
+        }
+
+        private static void AttachPeakLevels(
+            string logText,
+            IList<IList<CdTocEntry>> tables)
+        {
+            List<ParsedPeak> peaks = new List<ParsedPeak>();
+            AddPeakMatches(logText, PercentPeakPattern, 10.0, 3, peaks);
+            AddPeakMatches(logText, FractionPeakPattern, 1000.0, 6, peaks);
+            peaks.Sort(delegate(ParsedPeak left, ParsedPeak right)
+            {
+                return left.Index.CompareTo(right.Index);
+            });
+
+            int expectedPeakCount = 0;
+            int[] audioTrackCounts = new int[tables.Count];
+            for (int i = 0; i < tables.Count; i++)
+            {
+                int dataTracks = CdTocComparer.GetDataTrackCount(tables[i]);
+                if (dataTracks < 0)
+                    return;
+                audioTrackCounts[i] = tables[i].Count - dataTracks;
+                expectedPeakCount += audioTrackCounts[i];
+            }
+            // Only attach peaks when the file reports one for every audio
+            // track. Partial peak data must cause comparison to be skipped.
+            if (peaks.Count != expectedPeakCount)
+                return;
+
+            int peakIndex = 0;
+            for (int tableIndex = 0; tableIndex < tables.Count; tableIndex++)
+            {
+                for (int trackIndex = 0;
+                    trackIndex < audioTrackCounts[tableIndex];
+                    trackIndex++)
+                {
+                    ParsedPeak peak = peaks[peakIndex++];
+                    CdTocEntry entry = tables[tableIndex][trackIndex];
+                    entry.HasPeak = true;
+                    entry.Peak = peak.Value;
+                    entry.PeakPrecision = peak.Precision;
+                }
+            }
+        }
+
+        private static void AddPeakMatches(
+            string logText,
+            Regex pattern,
+            double scale,
+            int precision,
+            IList<ParsedPeak> peaks)
+        {
+            foreach (Match match in pattern.Matches(logText))
+            {
+                double value;
+                if (Double.TryParse(
+                    match.Groups["peak"].Value,
+                    NumberStyles.AllowDecimalPoint,
+                    CultureInfo.InvariantCulture,
+                    out value))
+                {
+                    peaks.Add(new ParsedPeak(
+                        match.Index,
+                        Math.Max(0.0, Math.Min(1000.0, value * scale)),
+                        precision));
+                }
+            }
         }
 
         private static bool TryParseEntry(
@@ -226,6 +305,20 @@ namespace AudioDataPlugIn
                 Entry = entry;
             }
         }
+
+        private sealed class ParsedPeak
+        {
+            internal readonly int Index;
+            internal readonly double Value;
+            internal readonly int Precision;
+
+            internal ParsedPeak(int index, double value, int precision)
+            {
+                Index = index;
+                Value = value;
+                Precision = precision;
+            }
+        }
     }
 
     internal static class CdTocComparer
@@ -236,6 +329,14 @@ namespace AudioDataPlugIn
         internal static CdTocComparisonResult Compare(
             IList<CdTocEntry> displayed,
             IList<CdTocEntry> logged)
+        {
+            return Compare(displayed, logged, false);
+        }
+
+        internal static CdTocComparisonResult Compare(
+            IList<CdTocEntry> displayed,
+            IList<CdTocEntry> logged,
+            bool comparePeaksWhenComplete)
         {
             if (displayed == null)
                 throw new ArgumentNullException("displayed");
@@ -351,12 +452,82 @@ namespace AudioDataPlugIn
             if (hasPostGap)
                 result.Details.Add("The selected log differs by a 150-sector post-gap.");
 
+            if (comparePeaksWhenComplete &&
+                HaveCompletePeakLevels(displayed, logged, displayedLength))
+            {
+                for (int i = 0; i < displayedLength; i++)
+                {
+                    CdTocEntry displayedEntry = displayed[i];
+                    CdTocEntry loggedEntry = logged[i];
+                    if (!PeaksMatch(displayedEntry, loggedEntry))
+                    {
+                        result.Reason = "Track " + (i + 1) +
+                            " peak difference is above 0.001 (" +
+                            FormatPeak(displayedEntry) + " vs. " +
+                            FormatPeak(loggedEntry) + ").";
+                        return result;
+                    }
+                    if (displayedEntry.PeakPrecision == loggedEntry.PeakPrecision &&
+                        displayedEntry.Peak != loggedEntry.Peak)
+                    {
+                        exact = false;
+                        result.Details.Add("Track " + (i + 1) +
+                            ": peak levels differ (" +
+                            FormatPeak(displayedEntry) + " vs. " +
+                            FormatPeak(loggedEntry) + ").");
+                    }
+                }
+            }
+
             result.IsMatch = true;
             result.IsExact = exact;
             result.Reason = exact
                 ? "The TOCs match exactly."
                 : "The TOCs match under the Similar CD Detector thresholds.";
             return result;
+        }
+
+        private static bool HaveCompletePeakLevels(
+            IList<CdTocEntry> displayed,
+            IList<CdTocEntry> logged,
+            int audioTrackCount)
+        {
+            for (int i = 0; i < audioTrackCount; i++)
+            {
+                if (!displayed[i].HasPeak || !logged[i].HasPeak)
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool PeaksMatch(CdTocEntry first, CdTocEntry second)
+        {
+            double[] progressiveOffsets = { -0.031, 0.901 };
+            foreach (double offset in progressiveOffsets)
+            {
+                if (Math.Abs(
+                    NormalizePeak(first, offset) -
+                    NormalizePeak(second, offset)) < 1.0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static double NormalizePeak(CdTocEntry entry, double offset)
+        {
+            double peak = entry.PeakPrecision <= 3
+                ? Math.Floor(entry.Peak) + offset
+                : entry.Peak;
+            return Math.Max(0.0, Math.Min(1000.0, peak));
+        }
+
+        private static string FormatPeak(CdTocEntry entry)
+        {
+            return (entry.Peak / 10.0).ToString(
+                "0.######",
+                CultureInfo.InvariantCulture) + "%";
         }
 
         internal static int GetDataTrackCount(IList<CdTocEntry> entries)
@@ -399,6 +570,14 @@ namespace AudioDataPlugIn
             IList<IList<CdTocEntry>> firstLog,
             IList<IList<CdTocEntry>> secondLog)
         {
+            return Compare(firstLog, secondLog, false);
+        }
+
+        internal static CdTocReleaseComparisonResult Compare(
+            IList<IList<CdTocEntry>> firstLog,
+            IList<IList<CdTocEntry>> secondLog,
+            bool comparePeaksWhenComplete)
+        {
             if (firstLog == null)
                 throw new ArgumentNullException("firstLog");
             if (secondLog == null)
@@ -428,15 +607,23 @@ namespace AudioDataPlugIn
                 0,
                 usedSecondTables,
                 mapping,
-                comparisons))
+                comparisons,
+                comparePeaksWhenComplete))
             {
                 releaseResult.Reason = firstLog.Count == 1
-                    ? CdTocComparer.Compare(firstLog[0], secondLog[0]).Reason
+                    ? CdTocComparer.Compare(
+                        firstLog[0],
+                        secondLog[0],
+                        comparePeaksWhenComplete).Reason
                     : "No one-to-one matching arrangement was found for the logs' TOC tables.";
                 // Pair labels are useful when several stacked/multi-disc TOCs
                 // were tried, but merely repeat the reason for a single pair.
                 if (firstLog.Count > 1)
-                    AppendFailureDetails(releaseResult, firstLog, secondLog);
+                    AppendFailureDetails(
+                        releaseResult,
+                        firstLog,
+                        secondLog,
+                        comparePeaksWhenComplete);
                 return releaseResult;
             }
 
@@ -478,7 +665,8 @@ namespace AudioDataPlugIn
             int firstIndex,
             bool[] usedSecondTables,
             int[] mapping,
-            CdTocComparisonResult[] comparisons)
+            CdTocComparisonResult[] comparisons,
+            bool comparePeaksWhenComplete)
         {
             if (firstIndex == firstLog.Count)
                 return true;
@@ -493,7 +681,8 @@ namespace AudioDataPlugIn
                         continue;
                     CdTocComparisonResult comparison = CdTocComparer.Compare(
                         firstLog[firstIndex],
-                        secondLog[secondIndex]);
+                        secondLog[secondIndex],
+                        comparePeaksWhenComplete);
                     if (!comparison.IsMatch || comparison.IsExact != (exactPass == 1))
                         continue;
                     usedSecondTables[secondIndex] = true;
@@ -505,7 +694,8 @@ namespace AudioDataPlugIn
                         firstIndex + 1,
                         usedSecondTables,
                         mapping,
-                        comparisons))
+                        comparisons,
+                        comparePeaksWhenComplete))
                     {
                         return true;
                     }
@@ -519,7 +709,8 @@ namespace AudioDataPlugIn
         private static void AppendFailureDetails(
             CdTocReleaseComparisonResult releaseResult,
             IList<IList<CdTocEntry>> firstLog,
-            IList<IList<CdTocEntry>> secondLog)
+            IList<IList<CdTocEntry>> secondLog,
+            bool comparePeaksWhenComplete)
         {
             const int MaximumDetails = 12;
             for (int firstIndex = 0;
@@ -533,7 +724,8 @@ namespace AudioDataPlugIn
                 {
                     CdTocComparisonResult comparison = CdTocComparer.Compare(
                         firstLog[firstIndex],
-                        secondLog[secondIndex]);
+                        secondLog[secondIndex],
+                        comparePeaksWhenComplete);
                     releaseResult.Details.Add(
                         "First log table " + (firstIndex + 1) +
                         " vs. second log table " + (secondIndex + 1) +
