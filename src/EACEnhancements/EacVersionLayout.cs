@@ -84,6 +84,9 @@ namespace AudioDataPlugIn
         internal readonly uint StandardDirectoryPathVa;
         internal readonly uint ActualPathVa;
         internal readonly uint LiveSettingsRefreshVa;
+        internal readonly uint LiveSettingsSaveVa;
+        internal readonly uint ActiveProfileNameVa;
+        internal readonly uint ProfilesPathVa;
         internal readonly uint PluginHandlerContextVa;
         internal readonly uint PluginGetNumPluginsPointerVa;
         internal readonly uint PluginSetCurrentPluginPointerVa;
@@ -188,6 +191,9 @@ namespace AudioDataPlugIn
             uint standardDirectoryPathVa,
             uint actualPathVa,
             uint liveSettingsRefreshVa,
+            uint liveSettingsSaveVa,
+            uint activeProfileNameVa,
+            uint profilesPathVa,
             uint pluginHandlerContextVa,
             uint pluginGetNumPluginsPointerVa,
             uint pluginSetCurrentPluginPointerVa,
@@ -280,6 +286,9 @@ namespace AudioDataPlugIn
             StandardDirectoryPathVa = standardDirectoryPathVa;
             ActualPathVa = actualPathVa;
             LiveSettingsRefreshVa = liveSettingsRefreshVa;
+            LiveSettingsSaveVa = liveSettingsSaveVa;
+            ActiveProfileNameVa = activeProfileNameVa;
+            ProfilesPathVa = profilesPathVa;
             PluginHandlerContextVa = pluginHandlerContextVa;
             PluginGetNumPluginsPointerVa = pluginGetNumPluginsPointerVa;
             PluginSetCurrentPluginPointerVa = pluginSetCurrentPluginPointerVa;
@@ -462,6 +471,9 @@ namespace AudioDataPlugIn
             // Reloads EAC's live settings from the registry. 0x005D0840 is
             // the inverse save routine and must never be used as a refresh.
             0x005DFC30,
+            0x005D0840,
+            0x00BD6280,
+            0x009AFD64,
             0x009B52DC,
             0x007D01F8,
             0x007D01FC,
@@ -557,6 +569,9 @@ namespace AudioDataPlugIn
             // Reloads EAC's live settings from the registry. 0x005CC8C0 is
             // the inverse save routine and must never be used as a refresh.
             0x005DBCB0,
+            0x005CC8C0,
+            0x00936AA8,
+            0x0084CBD4,
             0x0085214C,
             0x0074C1E8,
             0x0074C1EC,

@@ -367,6 +367,7 @@ namespace AudioDataPlugIn
 		UpdateLoggingPreference(settings.EnableLogging);
 		UpdateExtendedCompressorArgumentsPreference(
 			settings.IncreaseExternalCompressorArgumentsLimit);
+		SaveActiveProfileSettingsToRegistry();
 		string[] array = new string[4] { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
 		string[] array2 = new string[4] { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
 		using (RegistryKey registryKey = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
@@ -447,6 +448,7 @@ namespace AudioDataPlugIn
 			bool changed = false;
 			string[] names = { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
 			string[] defaults = { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
+			SaveActiveProfileSettingsToRegistry();
 			using (RegistryKey key = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
 			{
 				if (key == null)
@@ -488,6 +490,7 @@ namespace AudioDataPlugIn
 	{
 		string[] names = { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
 		string[] defaults = { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
+		SaveActiveProfileSettingsToRegistry();
 		using (RegistryKey key = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
 		{
 			if (key == null)

@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using Microsoft.Win32;
 
 namespace AudioDataPlugIn
 {
@@ -67,8 +66,6 @@ namespace AudioDataPlugIn
 
     internal static class EacSetupAudit
     {
-        private const string EacRoot = @"Software\AWSoftware\EACU";
-
         private enum IssueCategory
         {
             LogScore,
@@ -81,39 +78,39 @@ namespace AudioDataPlugIn
             // Cambia, plus settings required for a complete, verifiable 100% log.
             // Recommendations remain useful guidance but do not gate the workflow.
             EacSetupAuditResult result = new EacSetupAuditResult();
-            using (RegistryKey extraction = Registry.CurrentUser.OpenSubKey(EacRoot + @"\Extraction Options"))
-            using (RegistryKey startup = Registry.CurrentUser.OpenSubKey(EacRoot + @"\StartUp Options"))
-            using (RegistryKey compression = Registry.CurrentUser.OpenSubKey(EacRoot + @"\Compression Options"))
-            {
-                CheckEnabled(result, extraction, "EAC Options > Extraction", "Fill up missing offset samples with silence", "FillUpMissingSamples", true, IssueCategory.LogScore);
-                CheckEnabled(result, extraction, "EAC Options > Extraction", "Synchronize between tracks", "SyncTrackJunctions", true, IssueCategory.Recommendation);
-                CheckEnabled(result, extraction, "EAC Options > Extraction", "Delete leading and trailing silent blocks", "RemoveSilence", false, IssueCategory.LogScore);
-                CheckInteger(result, extraction, "EAC Options > Extraction", "Error recovery quality", "NumberReads", 5, "High", IssueCategory.Recommendation);
+            int? selectedDriveIndex;
+            string selectedDriveText = FindSelectedDriveText(mainWindow, out selectedDriveIndex);
+            EacSettingsSource settings = EacSettingsSource.Create(selectedDriveIndex);
+            const string extraction = "Extraction Options";
+            const string startup = "StartUp Options";
+            CheckEnabled(result, settings, extraction, "EAC Options > Extraction", "Fill up missing offset samples with silence", "FillUpMissingSamples", true, IssueCategory.LogScore);
+            CheckEnabled(result, settings, extraction, "EAC Options > Extraction", "Synchronize between tracks", "SyncTrackJunctions", true, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, extraction, "EAC Options > Extraction", "Delete leading and trailing silent blocks", "RemoveSilence", false, IssueCategory.LogScore);
+            CheckInteger(result, settings, extraction, "EAC Options > Extraction", "Error recovery quality", "NumberReads", 5, "High", IssueCategory.Recommendation);
 
-                CheckEnabled(result, extraction, "EAC Options > General", "Automatically access online metadata for unknown CDs", "RetrieveCDDBOnUnknownCD", true, IssueCategory.Recommendation);
-                CheckEnabled(result, startup, "EAC Options > General", "Create log files in English", "CreateEnglishLogFile", true, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, extraction, "EAC Options > General", "Automatically access online metadata for unknown CDs", "RetrieveCDDBOnUnknownCD", true, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, startup, "EAC Options > General", "Create log files in English", "CreateEnglishLogFile", true, IssueCategory.Recommendation);
 
-                CheckEnabled(result, extraction, "EAC Options > Tools", "Automatically write status report after extraction", "AutoSaveStatus", true, IssueCategory.LogScore);
-                CheckEnabled(result, extraction, "EAC Options > Tools", "Append checksum to status report", "AddChecksumLogFile", true, IssueCategory.LogScore);
-                CheckEnabled(result, extraction, "EAC Options > Tools", "Start external compressors queued in the background", "BackgroundExternalCompression", false, IssueCategory.Recommendation);
-                CheckEnabled(result, startup, "EAC Options > Tools", "Beginner mode", "EasyGUI", false, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, extraction, "EAC Options > Tools", "Automatically write status report after extraction", "AutoSaveStatus", true, IssueCategory.LogScore);
+            CheckEnabled(result, settings, extraction, "EAC Options > Tools", "Append checksum to status report", "AddChecksumLogFile", true, IssueCategory.LogScore);
+            CheckEnabled(result, settings, extraction, "EAC Options > Tools", "Start external compressors queued in the background", "BackgroundExternalCompression", false, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, startup, "EAC Options > Tools", "Beginner mode", "EasyGUI", false, IssueCategory.Recommendation);
 
-                CheckEnabled(result, extraction, "EAC Options > Normalize", "Normalize", "Normalize", false, IssueCategory.LogScore);
+            CheckEnabled(result, settings, extraction, "EAC Options > Normalize", "Normalize", "Normalize", false, IssueCategory.LogScore);
 
-                CheckCompression(result, compression);
-            }
-
-            CheckSelectedDrive(result, mainWindow);
+            CheckCompression(result, settings);
+            CheckSelectedDrive(result, settings, selectedDriveText);
             return result;
         }
 
-        private static void CheckCompression(EacSetupAuditResult result, RegistryKey key)
+        private static void CheckCompression(EacSetupAuditResult result, EacSettingsSource settings)
         {
+            const string key = "Compression Options";
             const string section = "Compression Options > External Compression";
-            CheckEnabled(result, key, section, "Use external program for compression", "UseExternalEncoder", true, IssueCategory.Recommendation);
-            CheckInteger(result, key, section, "Parameter passing scheme", "ExternalEncoderType", 20, "User Defined Encoder", IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, section, "Use external program for compression", "UseExternalEncoder", true, IssueCategory.Recommendation);
+            CheckInteger(result, settings, key, section, "Parameter passing scheme", "ExternalEncoderType", 20, "User Defined Encoder", IssueCategory.Recommendation);
 
-            string extension = ReadString(key, "ExternalEncoderExtension");
+            string extension = ReadString(settings, key, "ExternalEncoderExtension");
             string normalizedExtension = (extension ?? String.Empty).Trim().TrimStart('.');
             if (!IsOrpheusAcceptedExtension(normalizedExtension))
             {
@@ -128,86 +125,83 @@ namespace AudioDataPlugIn
                 result.AddRecommendation(section, "File extension", DisplayString(extension), ".flac");
             }
 
-            string encoder = ReadString(key, "ExternalEncoderProgram");
+            string encoder = ReadString(settings, key, "ExternalEncoderProgram");
             if (!HasExecutableExtension(encoder))
                 result.AddRecommendation(section, "External compressor", DisplayString(encoder), "A command-line compressor ending in .exe");
 
-            CheckEnabled(result, key, section, "Delete WAV after compression", "ExternalEncoderDeleteSource", true, IssueCategory.Recommendation);
-            CheckEnabled(result, key, section, "Add ID3 tag", "ExternalEncoderID3Tag", false, IssueCategory.LogScore);
-            CheckEnabled(result, key, section, "Check external program return code", "ExternalEncoderCheckReturnCode", true, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, section, "Delete WAV after compression", "ExternalEncoderDeleteSource", true, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, section, "Add ID3 tag", "ExternalEncoderID3Tag", false, IssueCategory.LogScore);
+            CheckEnabled(result, settings, key, section, "Check external program return code", "ExternalEncoderCheckReturnCode", true, IssueCategory.Recommendation);
 
             const string tagSection = "Compression Options > ID3 Tag";
-            CheckEnabled(result, key, tagSection, "ID3 v1.1 tags", "UseID3V11", false, IssueCategory.Recommendation);
-            CheckEnabled(result, key, tagSection, "ID3 v2 tags", "UseID3V2", false, IssueCategory.Recommendation);
-            CheckEnabled(result, key, tagSection, "Write ID3 v1 tags", "WriteV1Tags", false, IssueCategory.Recommendation);
-            CheckEnabled(result, key, tagSection, "Add cover to ID3 tag", "AddCoverToID3V2", false, IssueCategory.Recommendation);
-            CheckEnabled(result, key, tagSection, "Write cover image into extraction folder", "WriteCoverToFolder", true, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, tagSection, "ID3 v1.1 tags", "UseID3V11", false, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, tagSection, "ID3 v2 tags", "UseID3V2", false, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, tagSection, "Write ID3 v1 tags", "WriteV1Tags", false, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, tagSection, "Add cover to ID3 tag", "AddCoverToID3V2", false, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, key, tagSection, "Write cover image into extraction folder", "WriteCoverToFolder", true, IssueCategory.Recommendation);
         }
 
-        private static void CheckSelectedDrive(EacSetupAuditResult result, IntPtr mainWindow)
+        private static void CheckSelectedDrive(EacSetupAuditResult result, EacSettingsSource settings, string displayedDrive)
         {
-            string displayedDrive = FindSelectedDriveText(mainWindow);
-            using (RegistryKey drives = Registry.CurrentUser.OpenSubKey(EacRoot + @"\Drive Options"))
+            string driveKeyName = MatchDriveKey(settings.GetSubKeyNames("Drive Options"), displayedDrive);
+            if (driveKeyName == null)
             {
-                string driveKeyName = MatchDriveKey(drives, displayedDrive);
-                if (driveKeyName == null)
-                {
-                    result.AddLogScoreIssue(
-                        "Drive Options",
-                        "Selected drive",
-                        String.IsNullOrWhiteSpace(displayedDrive) ? "Could not identify the selected drive" : displayedDrive,
-                        "A selected drive with saved Drive Options");
-                    return;
-                }
+                result.AddLogScoreIssue(
+                    "Drive Options",
+                    "Selected drive",
+                    String.IsNullOrWhiteSpace(displayedDrive) ? "Could not identify the selected drive" : displayedDrive,
+                    "A selected drive with saved Drive Options");
+                return;
+            }
 
-                using (RegistryKey drive = drives.OpenSubKey(driveKeyName))
-                {
-                    string section = "Drive Options (" + NormalizeWhitespace(driveKeyName) + ")";
-                    CheckInteger(result, drive, section + " > Extraction Method", "Extraction mode", "ExtractionMode", 5, "Secure mode", IssueCategory.LogScore);
-                    CheckInteger(result, drive, section + " > Extraction Method", "Accurate Stream and drive-cache features", "SecureMode", 3, "Both enabled", IssueCategory.LogScore);
-                    CheckEnabled(result, drive, section + " > Extraction Method", "Use C2 error information", "UseC2Correction", false, IssueCategory.LogScore);
+            string drive = "Drive Options\\" + driveKeyName;
+            string section = "Drive Options (" + NormalizeWhitespace(driveKeyName) + ")";
+            CheckInteger(result, settings, drive, section + " > Extraction Method", "Extraction mode", "ExtractionMode", 5, "Secure mode", IssueCategory.LogScore);
+            CheckInteger(result, settings, drive, section + " > Extraction Method", "Accurate Stream and drive-cache features", "SecureMode", 3, "Both enabled", IssueCategory.LogScore);
+            CheckEnabled(result, settings, drive, section + " > Extraction Method", "Use C2 error information", "UseC2Correction", false, IssueCategory.LogScore);
 
-                    int? command = ReadInteger(drive, "ExtractionCommandSet");
-                    if (!command.HasValue || command.Value == 0)
-                        result.AddRecommendation(
-                            section + " > Drive",
-                            "Read command",
-                            DisplayReadCommand(command),
-                            "Autodetected for this drive");
+            int? command = ReadInteger(settings, drive, "ExtractionCommandSet");
+            if (!command.HasValue || command.Value == 0)
+                result.AddRecommendation(
+                    section + " > Drive",
+                    "Read command",
+                    DisplayReadCommand(command),
+                    "Autodetected for this drive");
 
-                    CheckInteger(result, drive, section + " > Offset/Speed", "Speed selection", "SpeedSelection", -1, "Current", IssueCategory.Recommendation);
-                    CheckEnabled(result, drive, section + " > Offset/Speed", "Allow speed reduction during extraction", "SpeedReduction", true, IssueCategory.Recommendation);
-                    CheckEnabled(result, drive, section + " > Offset/Speed", "Use AccurateRip with this drive", "UseAccurateRip", true, IssueCategory.Recommendation);
-                    CheckIntegerRange(
-                        result,
-                        drive,
-                        section + " > Gap Detection",
-                        "Gap retrieval method",
-                        "GapDetectionMode",
-                        0,
-                        2,
-                        "Detection Method A, B, or C (start with A)",
-                        IssueCategory.Recommendation);
-                    int? gapAccuracy = ReadInteger(drive, "GapDetectionAccuracy");
-                    if (!gapAccuracy.HasValue || gapAccuracy.Value < 1 || gapAccuracy.Value > 2)
-                    {
-                        result.AddRecommendation(
-                            section + " > Gap Detection",
-                            "Detection accuracy",
-                            DisplayGapDetectionAccuracy(gapAccuracy),
-                            "Secure, or Accurate if Secure stalls");
-                    }
-                }
+            CheckInteger(result, settings, drive, section + " > Offset/Speed", "Speed selection", "SpeedSelection", -1, "Current", IssueCategory.Recommendation);
+            CheckEnabled(result, settings, drive, section + " > Offset/Speed", "Allow speed reduction during extraction", "SpeedReduction", true, IssueCategory.Recommendation);
+            CheckEnabled(result, settings, drive, section + " > Offset/Speed", "Use AccurateRip with this drive", "UseAccurateRip", true, IssueCategory.Recommendation);
+            CheckIntegerRange(
+                result,
+                settings,
+                drive,
+                section + " > Gap Detection",
+                "Gap retrieval method",
+                "GapDetectionMode",
+                0,
+                2,
+                "Detection Method A, B, or C (start with A)",
+                IssueCategory.Recommendation);
+            int? gapAccuracy = ReadInteger(settings, drive, "GapDetectionAccuracy");
+            if (!gapAccuracy.HasValue || gapAccuracy.Value < 1 || gapAccuracy.Value > 2)
+            {
+                result.AddRecommendation(
+                    section + " > Gap Detection",
+                    "Detection accuracy",
+                    DisplayGapDetectionAccuracy(gapAccuracy),
+                    "Secure, or Accurate if Secure stalls");
             }
         }
 
-        private static string FindSelectedDriveText(IntPtr mainWindow)
+        private static string FindSelectedDriveText(IntPtr mainWindow, out int? selectedDriveIndex)
         {
             const uint WmGetText = 0x000D;
+            selectedDriveIndex = null;
             if (mainWindow == IntPtr.Zero || !NativeMethods.IsWindow(mainWindow))
                 return null;
 
             string selected = null;
+            int? selectedIndex = null;
             NativeMethods.EnumChildProc callback = delegate(IntPtr hwnd, IntPtr ignored)
             {
                 StringBuilder className = new StringBuilder(64);
@@ -230,22 +224,30 @@ namespace AudioDataPlugIn
                     value.IndexOf("ID:", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     selected = value;
+                    long index = NativeMethods.SendMessageW(
+                        hwnd,
+                        NativeMethods.CB_GETCURSEL,
+                        IntPtr.Zero,
+                        IntPtr.Zero).ToInt64();
+                    if (index >= 0 && index < 32)
+                        selectedIndex = (int)index;
                     return false;
                 }
                 return true;
             };
             NativeMethods.EnumChildWindows(mainWindow, callback, IntPtr.Zero);
             GC.KeepAlive(callback);
+            selectedDriveIndex = selectedIndex;
             return selected;
         }
 
-        private static string MatchDriveKey(RegistryKey drives, string displayedDrive)
+        private static string MatchDriveKey(IEnumerable<string> driveNames, string displayedDrive)
         {
-            if (drives == null || String.IsNullOrWhiteSpace(displayedDrive))
+            if (driveNames == null || String.IsNullOrWhiteSpace(displayedDrive))
                 return null;
             string normalizedDisplay = NormalizeWhitespace(displayedDrive);
             string best = null;
-            foreach (string name in drives.GetSubKeyNames())
+            foreach (string name in driveNames)
             {
                 if (String.IsNullOrWhiteSpace(name))
                     continue;
@@ -259,14 +261,15 @@ namespace AudioDataPlugIn
 
         private static void CheckEnabled(
             EacSetupAuditResult result,
-            RegistryKey key,
+            EacSettingsSource settings,
+            string key,
             string section,
             string label,
             string valueName,
             bool expected,
             IssueCategory category)
         {
-            int? value = ReadInteger(key, valueName);
+            int? value = ReadInteger(settings, key, valueName);
             bool? actual = value.HasValue ? (bool?)(value.Value != 0) : null;
             if (!actual.HasValue || actual.Value != expected)
                 AddIssue(result, category, section, label, DisplayBoolean(actual), expected ? "Enabled" : "Disabled");
@@ -274,7 +277,8 @@ namespace AudioDataPlugIn
 
         private static void CheckInteger(
             EacSetupAuditResult result,
-            RegistryKey key,
+            EacSettingsSource settings,
+            string key,
             string section,
             string label,
             string valueName,
@@ -282,14 +286,15 @@ namespace AudioDataPlugIn
             string expectedDisplay,
             IssueCategory category)
         {
-            int? value = ReadInteger(key, valueName);
+            int? value = ReadInteger(settings, key, valueName);
             if (!value.HasValue || value.Value != expected)
                 AddIssue(result, category, section, label, DisplayInteger(value), expectedDisplay);
         }
 
         private static void CheckIntegerRange(
             EacSetupAuditResult result,
-            RegistryKey key,
+            EacSettingsSource settings,
+            string key,
             string section,
             string label,
             string valueName,
@@ -298,7 +303,7 @@ namespace AudioDataPlugIn
             string expectedDisplay,
             IssueCategory category)
         {
-            int? value = ReadInteger(key, valueName);
+            int? value = ReadInteger(settings, key, valueName);
             if (!value.HasValue || value.Value < minimum || value.Value > maximum)
                 AddIssue(result, category, section, label, DisplayInteger(value), expectedDisplay);
         }
@@ -317,11 +322,9 @@ namespace AudioDataPlugIn
                 result.AddRecommendation(section, setting, current, required);
         }
 
-        private static int? ReadInteger(RegistryKey key, string name)
+        private static int? ReadInteger(EacSettingsSource settings, string key, string name)
         {
-            if (key == null)
-                return null;
-            object value = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+            object value = settings.GetValue(key, name);
             if (value is int)
                 return (int)value;
             byte[] bytes = value as byte[];
@@ -334,9 +337,9 @@ namespace AudioDataPlugIn
             return (sbyte)bytes[0];
         }
 
-        private static string ReadString(RegistryKey key, string name)
+        private static string ReadString(EacSettingsSource settings, string key, string name)
         {
-            return key == null ? null : key.GetValue(name, null) as string;
+            return settings.GetValue(key, name) as string;
         }
 
         private static string DisplayBoolean(bool? value)
