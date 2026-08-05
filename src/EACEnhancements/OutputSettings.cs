@@ -79,7 +79,9 @@ namespace AudioDataPlugIn
 			{
 				if (outputTemplateDialog.ShowDialog(owner) == DialogResult.OK)
 				{
-					SaveOutputTemplateSettings(outputTemplateDialog.Settings);
+					SaveOutputTemplateSettings(
+						outputTemplateDialog.Settings,
+						true);
 					MessageBox.Show(owner, "The enhancement options were saved and applied.", "EAC Enhancements", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
 				}
 			}
@@ -315,7 +317,9 @@ namespace AudioDataPlugIn
 		return stringBuilder.ToString();
 	}
 
-	private static void SaveOutputTemplateSettings(OutputTemplateSettings settings)
+	private static void SaveOutputTemplateSettings(
+		OutputTemplateSettings settings,
+		bool synchronizeLiveSettings)
 	{
 		string text = NormalizeRootFolder(settings.RootFolder);
 		string text2 = NormalizeFolderTemplate(settings.FolderTemplate);
@@ -367,7 +371,8 @@ namespace AudioDataPlugIn
 		UpdateLoggingPreference(settings.EnableLogging);
 		UpdateExtendedCompressorArgumentsPreference(
 			settings.IncreaseExternalCompressorArgumentsLimit);
-		SaveActiveProfileSettingsToRegistry();
+		if (synchronizeLiveSettings)
+			SaveActiveProfileSettingsToRegistry();
 		string[] array = new string[4] { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
 		string[] array2 = new string[4] { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
 		using (RegistryKey registryKey = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
@@ -411,6 +416,14 @@ namespace AudioDataPlugIn
 
 	internal static void ApplyConditionalFolderTemplate(int year, string comment)
 	{
+		ApplyConditionalFolderTemplate(year, comment, true);
+	}
+
+	private static void ApplyConditionalFolderTemplate(
+		int year,
+		string comment,
+		bool synchronizeLiveSettings)
+	{
 		try
 		{
 			if (suppressWorkflowFolderTemplate)
@@ -448,7 +461,8 @@ namespace AudioDataPlugIn
 			bool changed = false;
 			string[] names = { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
 			string[] defaults = { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
-			SaveActiveProfileSettingsToRegistry();
+			if (synchronizeLiveSettings)
+				SaveActiveProfileSettingsToRegistry();
 			using (RegistryKey key = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
 			{
 				if (key == null)

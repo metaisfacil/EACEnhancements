@@ -23,7 +23,7 @@ namespace AudioDataPlugIn
         internal const uint PAGE_READWRITE = 0x04;
         internal const uint PAGE_EXECUTE_READWRITE = 0x40;
         internal const uint WAIT_TIMEOUT = 0x00000102;
-        internal const uint QS_PAINT = 0x0020;
+        internal const uint QS_ALLINPUT = 0x04FF;
         internal const uint MWMO_INPUTAVAILABLE = 0x0004;
         internal const uint PM_REMOVE = 0x0001;
         internal const uint MF_BYCOMMAND = 0x00000000;
@@ -42,6 +42,7 @@ namespace AudioDataPlugIn
         internal const uint WM_ENABLE = 0x000A;
         internal const uint WM_SETREDRAW = 0x000B;
         internal const uint WM_CLOSE = 0x0010;
+        internal const uint WM_QUIT = 0x0012;
         internal const uint WM_NCDESTROY = 0x0082;
         internal const uint WM_SETTEXT = 0x000C;
         internal const uint WM_PAINT = 0x000F;
@@ -614,6 +615,14 @@ namespace AudioDataPlugIn
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool PostMessageW(
             IntPtr hwnd,
+            uint message,
+            IntPtr wParam,
+            IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool PostThreadMessageW(
+            uint threadId,
             uint message,
             IntPtr wParam,
             IntPtr lParam);

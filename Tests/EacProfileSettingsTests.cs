@@ -28,6 +28,21 @@ namespace AudioDataPlugIn
             AssertValue(settings, "Drive Options\\TEST DRIVE", "ExtractionMode", 5);
             AssertBytes(settings, "Drive Options\\TEST DRIVE", "SecureMode", 3, 0, 0, 0);
 
+            if (!EnhancementRuntime.ShouldRestoreDetectedReadCommand(7, 0) ||
+                !EnhancementRuntime.ShouldRestoreDetectedReadCommand(7, null) ||
+                EnhancementRuntime.ShouldRestoreDetectedReadCommand(0, 0) ||
+                EnhancementRuntime.ShouldRestoreDetectedReadCommand(7, 7) ||
+                EnhancementRuntime.ShouldRestoreDetectedReadCommand(7, 1))
+            {
+                throw new InvalidOperationException(
+                    "Detected read-command preservation did not reject a transient downgrade.");
+            }
+
+            AssertSelectedReadCommand(7, 0, null, new byte[] { 7, 0 });
+            AssertSelectedReadCommand(8, 8, new byte[] { 7, 0 }, new byte[] { 7, 0 });
+            AssertSelectedReadCommand(7, 0, new byte[] { 7, 0 }, new byte[] { 8, 0 });
+            AssertSelectedReadCommand(0, 0, null, new byte[] { 0, 0 });
+
             bool foundDrive = false;
             foreach (string name in settings.GetSubKeyNames("Drive Options"))
                 foundDrive |= String.Equals(name, "TEST DRIVE", StringComparison.OrdinalIgnoreCase);
@@ -55,6 +70,30 @@ namespace AudioDataPlugIn
 
             Console.WriteLine("EAC active-profile parsing tests passed.");
             return 0;
+        }
+
+        private static void AssertSelectedReadCommand(
+            int expected,
+            object live,
+            object profile,
+            object registry)
+        {
+            object selected = EacSettingsSource.SelectExtractionCommandSet(
+                live,
+                profile,
+                registry);
+            byte[] bytes = selected as byte[];
+            int actual = bytes == null
+                ? Convert.ToInt32(selected)
+                : bytes.Length >= sizeof(int)
+                    ? BitConverter.ToInt32(bytes, 0)
+                    : BitConverter.ToUInt16(bytes, 0);
+            if (actual != expected)
+            {
+                throw new InvalidOperationException(
+                    "Read-command selection returned " + actual +
+                    " instead of " + expected + ".");
+            }
         }
 
         private static void AssertValue(

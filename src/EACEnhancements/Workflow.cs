@@ -1504,7 +1504,7 @@ namespace AudioDataPlugIn
 							settings.CreateWorkflowFolders,
 							settings.EnableLogging,
 							settings.IncreaseExternalCompressorArgumentsLimit);
-						SaveOutputTemplateSettings(selectedSettings);
+						SaveOutputTemplateSettings(selectedSettings, true);
 						if (settings.CreateWorkflowFolders)
 						{
 							PrepareDedicatedWorkflowFolder(
@@ -1727,8 +1727,12 @@ namespace AudioDataPlugIn
 		try
 		{
 			OutputTemplateSettings settings = LoadOutputTemplateSettings();
-			SaveOutputTemplateSettings(settings);
-			ApplyConditionalFolderTemplateFromMainWindow(mainWindow);
+			// The pre-rip preparation already synchronized the active profile to
+			// the registry.  Do not save EAC's live settings after extraction:
+			// cancellation temporarily clears drive fields such as the detected
+			// read command, and EAC's global save routine would persist that state.
+			SaveOutputTemplateSettings(settings, false);
+			ApplyConditionalFolderTemplateFromMainWindow(mainWindow, false);
 			RestoreConfiguredOutputPath(settings.RootFolder);
 			Log("Folder template and configured output path restored after the 100% log workflow.");
 		}
@@ -1738,12 +1742,17 @@ namespace AudioDataPlugIn
 		}
 	}
 
-	private static void ApplyConditionalFolderTemplateFromMainWindow(IntPtr mainWindow)
+	private static void ApplyConditionalFolderTemplateFromMainWindow(
+		IntPtr mainWindow,
+		bool synchronizeLiveSettings = true)
 	{
 		int year;
 		if (!Int32.TryParse(ReadChildControlText(mainWindow, 995), out year))
 			year = 0;
-		ApplyConditionalFolderTemplate(year, ReadChildControlText(mainWindow, 883));
+		ApplyConditionalFolderTemplate(
+			year,
+			ReadChildControlText(mainWindow, 883),
+			synchronizeLiveSettings);
 	}
 
 	private static void PrepareDirectWorkflowDestination(string destination)

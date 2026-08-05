@@ -12,6 +12,8 @@ namespace AudioDataPlugIn
     {
         private const int EacProfileNameCapacity = 64;
         private const int EacProfilesPathCapacity = 512;
+        private const string EacDriveOptionsRegistryPath =
+            @"Software\AWSoftware\EACU\Drive Options";
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void LiveSettingsSaveDelegate();
@@ -62,12 +64,126 @@ namespace AudioDataPlugIn
             if (String.IsNullOrWhiteSpace(TryGetActiveEacProfileName()))
                 return;
 
+            List<DetectedReadCommand> detectedReadCommands =
+                CaptureDetectedReadCommands();
             LiveSettingsSaveDelegate save =
                 (LiveSettingsSaveDelegate)Marshal.GetDelegateForFunctionPointer(
                     AddressFromStaticVa(layout.LiveSettingsSaveVa),
                     typeof(LiveSettingsSaveDelegate));
             save();
-            Log("Active EAC profile settings synchronized before updating live output settings.");
+            int restored = RestoreDetectedReadCommands(detectedReadCommands);
+            Log(
+                "Active EAC profile settings synchronized before updating live output settings; " +
+                "preservedReadCommands=" + restored + ".");
+        }
+
+        private sealed class DetectedReadCommand
+        {
+            internal string DriveName;
+            internal object Value;
+            internal RegistryValueKind Kind;
+            internal int Command;
+        }
+
+        private static List<DetectedReadCommand> CaptureDetectedReadCommands()
+        {
+            List<DetectedReadCommand> result = new List<DetectedReadCommand>();
+            using (RegistryKey root = Registry.CurrentUser.OpenSubKey(
+                EacDriveOptionsRegistryPath))
+            {
+                if (root == null)
+                    return result;
+                foreach (string driveName in root.GetSubKeyNames())
+                {
+                    using (RegistryKey drive = root.OpenSubKey(driveName))
+                    {
+                        if (drive == null)
+                            continue;
+                        object value = drive.GetValue(
+                            "ExtractionCommandSet",
+                            null,
+                            RegistryValueOptions.DoNotExpandEnvironmentNames);
+                        int? command = ReadRegistryInteger(value);
+                        if (!command.HasValue || command.Value <= 0)
+                            continue;
+                        byte[] bytes = value as byte[];
+                        result.Add(new DetectedReadCommand
+                        {
+                            DriveName = driveName,
+                            Value = bytes == null ? value : (byte[])bytes.Clone(),
+                            Kind = drive.GetValueKind("ExtractionCommandSet"),
+                            Command = command.Value
+                        });
+                    }
+                }
+            }
+            return result;
+        }
+
+        private static int RestoreDetectedReadCommands(
+            IEnumerable<DetectedReadCommand> snapshots)
+        {
+            int restored = 0;
+            using (RegistryKey root = Registry.CurrentUser.OpenSubKey(
+                EacDriveOptionsRegistryPath,
+                true))
+            {
+                if (root == null)
+                    return restored;
+                foreach (DetectedReadCommand snapshot in snapshots)
+                {
+                    using (RegistryKey drive = root.OpenSubKey(
+                        snapshot.DriveName,
+                        true))
+                    {
+                        if (drive == null)
+                            continue;
+                        int? current = ReadRegistryInteger(drive.GetValue(
+                            "ExtractionCommandSet",
+                            null,
+                            RegistryValueOptions.DoNotExpandEnvironmentNames));
+                        if (!ShouldRestoreDetectedReadCommand(
+                            snapshot.Command,
+                            current))
+                        {
+                            continue;
+                        }
+                        drive.SetValue(
+                            "ExtractionCommandSet",
+                            snapshot.Value,
+                            snapshot.Kind);
+                        restored++;
+                    }
+                }
+            }
+            return restored;
+        }
+
+        internal static bool ShouldRestoreDetectedReadCommand(
+            int previous,
+            int? current)
+        {
+            return previous > 0 && (!current.HasValue || current.Value == 0);
+        }
+
+        private static int? ReadRegistryInteger(object value)
+        {
+            byte[] bytes = value as byte[];
+            if (bytes != null)
+            {
+                if (bytes.Length >= sizeof(int))
+                    return BitConverter.ToInt32(bytes, 0);
+                if (bytes.Length >= sizeof(short))
+                    return (int)BitConverter.ToUInt16(bytes, 0);
+                if (bytes.Length == 1)
+                    return (int)bytes[0];
+                return null;
+            }
+            if (value is int)
+                return (int)value;
+            if (value is long)
+                return unchecked((int)(long)value);
+            return null;
         }
 
         private static string TryGetActiveEacProfileName()
@@ -344,12 +460,77 @@ namespace AudioDataPlugIn
         internal object GetValue(string section, string name)
         {
             object value;
+            if (section.StartsWith("Drive Options\\", StringComparison.OrdinalIgnoreCase) &&
+                name.Equals("ExtractionCommandSet", StringComparison.OrdinalIgnoreCase))
+            {
+                object liveValue = null;
+                object profileValue = null;
+                object registryValue;
+                if (live != null)
+                    live.TryGetValue(section, name, out liveValue);
+                if (profile != null)
+                    profile.TryGetValue(section, name, out profileValue);
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(
+                    EacRoot + "\\" + section))
+                {
+                    registryValue = key == null
+                        ? null
+                        : key.GetValue(
+                            name,
+                            null,
+                            RegistryValueOptions.DoNotExpandEnvironmentNames);
+                }
+                object selected = SelectExtractionCommandSet(
+                    liveValue,
+                    profileValue,
+                    registryValue);
+                if (ReadInteger(liveValue) == 0 && ReadInteger(selected) > 0)
+                {
+                    EnhancementRuntime.Log(
+                        "Rip configuration audit ignored transient live read command 0 " +
+                        "for '" + section + "' in favor of persisted command " +
+                        ReadInteger(selected) + ".");
+                }
+                return selected;
+            }
             if (live != null && live.TryGetValue(section, name, out value))
                 return value;
             if (profile != null && profile.TryGetValue(section, name, out value))
                 return value;
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(EacRoot + "\\" + section))
                 return key == null ? null : key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+        }
+
+        internal static object SelectExtractionCommandSet(
+            object liveValue,
+            object profileValue,
+            object registryValue)
+        {
+            if (ReadInteger(liveValue) > 0)
+                return liveValue;
+            if (ReadInteger(profileValue) > 0)
+                return profileValue;
+            if (ReadInteger(registryValue) > 0)
+                return registryValue;
+            return liveValue ?? profileValue ?? registryValue;
+        }
+
+        private static int? ReadInteger(object value)
+        {
+            byte[] bytes = value as byte[];
+            if (bytes != null)
+            {
+                if (bytes.Length >= sizeof(int))
+                    return BitConverter.ToInt32(bytes, 0);
+                if (bytes.Length >= sizeof(short))
+                    return (int)BitConverter.ToUInt16(bytes, 0);
+                return bytes.Length == 1 ? (int?)bytes[0] : null;
+            }
+            if (value is int)
+                return (int)value;
+            if (value is long)
+                return unchecked((int)(long)value);
+            return null;
         }
 
         internal IEnumerable<string> GetSubKeyNames(string section)

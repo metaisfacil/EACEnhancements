@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace AudioDataPlugIn
@@ -104,27 +105,38 @@ namespace AudioDataPlugIn
 		}
 
 		// EAC normally waits forever here.  Slow corrective reads can therefore
-		// starve the rip dialog for seconds at a time.  Wait for either the drive
-		// event or queued paint work, handling one paint message before checking the
-		// drive event again.  Input must remain queued until the command completes;
-		// dispatching it here can re-enter EAC's extraction state (for example via
-		// Cancel) while the ASPI command handler is still on the stack.
+		// starve the rip dialog for seconds at a time.  Drain queued work so input
+		// cannot prevent Windows from generating low-priority paint messages, but
+		// dispatch only paint.  Hold everything else and repost it after the drive
+		// event completes; dispatching input here can re-enter EAC's extraction state
+		// (for example via Cancel) while the ASPI handler is still on the stack.
 		IntPtr[] waitHandles = { eventHandle };
-		uint waitResult;
-		do
+		List<NativeMethods.MSG> deferredMessages =
+			new List<NativeMethods.MSG>();
+		uint waitResult = NativeMethods.WAIT_TIMEOUT;
+		try
 		{
-			waitResult = NativeMethods.MsgWaitForMultipleObjectsEx(
-				1u,
-				waitHandles,
-				50u,
-				NativeMethods.QS_PAINT,
-				NativeMethods.MWMO_INPUTAVAILABLE);
-			if (waitResult == 1u)
+			do
 			{
-				waitResult = PumpOnePaintMessage(eventHandle);
+				waitResult = NativeMethods.MsgWaitForMultipleObjectsEx(
+					1u,
+					waitHandles,
+					50u,
+					NativeMethods.QS_ALLINPUT,
+					NativeMethods.MWMO_INPUTAVAILABLE);
+				if (waitResult == 1u)
+				{
+					waitResult = PumpOneMessage(
+						eventHandle,
+						deferredMessages);
+				}
 			}
+			while (waitResult == NativeMethods.WAIT_TIMEOUT);
 		}
-		while (waitResult == NativeMethods.WAIT_TIMEOUT);
+		finally
+		{
+			ReplayDeferredMessages(currentThreadId, deferredMessages);
+		}
 
 		if (waitResult != 0u)
 		{
@@ -147,29 +159,18 @@ namespace AudioDataPlugIn
 		return true;
 	}
 
-	private static uint PumpOnePaintMessage(IntPtr commandEvent)
+	private static uint PumpOneMessage(
+		IntPtr commandEvent,
+		List<NativeMethods.MSG> deferredMessages)
 	{
 		if (!hookInstalled || insideAssistedPump || commandEvent == IntPtr.Zero)
 		{
 			return NativeMethods.WAIT_TIMEOUT;
 		}
 		uint currentThreadId = NativeMethods.GetCurrentThreadId();
-		IntPtr intPtr = ReadRipDialogHwnd();
-		if (intPtr != IntPtr.Zero && NativeMethods.IsWindow(intPtr))
+		if (!ripSessionActive || ripSessionThreadId != (int)currentThreadId)
 		{
-			uint windowThreadProcessId = NativeMethods.GetWindowThreadProcessId(intPtr, IntPtr.Zero);
-			if (windowThreadProcessId != currentThreadId)
-			{
-				return NativeMethods.WAIT_TIMEOUT;
-			}
-		}
-		else
-		{
-			if (!ripSessionActive || ripSessionThreadId != (int)currentThreadId)
-			{
-				return NativeMethods.WAIT_TIMEOUT;
-			}
-			intPtr = IntPtr.Zero;
+			return NativeMethods.WAIT_TIMEOUT;
 		}
 		insideAssistedPump = true;
 		try
@@ -185,20 +186,24 @@ namespace AudioDataPlugIn
 			if (NativeMethods.PeekMessageW(
 				out message,
 				IntPtr.Zero,
-				NativeMethods.WM_PAINT,
-				NativeMethods.WM_PAINT,
+				0u,
+				0u,
 				NativeMethods.PM_REMOVE))
 			{
 				if (IsSafeAssistedMessage(message.message))
 				{
 					NativeMethods.DispatchMessageW(ref message);
 				}
+				else
+				{
+					DeferMessage(deferredMessages, message);
+				}
 			}
 			assistedPumpCount++;
 			if (!firstAssistLogged)
 			{
 				firstAssistLogged = true;
-				Log("Responsive assist activated on thread " + currentThreadId + ", dialog=0x" + intPtr.ToInt64().ToString("X8") + ".");
+				Log("Responsive assist activated on thread " + currentThreadId + ".");
 			}
 			return NativeMethods.WaitForSingleObject(commandEvent, 0u);
 		}
@@ -210,20 +215,55 @@ namespace AudioDataPlugIn
 
 	internal static bool IsSafeAssistedMessage(uint message)
 	{
-		return message == NativeMethods.WM_PAINT;
+		// EAC's rip dialog advances several visual fields from its UI timer.
+		// Mouse/button/command/key messages remain deferred, so the timer cannot
+		// synthesize the unsafe Cancel reentrancy that the input messages caused.
+		return message == NativeMethods.WM_PAINT ||
+			message == NativeMethods.WM_TIMER;
 	}
 
-	private static IntPtr ReadRipDialogHwnd()
+	private static void DeferMessage(
+		List<NativeMethods.MSG> deferredMessages,
+		NativeMethods.MSG message)
 	{
-		try
+		if (message.message == NativeMethods.WM_MOUSEMOVE &&
+			deferredMessages.Count > 0)
 		{
-			int value = Marshal.ReadInt32(Add(imageBase, layout.RipDialogHwndRva));
-			return new IntPtr(value);
+			int lastIndex = deferredMessages.Count - 1;
+			NativeMethods.MSG previous = deferredMessages[lastIndex];
+			if (previous.message == message.message &&
+				previous.hwnd == message.hwnd)
+			{
+				deferredMessages[lastIndex] = message;
+				return;
+			}
 		}
-		catch
+		deferredMessages.Add(message);
+	}
+
+	private static void ReplayDeferredMessages(
+		uint threadId,
+		IEnumerable<NativeMethods.MSG> deferredMessages)
+	{
+		int failed = 0;
+		foreach (NativeMethods.MSG message in deferredMessages)
 		{
-			return IntPtr.Zero;
+			bool posted = message.hwnd != IntPtr.Zero
+				? NativeMethods.PostMessageW(
+					message.hwnd,
+					message.message,
+					message.wParam,
+					message.lParam)
+				: NativeMethods.PostThreadMessageW(
+					threadId,
+					message.message,
+					message.wParam,
+					message.lParam);
+			if (!posted)
+				failed++;
 		}
+		if (failed != 0)
+			Log("Could not replay " + failed + " deferred rip message(s).");
 	}
 
 	private static void WriteRelativeJump(IntPtr source, IntPtr destination, int patchLength)

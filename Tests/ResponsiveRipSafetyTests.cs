@@ -7,6 +7,7 @@ namespace AudioDataPlugIn
         private static int Main()
         {
             AssertSafe(NativeMethods.WM_PAINT, true);
+            AssertSafe(NativeMethods.WM_TIMER, true);
             AssertSafe(NativeMethods.WM_COMMAND, false);
             AssertSafe(NativeMethods.WM_CLOSE, false);
             AssertSafe(NativeMethods.WM_KEYDOWN, false);
