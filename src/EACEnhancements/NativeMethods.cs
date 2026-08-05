@@ -22,6 +22,9 @@ namespace AudioDataPlugIn
         internal const uint MEM_RESERVE = 0x2000;
         internal const uint PAGE_READWRITE = 0x04;
         internal const uint PAGE_EXECUTE_READWRITE = 0x40;
+        internal const uint WAIT_TIMEOUT = 0x00000102;
+        internal const uint QS_PAINT = 0x0020;
+        internal const uint MWMO_INPUTAVAILABLE = 0x0004;
         internal const uint PM_REMOVE = 0x0001;
         internal const uint MF_BYCOMMAND = 0x00000000;
         internal const uint MF_BYPOSITION = 0x00000400;
@@ -242,6 +245,30 @@ namespace AudioDataPlugIn
 
         [DllImport("kernel32.dll")]
         internal static extern uint GetCurrentThreadId();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern uint WaitForSingleObject(
+            IntPtr handle,
+            uint milliseconds);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        internal static extern IntPtr CreateEventW(
+            IntPtr eventAttributes,
+            [MarshalAs(UnmanagedType.Bool)] bool manualReset,
+            [MarshalAs(UnmanagedType.Bool)] bool initialState,
+            string name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetEvent(IntPtr handle);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        internal static extern uint MsgWaitForMultipleObjectsEx(
+            uint count,
+            IntPtr[] handles,
+            uint milliseconds,
+            uint wakeMask,
+            uint flags);
 
         [DllImport("user32.dll")]
         internal static extern IntPtr GetActiveWindow();

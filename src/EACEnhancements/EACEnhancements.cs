@@ -195,6 +195,8 @@ namespace AudioDataPlugIn
         private static EacVersionLayout layout;
         private static IntPtr commandCompletionAddress;
         private static IntPtr commandCompletionTrampoline;
+        private static IntPtr commandCompletionRelayEvent;
+        private static IntPtr commandCompletionRelayEventPointer;
         private static CommandCompletionDelegate originalCommandCompletion;
         private static CommandCompletionDelegate hookedCommandCompletion;
         private static int outputSettingsDialogActive;

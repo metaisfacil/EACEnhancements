@@ -24,6 +24,21 @@ namespace AudioDataPlugIn
 		Marshal.Copy(array, 0, commandCompletionTrampoline, 6);
 		WriteRelativeJump(Add(commandCompletionTrampoline, 6), Add(commandCompletionAddress, 6), 5);
 		originalCommandCompletion = (CommandCompletionDelegate)Marshal.GetDelegateForFunctionPointer(commandCompletionTrampoline, typeof(CommandCompletionDelegate));
+		commandCompletionRelayEvent = NativeMethods.CreateEventW(
+			IntPtr.Zero,
+			true,
+			false,
+			null);
+		if (commandCompletionRelayEvent == IntPtr.Zero)
+		{
+			throw new InvalidOperationException(
+				"CreateEvent failed with Win32 error " +
+				Marshal.GetLastWin32Error() + ".");
+		}
+		commandCompletionRelayEventPointer = Marshal.AllocHGlobal(4);
+		Marshal.WriteInt32(
+			commandCompletionRelayEventPointer,
+			commandCompletionRelayEvent.ToInt32());
 		hookedCommandCompletion = HookedCommandCompletion;
 		IntPtr functionPointerForDelegate = Marshal.GetFunctionPointerForDelegate(hookedCommandCompletion);
 		uint oldProtection;
@@ -48,7 +63,22 @@ namespace AudioDataPlugIn
 
 	private static uint HookedCommandCompletion(IntPtr commandState, IntPtr eventHandlePointer)
 	{
-		uint result = originalCommandCompletion(commandState, eventHandlePointer);
+		IntPtr originalEventHandlePointer = eventHandlePointer;
+		try
+		{
+			if (WaitForCommandWhilePumping(commandState, eventHandlePointer))
+			{
+				originalEventHandlePointer =
+					commandCompletionRelayEventPointer;
+			}
+		}
+		catch (Exception ex)
+		{
+			Log("Assisted command wait failed: " + ex);
+		}
+		uint result = originalCommandCompletion(
+			commandState,
+			originalEventHandlePointer);
 		try
 		{
 			MaybePumpMessages();
@@ -60,11 +90,79 @@ namespace AudioDataPlugIn
 		return result;
 	}
 
+	private static bool WaitForCommandWhilePumping(
+		IntPtr commandState,
+		IntPtr eventHandlePointer)
+	{
+		uint currentThreadId = NativeMethods.GetCurrentThreadId();
+		if (!ripSessionActive ||
+			ripSessionThreadId != (int)currentThreadId ||
+			commandState == IntPtr.Zero || eventHandlePointer == IntPtr.Zero ||
+			Marshal.ReadByte(Add(commandState, 1)) != 0)
+		{
+			return false;
+		}
+
+		IntPtr eventHandle = new IntPtr(Marshal.ReadInt32(eventHandlePointer));
+		if (eventHandle == IntPtr.Zero)
+		{
+			return false;
+		}
+
+		// EAC normally waits forever here.  Slow corrective reads can therefore
+		// starve the rip dialog for seconds at a time.  Wait for either the drive
+		// event or queued paint work, handling one paint message before checking the
+		// drive event again.  Input must remain queued until the command completes;
+		// dispatching it here can re-enter EAC's extraction state (for example via
+		// Cancel) while the ASPI command handler is still on the stack.
+		IntPtr[] waitHandles = { eventHandle };
+		uint waitResult;
+		do
+		{
+			waitResult = NativeMethods.MsgWaitForMultipleObjectsEx(
+				1u,
+				waitHandles,
+				50u,
+				NativeMethods.QS_PAINT,
+				NativeMethods.MWMO_INPUTAVAILABLE);
+			if (waitResult == 1u)
+			{
+				waitResult = PumpMessages(eventHandle, 1);
+			}
+		}
+		while (waitResult == NativeMethods.WAIT_TIMEOUT);
+
+		if (waitResult != 0u)
+		{
+			return false;
+		}
+
+		// Waiting can consume an auto-reset event.  Give EAC's original cleanup
+		// routine a private signaled relay instead of re-signaling the real event,
+		// where another waiter could steal it before the original routine runs.
+		if (!NativeMethods.SetEvent(commandCompletionRelayEvent))
+		{
+			int error = Marshal.GetLastWin32Error();
+			// Relay failure is not expected, but restoring the real event preserves
+			// EAC's original behavior and avoids turning diagnostics into a hang.
+			NativeMethods.SetEvent(eventHandle);
+			throw new InvalidOperationException(
+				"Could not signal EAC's command relay event; Win32 error " +
+				error + ".");
+		}
+		return true;
+	}
+
 	private static void MaybePumpMessages()
+	{
+		PumpMessages(IntPtr.Zero, 256);
+	}
+
+	private static uint PumpMessages(IntPtr commandEvent, int maximumMessages)
 	{
 		if (!hookInstalled || insideAssistedPump)
 		{
-			return;
+			return NativeMethods.WAIT_TIMEOUT;
 		}
 		uint currentThreadId = NativeMethods.GetCurrentThreadId();
 		IntPtr intPtr = ReadRipDialogHwnd();
@@ -73,33 +171,54 @@ namespace AudioDataPlugIn
 			uint windowThreadProcessId = NativeMethods.GetWindowThreadProcessId(intPtr, IntPtr.Zero);
 			if (windowThreadProcessId != currentThreadId)
 			{
-				return;
+				return NativeMethods.WAIT_TIMEOUT;
 			}
 		}
 		else
 		{
 			if (!ripSessionActive || ripSessionThreadId != (int)currentThreadId)
 			{
-				return;
+				return NativeMethods.WAIT_TIMEOUT;
 			}
 			intPtr = IntPtr.Zero;
 		}
 		int tickCount = Environment.TickCount;
-		if (tickCount - lastPumpTick < 50)
+		if (commandEvent == IntPtr.Zero && tickCount - lastPumpTick < 50)
 		{
-			return;
+			return NativeMethods.WAIT_TIMEOUT;
 		}
 		insideAssistedPump = true;
 		try
 		{
-			for (int i = 0; i < 256; i++)
+			for (int i = 0; i < maximumMessages; i++)
 			{
+				if (commandEvent != IntPtr.Zero)
+				{
+					uint waitResult = NativeMethods.WaitForSingleObject(
+						commandEvent,
+						0u);
+					if (waitResult != NativeMethods.WAIT_TIMEOUT)
+					{
+						return waitResult;
+					}
+				}
 				NativeMethods.MSG message;
-				if (!NativeMethods.PeekMessageW(out message, IntPtr.Zero, 0u, 0u, 1u))
+				uint firstMessage = commandEvent != IntPtr.Zero
+					? NativeMethods.WM_PAINT
+					: 0u;
+				uint lastMessage = firstMessage;
+				if (!NativeMethods.PeekMessageW(
+					out message,
+					IntPtr.Zero,
+					firstMessage,
+					lastMessage,
+					NativeMethods.PM_REMOVE))
 				{
 					break;
 				}
-				if (intPtr == IntPtr.Zero || !NativeMethods.IsDialogMessageW(intPtr, ref message))
+				if (commandEvent != IntPtr.Zero ||
+					intPtr == IntPtr.Zero ||
+					!NativeMethods.IsDialogMessageW(intPtr, ref message))
 				{
 					NativeMethods.TranslateMessage(ref message);
 					NativeMethods.DispatchMessageW(ref message);
@@ -112,6 +231,11 @@ namespace AudioDataPlugIn
 				firstAssistLogged = true;
 				Log("Responsive assist activated on thread " + currentThreadId + ", dialog=0x" + intPtr.ToInt64().ToString("X8") + ".");
 			}
+			if (commandEvent != IntPtr.Zero)
+			{
+				return NativeMethods.WaitForSingleObject(commandEvent, 0u);
+			}
+			return NativeMethods.WAIT_TIMEOUT;
 		}
 		finally
 		{
