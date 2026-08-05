@@ -479,6 +479,8 @@ namespace AudioDataPlugIn
                 message.Append(result.IsMatch
                     ? result.Reason
                     : "The logs do not match.\r\n\r\nReason: " + result.Reason);
+                if (!String.IsNullOrEmpty(result.PeakSummary))
+                    message.Append("\r\n").Append(result.PeakSummary);
                 AppendComparisonDetails(message, result);
                 message.Append("\r\n\r\nFirst log: ").Append(paths[0])
                     .Append("\r\nSecond log: ").Append(paths[1]);

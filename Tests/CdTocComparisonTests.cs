@@ -227,6 +227,17 @@ namespace AudioDataPlugIn
                 peakAware.Reason.IndexOf("track 2", StringComparison.OrdinalIgnoreCase) >= 0,
                 "A peak difference above the script threshold was accepted.");
 
+            CdTocReleaseComparisonResult exactPeaks = CdTocReleaseComparer.Compare(
+                Tables(first),
+                Tables(first),
+                true);
+            Assert(exactPeaks.IsMatch &&
+                exactPeaks.PeakSummary.IndexOf(
+                    "All per-track peak levels match",
+                    StringComparison.Ordinal) >= 0 &&
+                !ContainsDetail(exactPeaks, "All per-track peak levels match"),
+                "An exact set of per-track peaks was not explicitly reported.");
+
             CdTocReleaseComparisonResult tocOnly = CdTocReleaseComparer.Compare(
                 Tables(first),
                 Tables(second));

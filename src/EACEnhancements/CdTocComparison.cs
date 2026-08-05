@@ -11,6 +11,7 @@ namespace AudioDataPlugIn
         internal bool IsExact;
         internal int TrackCount;
         internal string Reason = String.Empty;
+        internal string PeakSummary = String.Empty;
         internal readonly List<string> Details = new List<string>();
     }
 
@@ -19,6 +20,7 @@ namespace AudioDataPlugIn
         internal bool IsMatch;
         internal bool IsExact;
         internal string Reason = String.Empty;
+        internal string PeakSummary = String.Empty;
         internal readonly List<string> Details = new List<string>();
     }
 
@@ -455,6 +457,7 @@ namespace AudioDataPlugIn
             if (comparePeaksWhenComplete &&
                 HaveCompletePeakLevels(displayed, logged, displayedLength))
             {
+                bool allPeakValuesMatch = true;
                 for (int i = 0; i < displayedLength; i++)
                 {
                     CdTocEntry displayedEntry = displayed[i];
@@ -467,6 +470,8 @@ namespace AudioDataPlugIn
                             FormatPeak(loggedEntry) + ").";
                         return result;
                     }
+                    if (displayedEntry.Peak != loggedEntry.Peak)
+                        allPeakValuesMatch = false;
                     if (displayedEntry.PeakPrecision == loggedEntry.PeakPrecision &&
                         displayedEntry.Peak != loggedEntry.Peak)
                     {
@@ -477,6 +482,8 @@ namespace AudioDataPlugIn
                             FormatPeak(loggedEntry) + ").");
                     }
                 }
+                if (allPeakValuesMatch)
+                    result.PeakSummary = "All per-track peak levels match.";
             }
 
             result.IsMatch = true;
@@ -628,11 +635,14 @@ namespace AudioDataPlugIn
             }
 
             bool exact = true;
+            bool allPeakSummariesPresent = true;
             for (int i = 0; i < comparisons.Length; i++)
             {
                 CdTocComparisonResult comparison = comparisons[i];
                 if (!comparison.IsExact)
                     exact = false;
+                if (String.IsNullOrEmpty(comparison.PeakSummary))
+                    allPeakSummariesPresent = false;
                 if (comparisons.Length > 1)
                 {
                     releaseResult.Details.Add(
@@ -650,6 +660,8 @@ namespace AudioDataPlugIn
             }
             releaseResult.IsMatch = true;
             releaseResult.IsExact = exact;
+            if (allPeakSummariesPresent)
+                releaseResult.PeakSummary = "All per-track peak levels match.";
             releaseResult.Reason = comparisons.Length == 1
                 ? comparisons[0].Reason
                 : exact
