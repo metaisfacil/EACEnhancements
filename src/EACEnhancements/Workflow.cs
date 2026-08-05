@@ -617,6 +617,48 @@ namespace AudioDataPlugIn
 				TitleCaseTransformCommand.ToString("X") + ": " +
 				TitleCaseTransformMenuText + ".");
 		}
+		IntPtr toolsMenu = FindToolsMenu(menu);
+		bool tocDisplayInstalled = toolsMenu != IntPtr.Zero &&
+			NativeMethods.GetMenuState(
+				toolsMenu,
+				DisplayCdTocCommand,
+				NativeMethods.MF_BYCOMMAND) != uint.MaxValue;
+		if (!tocDisplayInstalled)
+		{
+			if (toolsMenu == IntPtr.Zero)
+			{
+				throw new InvalidOperationException("EAC's Tools menu was not found.");
+			}
+			if (!NativeMethods.AppendMenuW(
+				toolsMenu,
+				NativeMethods.MF_SEPARATOR,
+				UIntPtr.Zero,
+				null))
+			{
+				throw new InvalidOperationException(
+					"AppendMenuW failed for the CD TOC separator with Win32 error " +
+					Marshal.GetLastWin32Error() + ".");
+			}
+			uint tocMenuFlags = NativeMethods.MF_STRING;
+			if (!HasCurrentCdToc())
+				tocMenuFlags |= NativeMethods.MF_GRAYED;
+			if (!NativeMethods.AppendMenuW(
+				toolsMenu,
+				tocMenuFlags,
+				new UIntPtr(DisplayCdTocCommand),
+				DisplayCdTocMenuText))
+			{
+				throw new InvalidOperationException(
+					"AppendMenuW failed for CD TOC command 0x" +
+					DisplayCdTocCommand.ToString("X") +
+					" with Win32 error " + Marshal.GetLastWin32Error() + ".");
+			}
+			flag = true;
+			Log(
+				"Installed Tools-menu command 0x" +
+				DisplayCdTocCommand.ToString("X") + ": " +
+				DisplayCdTocMenuText + ".");
+		}
 		if (flag)
 		{
 			NativeMethods.DrawMenuBar(mainWindow);
@@ -649,12 +691,17 @@ namespace AudioDataPlugIn
 	{
 		int lastEnabled = -1;
 		int lastHtoaEnabled = -1;
+		int lastTocEnabled = -1;
 		while (NativeMethods.IsWindow(mainWindow))
 		{
 			try
 			{
 				EnsureWorkflowCancellationHooks(mainWindow);
-				SynchronizeWorkflowMenuState(mainWindow, ref lastEnabled, ref lastHtoaEnabled);
+				SynchronizeWorkflowMenuState(
+					mainWindow,
+					ref lastEnabled,
+					ref lastHtoaEnabled,
+					ref lastTocEnabled);
 			}
 			catch (Exception ex)
 			{
@@ -664,7 +711,11 @@ namespace AudioDataPlugIn
 		}
 	}
 
-	private static void SynchronizeWorkflowMenuState(IntPtr mainWindow, ref int lastEnabled, ref int lastHtoaEnabled)
+	private static void SynchronizeWorkflowMenuState(
+		IntPtr mainWindow,
+		ref int lastEnabled,
+		ref int lastHtoaEnabled,
+		ref int lastTocEnabled)
 	{
 		IntPtr menu = NativeMethods.GetMenu(mainWindow);
 		if (menu == IntPtr.Zero)
@@ -721,6 +772,34 @@ namespace AudioDataPlugIn
 				Log("HTOA 100% log menu is now " + (htoaEnabled ? "enabled" : "disabled") + ".");
 			}
 		}
+		IntPtr toolsMenu = FindToolsMenu(menu);
+		if (toolsMenu != IntPtr.Zero)
+		{
+			uint tocMenuState = NativeMethods.GetMenuState(
+				toolsMenu,
+				DisplayCdTocCommand,
+				NativeMethods.MF_BYCOMMAND);
+			if (tocMenuState != uint.MaxValue)
+			{
+				bool tocEnabled = HasCurrentCdToc();
+				bool currentlyEnabled = (tocMenuState & 3) == 0;
+				if (currentlyEnabled != tocEnabled)
+				{
+					NativeMethods.EnableMenuItem(
+						toolsMenu,
+						DisplayCdTocCommand,
+						tocEnabled ? NativeMethods.MF_ENABLED : NativeMethods.MF_GRAYED);
+					NativeMethods.DrawMenuBar(mainWindow);
+				}
+				int state = tocEnabled ? 1 : 0;
+				if (lastTocEnabled != state)
+				{
+					lastTocEnabled = state;
+					Log("Display CD TOC menu is now " +
+						(tocEnabled ? "enabled" : "disabled") + ".");
+				}
+			}
+		}
 	}
 
 	private static IntPtr FindMenuContainingCommand(IntPtr menu, uint command)
@@ -751,6 +830,11 @@ namespace AudioDataPlugIn
 		if (databaseMenu == IntPtr.Zero)
 			return IntPtr.Zero;
 		return FindSubMenu(databaseMenu, "Transform Current CD Information", 4);
+	}
+
+	internal static IntPtr FindToolsMenu(IntPtr menu)
+	{
+		return FindSubMenu(menu, "Tools", 4);
 	}
 
 	private static IntPtr FindSubMenu(IntPtr menu, string expectedText, int fallbackPosition)
@@ -960,6 +1044,13 @@ namespace AudioDataPlugIn
 				command == (int)TitleCaseTransformCommand)
 			{
 				TransformCurrentCdInformation(hwnd);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND &&
+				lParam == IntPtr.Zero &&
+				command == (int)DisplayCdTocCommand)
+			{
+				ShowCurrentCdToc(hwnd);
 				return IntPtr.Zero;
 			}
 			if (message == 273 && command == 41746)

@@ -16,6 +16,7 @@ Exact Audio Copy that adds a number of quality-of-life features:
 - Auto-generated album folders with dynamic naming
 - Improved responsiveness of progress window during secure mode rips
 - Album-level CD label, barcode, and catalog-number fields for external compressor tags
+- Copy/compare CD TOC against pre-existing log files to determine dupes
 - External compressor argument templates up to 1,000 characters
 
 Exact Audio Copy 1.6 and 1.8 are supported. No patches or launcher needed.
@@ -170,3 +171,8 @@ have an administrator grant your user account Modify permission to the folder, o
 install EAC somewhere the account can write to. The plugin continues with existing
 settings or built-in defaults, but it cannot persist option changes until write
 access is granted.
+
+## Credits
+
+- The CD TOC comparison routine is based almost entirely on a userscript written by
+Anakunda titled [Similar CD Detector](https://greasyfork.org/en/scripts/455108-red-similar-cd-detector).
