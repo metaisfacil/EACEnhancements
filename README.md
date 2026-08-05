@@ -174,5 +174,5 @@ access is granted.
 
 ## Credits
 
-- The CD TOC comparison routine is based almost entirely on a userscript written by
-Anakunda titled [Similar CD Detector](https://greasyfork.org/en/scripts/455108-red-similar-cd-detector).
+- The various CD TOC comparison routines (parsing, shift calculation, etc.) are
+based almost entirely on Anakunda's [Similar CD Detector](https://greasyfork.org/en/scripts/455108-red-similar-cd-detector).
