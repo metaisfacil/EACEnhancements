@@ -643,16 +643,6 @@ namespace AudioDataPlugIn
             uint removeMessage);
 
         [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool IsDialogMessageW(
-            IntPtr dialog,
-            ref MSG message);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool TranslateMessage(ref MSG message);
-
-        [DllImport("user32.dll")]
         internal static extern IntPtr DispatchMessageW(ref MSG message);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]

@@ -76,18 +76,12 @@ namespace AudioDataPlugIn
 		{
 			Log("Assisted command wait failed: " + ex);
 		}
-		uint result = originalCommandCompletion(
+		// Do not dispatch queued input here.  The command has completed, but its
+		// caller still owns live extraction state until this hook returns.  EAC's
+		// native outer pump will process Cancel after that stack has unwound.
+		return originalCommandCompletion(
 			commandState,
 			originalEventHandlePointer);
-		try
-		{
-			MaybePumpMessages();
-		}
-		catch (Exception ex)
-		{
-			Log("Assisted message pump failed: " + ex);
-		}
-		return result;
 	}
 
 	private static bool WaitForCommandWhilePumping(
@@ -127,7 +121,7 @@ namespace AudioDataPlugIn
 				NativeMethods.MWMO_INPUTAVAILABLE);
 			if (waitResult == 1u)
 			{
-				waitResult = PumpMessages(eventHandle, 1);
+				waitResult = PumpOnePaintMessage(eventHandle);
 			}
 		}
 		while (waitResult == NativeMethods.WAIT_TIMEOUT);
@@ -153,14 +147,9 @@ namespace AudioDataPlugIn
 		return true;
 	}
 
-	private static void MaybePumpMessages()
+	private static uint PumpOnePaintMessage(IntPtr commandEvent)
 	{
-		PumpMessages(IntPtr.Zero, 256);
-	}
-
-	private static uint PumpMessages(IntPtr commandEvent, int maximumMessages)
-	{
-		if (!hookInstalled || insideAssistedPump)
+		if (!hookInstalled || insideAssistedPump || commandEvent == IntPtr.Zero)
 		{
 			return NativeMethods.WAIT_TIMEOUT;
 		}
@@ -182,65 +171,46 @@ namespace AudioDataPlugIn
 			}
 			intPtr = IntPtr.Zero;
 		}
-		int tickCount = Environment.TickCount;
-		if (commandEvent == IntPtr.Zero && tickCount - lastPumpTick < 50)
-		{
-			return NativeMethods.WAIT_TIMEOUT;
-		}
 		insideAssistedPump = true;
 		try
 		{
-			for (int i = 0; i < maximumMessages; i++)
+			uint waitResult = NativeMethods.WaitForSingleObject(
+				commandEvent,
+				0u);
+			if (waitResult != NativeMethods.WAIT_TIMEOUT)
 			{
-				if (commandEvent != IntPtr.Zero)
+				return waitResult;
+			}
+			NativeMethods.MSG message;
+			if (NativeMethods.PeekMessageW(
+				out message,
+				IntPtr.Zero,
+				NativeMethods.WM_PAINT,
+				NativeMethods.WM_PAINT,
+				NativeMethods.PM_REMOVE))
+			{
+				if (IsSafeAssistedMessage(message.message))
 				{
-					uint waitResult = NativeMethods.WaitForSingleObject(
-						commandEvent,
-						0u);
-					if (waitResult != NativeMethods.WAIT_TIMEOUT)
-					{
-						return waitResult;
-					}
-				}
-				NativeMethods.MSG message;
-				uint firstMessage = commandEvent != IntPtr.Zero
-					? NativeMethods.WM_PAINT
-					: 0u;
-				uint lastMessage = firstMessage;
-				if (!NativeMethods.PeekMessageW(
-					out message,
-					IntPtr.Zero,
-					firstMessage,
-					lastMessage,
-					NativeMethods.PM_REMOVE))
-				{
-					break;
-				}
-				if (commandEvent != IntPtr.Zero ||
-					intPtr == IntPtr.Zero ||
-					!NativeMethods.IsDialogMessageW(intPtr, ref message))
-				{
-					NativeMethods.TranslateMessage(ref message);
 					NativeMethods.DispatchMessageW(ref message);
 				}
 			}
-			lastPumpTick = Environment.TickCount;
 			assistedPumpCount++;
 			if (!firstAssistLogged)
 			{
 				firstAssistLogged = true;
 				Log("Responsive assist activated on thread " + currentThreadId + ", dialog=0x" + intPtr.ToInt64().ToString("X8") + ".");
 			}
-			if (commandEvent != IntPtr.Zero)
-			{
-				return NativeMethods.WaitForSingleObject(commandEvent, 0u);
-			}
-			return NativeMethods.WAIT_TIMEOUT;
+			return NativeMethods.WaitForSingleObject(commandEvent, 0u);
 		}
 		finally
 		{
 			insideAssistedPump = false;
 		}
+	}
+
+	internal static bool IsSafeAssistedMessage(uint message)
+	{
+		return message == NativeMethods.WM_PAINT;
 	}
 
 	private static IntPtr ReadRipDialogHwnd()

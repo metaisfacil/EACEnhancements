@@ -205,7 +205,6 @@ namespace AudioDataPlugIn
         private static volatile string workflowOutputDirectory;
         private static volatile bool ripSessionActive;
         private static int ripSessionThreadId;
-        private static int lastPumpTick;
         private static int assistedPumpCount;
         private static int audioTransferCount;
         private static bool firstAssistLogged;

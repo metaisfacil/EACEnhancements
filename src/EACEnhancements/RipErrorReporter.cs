@@ -23,7 +23,6 @@ namespace AudioDataPlugIn
 		Interlocked.Exchange(ref ripSessionSuspiciousCount, 0);
 		ripSessionThreadId = (int)NativeMethods.GetCurrentThreadId();
 		ripSessionActive = true;
-		lastPumpTick = Environment.TickCount;
 		assistedPumpCount = 0;
 		audioTransferCount = 0;
 		firstAssistLogged = false;
