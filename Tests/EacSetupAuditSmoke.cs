@@ -29,7 +29,20 @@ namespace AudioDataPlugIn
                 return 1;
             }
 
-            if (EacSetupAudit.DisplayReadCommand(null) != "Not configured" ||
+            if (EacSetupAudit.DisplayErrorRecoveryQuality(1) != "Low" ||
+                EacSetupAudit.DisplayErrorRecoveryQuality(3) != "Medium" ||
+                EacSetupAudit.DisplayErrorRecoveryQuality(5) != "High" ||
+                EacSetupAudit.DisplayExtractionMode(0) != "Burst mode" ||
+                EacSetupAudit.DisplayExtractionMode(5) != "Secure mode" ||
+                EacSetupAudit.DisplaySecureModeFeatures(0) != "Neither enabled" ||
+                EacSetupAudit.DisplaySecureModeFeatures(3) != "Both enabled" ||
+                EacSetupAudit.DisplaySpeedSelection(-1) != "Current" ||
+                EacSetupAudit.DisplaySpeedSelection(8) != "8x" ||
+                EacSetupAudit.DisplayGapDetectionMode(0) != "Detection Method A" ||
+                EacSetupAudit.DisplayGapDetectionMode(2) != "Detection Method C" ||
+                EacSetupAudit.DisplayExternalEncoderType(4) != "LAME MP3 Encoder" ||
+                EacSetupAudit.DisplayExternalEncoderType(20) != "User Defined Encoder" ||
+                EacSetupAudit.DisplayReadCommand(null) != "Not configured" ||
                 EacSetupAudit.DisplayReadCommand(0) != "Not autodetected" ||
                 EacSetupAudit.DisplayReadCommand(7) != "Command set 7" ||
                 EacSetupAudit.DisplayGapDetectionAccuracy(null) != "Not configured" ||

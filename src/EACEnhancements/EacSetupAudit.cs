@@ -86,7 +86,7 @@ namespace AudioDataPlugIn
             CheckEnabled(result, settings, extraction, "EAC Options > Extraction", "Fill up missing offset samples with silence", "FillUpMissingSamples", true, IssueCategory.LogScore);
             CheckEnabled(result, settings, extraction, "EAC Options > Extraction", "Synchronize between tracks", "SyncTrackJunctions", true, IssueCategory.Recommendation);
             CheckEnabled(result, settings, extraction, "EAC Options > Extraction", "Delete leading and trailing silent blocks", "RemoveSilence", false, IssueCategory.LogScore);
-            CheckInteger(result, settings, extraction, "EAC Options > Extraction", "Error recovery quality", "NumberReads", 5, "High", IssueCategory.Recommendation);
+            CheckInteger(result, settings, extraction, "EAC Options > Extraction", "Error recovery quality", "NumberReads", 5, "High", IssueCategory.Recommendation, DisplayErrorRecoveryQuality);
 
             CheckEnabled(result, settings, extraction, "EAC Options > General", "Automatically access online metadata for unknown CDs", "RetrieveCDDBOnUnknownCD", true, IssueCategory.Recommendation);
             CheckEnabled(result, settings, startup, "EAC Options > General", "Create log files in English", "CreateEnglishLogFile", true, IssueCategory.Recommendation);
@@ -108,7 +108,7 @@ namespace AudioDataPlugIn
             const string key = "Compression Options";
             const string section = "Compression Options > External Compression";
             CheckEnabled(result, settings, key, section, "Use external program for compression", "UseExternalEncoder", true, IssueCategory.Recommendation);
-            CheckInteger(result, settings, key, section, "Parameter passing scheme", "ExternalEncoderType", 20, "User Defined Encoder", IssueCategory.Recommendation);
+            CheckInteger(result, settings, key, section, "Parameter passing scheme", "ExternalEncoderType", 20, "User Defined Encoder", IssueCategory.Recommendation, DisplayExternalEncoderType);
 
             string extension = ReadString(settings, key, "ExternalEncoderExtension");
             string normalizedExtension = (extension ?? String.Empty).Trim().TrimStart('.');
@@ -156,8 +156,8 @@ namespace AudioDataPlugIn
 
             string drive = "Drive Options\\" + driveKeyName;
             string section = "Drive Options (" + NormalizeWhitespace(driveKeyName) + ")";
-            CheckInteger(result, settings, drive, section + " > Extraction Method", "Extraction mode", "ExtractionMode", 5, "Secure mode", IssueCategory.LogScore);
-            CheckInteger(result, settings, drive, section + " > Extraction Method", "Accurate Stream and drive-cache features", "SecureMode", 3, "Both enabled", IssueCategory.LogScore);
+            CheckInteger(result, settings, drive, section + " > Extraction Method", "Extraction mode", "ExtractionMode", 5, "Secure mode", IssueCategory.LogScore, DisplayExtractionMode);
+            CheckInteger(result, settings, drive, section + " > Extraction Method", "Accurate Stream and drive-cache features", "SecureMode", 3, "Both enabled", IssueCategory.LogScore, DisplaySecureModeFeatures);
             CheckEnabled(result, settings, drive, section + " > Extraction Method", "Use C2 error information", "UseC2Correction", false, IssueCategory.LogScore);
 
             int? command = ReadInteger(settings, drive, "ExtractionCommandSet");
@@ -168,7 +168,7 @@ namespace AudioDataPlugIn
                     DisplayReadCommand(command),
                     "Autodetected for this drive");
 
-            CheckInteger(result, settings, drive, section + " > Offset/Speed", "Speed selection", "SpeedSelection", -1, "Current", IssueCategory.Recommendation);
+            CheckInteger(result, settings, drive, section + " > Offset/Speed", "Speed selection", "SpeedSelection", -1, "Current", IssueCategory.Recommendation, DisplaySpeedSelection);
             CheckEnabled(result, settings, drive, section + " > Offset/Speed", "Allow speed reduction during extraction", "SpeedReduction", true, IssueCategory.Recommendation);
             CheckEnabled(result, settings, drive, section + " > Offset/Speed", "Use AccurateRip with this drive", "UseAccurateRip", true, IssueCategory.Recommendation);
             CheckIntegerRange(
@@ -181,7 +181,8 @@ namespace AudioDataPlugIn
                 0,
                 2,
                 "Detection Method A, B, or C (start with A)",
-                IssueCategory.Recommendation);
+                IssueCategory.Recommendation,
+                DisplayGapDetectionMode);
             int? gapAccuracy = ReadInteger(settings, drive, "GapDetectionAccuracy");
             if (!gapAccuracy.HasValue || gapAccuracy.Value < 1 || gapAccuracy.Value > 2)
             {
@@ -284,11 +285,12 @@ namespace AudioDataPlugIn
             string valueName,
             int expected,
             string expectedDisplay,
-            IssueCategory category)
+            IssueCategory category,
+            Func<int?, string> displayCurrent)
         {
             int? value = ReadInteger(settings, key, valueName);
             if (!value.HasValue || value.Value != expected)
-                AddIssue(result, category, section, label, DisplayInteger(value), expectedDisplay);
+                AddIssue(result, category, section, label, displayCurrent(value), expectedDisplay);
         }
 
         private static void CheckIntegerRange(
@@ -301,11 +303,12 @@ namespace AudioDataPlugIn
             int minimum,
             int maximum,
             string expectedDisplay,
-            IssueCategory category)
+            IssueCategory category,
+            Func<int?, string> displayCurrent)
         {
             int? value = ReadInteger(settings, key, valueName);
             if (!value.HasValue || value.Value < minimum || value.Value > maximum)
-                AddIssue(result, category, section, label, DisplayInteger(value), expectedDisplay);
+                AddIssue(result, category, section, label, displayCurrent(value), expectedDisplay);
         }
 
         private static void AddIssue(
@@ -347,9 +350,116 @@ namespace AudioDataPlugIn
             return value.HasValue ? (value.Value ? "Enabled" : "Disabled") : "Not configured";
         }
 
-        private static string DisplayInteger(int? value)
+        internal static string DisplayErrorRecoveryQuality(int? value)
         {
-            return value.HasValue ? value.Value.ToString() : "Not configured";
+            if (!value.HasValue)
+                return "Not configured";
+            switch (value.Value)
+            {
+                case 1:
+                    return "Low";
+                case 3:
+                    return "Medium";
+                case 5:
+                    return "High";
+                default:
+                    return DisplayUnknownValue(value.Value);
+            }
+        }
+
+        internal static string DisplayExtractionMode(int? value)
+        {
+            if (!value.HasValue)
+                return "Not configured";
+            switch (value.Value)
+            {
+                case 0:
+                    return "Burst mode";
+                case 5:
+                    return "Secure mode";
+                default:
+                    return DisplayUnknownValue(value.Value);
+            }
+        }
+
+        internal static string DisplaySecureModeFeatures(int? value)
+        {
+            if (!value.HasValue)
+                return "Not configured";
+            switch (value.Value)
+            {
+                case 0:
+                    return "Neither enabled";
+                case 1:
+                    return "Accurate Stream enabled; drive cache disabled";
+                case 2:
+                    return "Accurate Stream disabled; drive cache enabled";
+                case 3:
+                    return "Both enabled";
+                default:
+                    return DisplayUnknownValue(value.Value);
+            }
+        }
+
+        internal static string DisplaySpeedSelection(int? value)
+        {
+            if (!value.HasValue)
+                return "Not configured";
+            if (value.Value == -1)
+                return "Current";
+            if (value.Value > 0)
+                return value.Value + "x";
+            return DisplayUnknownValue(value.Value);
+        }
+
+        internal static string DisplayGapDetectionMode(int? value)
+        {
+            if (!value.HasValue)
+                return "Not configured";
+            switch (value.Value)
+            {
+                case 0:
+                    return "Detection Method A";
+                case 1:
+                    return "Detection Method B";
+                case 2:
+                    return "Detection Method C";
+                default:
+                    return DisplayUnknownValue(value.Value);
+            }
+        }
+
+        internal static string DisplayExternalEncoderType(int? value)
+        {
+            if (!value.HasValue)
+                return "Not configured";
+            string[] names =
+            {
+                "L3Enc MP3 Encoder & Compatible",
+                "Fraunhofer MP3Enc MP3 Encoder",
+                "Xing X3Enc MP3 Encoder",
+                "Xing ToMPG MP3 Encoder",
+                "LAME MP3 Encoder",
+                "GOGO MP3 Encoder",
+                "MPC Encoder",
+                "Ogg Vorbis Encoder",
+                "Microsoft WMA9 Encoder",
+                "FAAC AAC Encoder",
+                "Homeboy AAC Encoder",
+                "Quartex AAC Encoder",
+                "PsyTEL AAC Encoder",
+                "MBSoft AAC Encoder",
+                "Yamaha VQF Encoder",
+                "Real Audio Encoder",
+                "Monkey's Audio Lossless Encoder",
+                "Shorten Lossless Encoder",
+                "RKAU Lossless Encoder",
+                "LPAC Lossless Encoder",
+                "User Defined Encoder"
+            };
+            return value.Value >= 0 && value.Value < names.Length
+                ? names[value.Value]
+                : DisplayUnknownValue(value.Value);
         }
 
         internal static string DisplayReadCommand(int? value)
@@ -377,6 +487,11 @@ namespace AudioDataPlugIn
                 default:
                     return "Unknown value (" + value.Value + ")";
             }
+        }
+
+        private static string DisplayUnknownValue(int value)
+        {
+            return "Unknown value (" + value + ")";
         }
 
         private static string DisplayString(string value)
