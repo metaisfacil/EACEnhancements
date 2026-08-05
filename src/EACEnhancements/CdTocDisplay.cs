@@ -141,8 +141,11 @@ namespace AudioDataPlugIn
         private const int TocRecordStride = 0x22;
         private const int TocStartSectorOffset = 4;
         private const int TocNextStartSectorOffset = 0x14;
+        private const string CurrentDiscPeakComparisonNotice =
+            "Peak values are not factored into this comparison because they " +
+            "cannot be derived without completing a rip.";
         private static Form cdTocWindow;
-        private static TextBox cdTocTextBox;
+        private static RichTextBox cdTocTextBox;
         private static IList<CdTocEntry> displayedCdTocEntries;
         private static IntPtr cdTocOwnerWindow;
 
@@ -216,16 +219,15 @@ namespace AudioDataPlugIn
                     return;
                 }
 
-                cdTocTextBox = new TextBox();
-                cdTocTextBox.AcceptsReturn = true;
+                cdTocTextBox = new RichTextBox();
                 cdTocTextBox.AcceptsTab = true;
                 cdTocTextBox.BackColor = SystemColors.Window;
                 cdTocTextBox.BorderStyle = BorderStyle.None;
+                cdTocTextBox.DetectUrls = false;
                 cdTocTextBox.Dock = DockStyle.Fill;
                 cdTocTextBox.Font = new Font("Consolas", 9.0F, FontStyle.Regular);
-                cdTocTextBox.Multiline = true;
                 cdTocTextBox.ReadOnly = true;
-                cdTocTextBox.ScrollBars = ScrollBars.Both;
+                cdTocTextBox.ScrollBars = RichTextBoxScrollBars.Both;
                 cdTocTextBox.WordWrap = false;
                 cdTocTextBox.Text = toc;
 
@@ -376,6 +378,7 @@ namespace AudioDataPlugIn
                             .Append(matchedTable + 1).Append(" of ").Append(tables.Count).Append('.');
                     }
                     AppendComparisonDetails(message, match);
+                    message.Append("\r\n\r\n").Append(CurrentDiscPeakComparisonNotice);
                     message.Append("\r\n\r\nLog: ").Append(path);
                     ShowTocComparisonMessage(true, message.ToString());
                     return;
@@ -398,6 +401,7 @@ namespace AudioDataPlugIn
                             .Append(": ").Append(results[i].Reason);
                     }
                 }
+                failure.Append("\r\n\r\n").Append(CurrentDiscPeakComparisonNotice);
                 failure.Append("\r\n\r\nLog: ").Append(path);
                 ShowTocComparisonMessage(false, failure.ToString());
             }
