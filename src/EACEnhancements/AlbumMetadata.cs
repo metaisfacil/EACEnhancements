@@ -74,9 +74,15 @@ namespace AudioDataPlugIn
         private static volatile string albumCatalogNumber = String.Empty;
         private static volatile string albumLabel = String.Empty;
         private static IntPtr albumMetadataParent;
-        private static MainWindowSubclassDelegate albumMetadataParentSubclassDelegate;
-        private static MainWindowSubclassDelegate albumMetadataEditSubclassDelegate;
-        private static MainWindowSubclassDelegate albumMetadataStateControlSubclassDelegate;
+        // Built once and never reassigned; see the delegate fields in
+        // EACEnhancements.cs.
+        private static readonly MainWindowSubclassDelegate
+            albumMetadataParentSubclassDelegate = AlbumMetadataParentSubclass;
+        private static readonly MainWindowSubclassDelegate
+            albumMetadataEditSubclassDelegate = AlbumMetadataEditSubclass;
+        private static readonly MainWindowSubclassDelegate
+            albumMetadataStateControlSubclassDelegate =
+                AlbumMetadataStateControlSubclass;
         private static IntPtr albumMetadataUserEditControl;
         private static IntPtr albumMetadataPendingTabSource;
         private static IntPtr albumMetadataPendingTabShiftState;
@@ -873,7 +879,6 @@ namespace AudioDataPlugIn
                 new IntPtr(511),
                 IntPtr.Zero);
 
-            albumMetadataEditSubclassDelegate = AlbumMetadataEditSubclass;
             IntPtr editSubclassProcedure =
                 Marshal.GetFunctionPointerForDelegate(
                     albumMetadataEditSubclassDelegate);
@@ -894,13 +899,11 @@ namespace AudioDataPlugIn
                     UIntPtr.Zero))
             {
                 DestroyAlbumMetadataControls();
-                albumMetadataEditSubclassDelegate = null;
                 throw new InvalidOperationException(
                     "SetWindowSubclass failed for EAC's album metadata edits with Win32 error " +
                     Marshal.GetLastWin32Error() + ".");
             }
 
-            albumMetadataParentSubclassDelegate = AlbumMetadataParentSubclass;
             IntPtr subclassProcedure = Marshal.GetFunctionPointerForDelegate(
                 albumMetadataParentSubclassDelegate);
             if (!NativeMethods.SetWindowSubclass(
@@ -910,15 +913,11 @@ namespace AudioDataPlugIn
                 UIntPtr.Zero))
             {
                 DestroyAlbumMetadataControls();
-                albumMetadataParentSubclassDelegate = null;
-                albumMetadataEditSubclassDelegate = null;
                 throw new InvalidOperationException(
                     "SetWindowSubclass failed for EAC's album metadata panel with Win32 error " +
                     Marshal.GetLastWin32Error() + ".");
             }
 
-            albumMetadataStateControlSubclassDelegate =
-                AlbumMetadataStateControlSubclass;
             IntPtr stateSubclassProcedure = Marshal.GetFunctionPointerForDelegate(
                 albumMetadataStateControlSubclassDelegate);
             if (!NativeMethods.SetWindowSubclass(
@@ -1132,6 +1131,8 @@ namespace AudioDataPlugIn
             UIntPtr subclassId,
             UIntPtr referenceData)
         {
+            // True once a branch has already passed the message to EAC.
+            bool defaultProcessed = false;
             try
             {
                 if (message == EacEditNavigateMessage &&
@@ -1154,6 +1155,7 @@ namespace AudioDataPlugIn
                 {
                     IntPtr result = NativeMethods.DefSubclassProc(
                         hwnd, message, wParam, lParam);
+                    defaultProcessed = true;
                     LayoutAlbumMetadataControls(hwnd);
                     return result;
                 }
@@ -1161,6 +1163,7 @@ namespace AudioDataPlugIn
                 {
                     IntPtr result = NativeMethods.DefSubclassProc(
                         hwnd, message, wParam, lParam);
+                    defaultProcessed = true;
                     ObserveAlbumMetadataCommand(
                         hwnd,
                         message,
@@ -1173,6 +1176,8 @@ namespace AudioDataPlugIn
             catch (Exception error)
             {
                 Log("Album metadata panel subclass callback failed: " + error);
+                if (defaultProcessed)
+                    return IntPtr.Zero;
             }
             return NativeMethods.DefSubclassProc(
                 hwnd, message, wParam, lParam);

@@ -932,10 +932,20 @@ namespace AudioDataPlugIn
                 RequestCommandLineShutdown(mainWindow);
                 return;
             }
-            NativeMethods.MessageBoxW(mainWindow,
-                "The EAC Enhancements command-line request could not be completed.\r\n\r\n" +
-                (commandLineError ?? "Unknown error."),
-                "EAC Enhancements", NativeMethods.MB_OK | NativeMethods.MB_ICONWARNING);
+            // Reachable from the menu-installer thread as well as EAC's, so
+            // the owner has to be restored explicitly.
+            bool ownerWasEnabled = WasDialogOwnerEnabled(mainWindow);
+            try
+            {
+                NativeMethods.MessageBoxW(mainWindow,
+                    "The EAC Enhancements command-line request could not be completed.\r\n\r\n" +
+                    (commandLineError ?? "Unknown error."),
+                    "EAC Enhancements", NativeMethods.MB_OK | NativeMethods.MB_ICONWARNING);
+            }
+            finally
+            {
+                RestoreDialogOwner(mainWindow, ownerWasEnabled);
+            }
         }
 
         internal static bool IsCommandLineWorkflow()

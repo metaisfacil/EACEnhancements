@@ -147,7 +147,6 @@ namespace AudioDataPlugIn
                         Marshal.GetLastWin32Error() + ".");
                 }
 
-                workflowButtonSubclassDelegate = WorkflowButtonSubclass;
                 IntPtr subclassProcedure = Marshal.GetFunctionPointerForDelegate(
                     workflowButtonSubclassDelegate);
                 if (!NativeMethods.SetWindowSubclass(
@@ -157,7 +156,6 @@ namespace AudioDataPlugIn
                     UIntPtr.Zero))
                 {
                     NativeMethods.DestroyWindow(button);
-                    workflowButtonSubclassDelegate = null;
                     DisposeWorkflowButtonImages();
                     throw new InvalidOperationException(
                         "SetWindowSubclass failed for the workflow button with Win32 error " +
@@ -171,7 +169,6 @@ namespace AudioDataPlugIn
                 catch
                 {
                     NativeMethods.DestroyWindow(button);
-                    workflowButtonSubclassDelegate = null;
                     DisposeWorkflowButtonImages();
                     throw;
                 }
@@ -374,7 +371,6 @@ namespace AudioDataPlugIn
                     Marshal.GetLastWin32Error() + ".");
             }
 
-            workflowButtonTooltipSubclassDelegate = WorkflowButtonTooltipSubclass;
             IntPtr subclassProcedure = Marshal.GetFunctionPointerForDelegate(
                 workflowButtonTooltipSubclassDelegate);
             if (!NativeMethods.SetWindowSubclass(
@@ -384,7 +380,6 @@ namespace AudioDataPlugIn
                 UIntPtr.Zero))
             {
                 NativeMethods.DestroyWindow(tooltip);
-                workflowButtonTooltipSubclassDelegate = null;
                 throw new InvalidOperationException(
                     "SetWindowSubclass failed for the workflow-button tooltip with Win32 error " +
                     Marshal.GetLastWin32Error() + ".");
@@ -395,7 +390,6 @@ namespace AudioDataPlugIn
             if (deviceContext == IntPtr.Zero)
             {
                 NativeMethods.DestroyWindow(tooltip);
-                workflowButtonTooltipSubclassDelegate = null;
                 throw new InvalidOperationException("The workflow tooltip could not be measured.");
             }
             NativeMethods.SelectObject(deviceContext, NativeMethods.GetStockObject(17));

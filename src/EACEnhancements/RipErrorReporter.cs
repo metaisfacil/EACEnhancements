@@ -266,11 +266,21 @@ namespace AudioDataPlugIn
 					((fileInfo == null)
 						? "."
 						: ("; log='" + fileInfo.FullName + "'.")));
-				NativeMethods.MessageBoxW(
-					intPtr,
-					stringBuilder.ToString(),
-					"EAC Rip Completed with Errors",
-					48u);
+				// Runs on the completion-watcher thread rather than EAC's, so
+				// the owner has to be restored explicitly.
+				bool ownerWasEnabled = WasDialogOwnerEnabled(intPtr);
+				try
+				{
+					NativeMethods.MessageBoxW(
+						intPtr,
+						stringBuilder.ToString(),
+						"EAC Rip Completed with Errors",
+						48u);
+				}
+				finally
+				{
+					RestoreDialogOwner(intPtr, ownerWasEnabled);
+				}
 			}
 		}
 		catch (Exception ex)

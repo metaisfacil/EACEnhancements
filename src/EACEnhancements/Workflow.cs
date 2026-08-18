@@ -871,14 +871,6 @@ namespace AudioDataPlugIn
 			return;
 		}
 		lastWorkflowHookRefreshTick = tickCount;
-		if (workflowCallWndProcHookDelegate == null)
-		{
-			workflowCallWndProcHookDelegate = WorkflowCallWndProc;
-		}
-		if (workflowGetMessageHookDelegate == null)
-		{
-			workflowGetMessageHookDelegate = WorkflowGetMessage;
-		}
 		HashSet<uint> hashSet = new HashSet<uint>();
 		uint windowThreadProcessId = NativeMethods.GetWindowThreadProcessId(mainWindow, IntPtr.Zero);
 		if (windowThreadProcessId != 0)
@@ -887,10 +879,7 @@ namespace AudioDataPlugIn
 		}
 		try
 		{
-			foreach (ProcessThread thread in Process.GetCurrentProcess().Threads)
-			{
-				hashSet.Add((uint)thread.Id);
-			}
+			AddCurrentProcessThreadIds(hashSet);
 		}
 		catch
 		{
@@ -929,6 +918,46 @@ namespace AudioDataPlugIn
 		}
 	}
 
+	// Process.GetCurrentProcess().Threads is too expensive to call on a timer.
+	// It queries every process on the system and leaves an undisposed Process
+	// behind, and this runs twice a second for as long as EAC is open. The
+	// toolhelp snapshot covers threads only and allocates nothing per thread.
+	private static void AddCurrentProcessThreadIds(HashSet<uint> threadIds)
+	{
+		IntPtr snapshot = NativeMethods.CreateToolhelp32Snapshot(
+			NativeMethods.TH32CS_SNAPTHREAD,
+			0u);
+		if (snapshot == NativeMethods.InvalidHandleValue || snapshot == IntPtr.Zero)
+		{
+			Log(
+				"Thread enumeration for the 100% log cancellation guard failed " +
+				"with Win32 error " + Marshal.GetLastWin32Error() + ".");
+			return;
+		}
+		try
+		{
+			uint processId = NativeMethods.GetCurrentProcessId();
+			uint entrySize = (uint)Marshal.SizeOf(
+				typeof(NativeMethods.THREADENTRY32));
+			NativeMethods.THREADENTRY32 entry = new NativeMethods.THREADENTRY32();
+			entry.Size = entrySize;
+			bool found = NativeMethods.Thread32First(snapshot, ref entry);
+			while (found)
+			{
+				if (entry.OwnerProcessId == processId)
+					threadIds.Add(entry.ThreadId);
+				// Thread32First can overwrite dwSize, and Thread32Next
+				// reads it as an input on some Windows versions.
+				entry.Size = entrySize;
+				found = NativeMethods.Thread32Next(snapshot, ref entry);
+			}
+		}
+		finally
+		{
+			NativeMethods.CloseHandle(snapshot);
+		}
+	}
+
 	private static IntPtr WorkflowCallWndProc(int code, IntPtr wParam, IntPtr lParam)
 	{
 		try
@@ -960,11 +989,9 @@ namespace AudioDataPlugIn
 		}
 		try
 		{
-			mainWindowSubclassDelegate = MainWindowSubclass;
 			IntPtr functionPointerForDelegate = Marshal.GetFunctionPointerForDelegate(mainWindowSubclassDelegate);
 			if (!NativeMethods.SetWindowSubclass(mainWindow, functionPointerForDelegate, new UIntPtr(246194962u), UIntPtr.Zero))
 			{
-				mainWindowSubclassDelegate = null;
 				Interlocked.Exchange(ref mainWindowSubclassInstalled, 0);
 				Log("Output settings window subclass could not be installed.");
 			}
@@ -987,14 +1014,18 @@ namespace AudioDataPlugIn
 		}
 		catch (Exception ex)
 		{
-			mainWindowSubclassDelegate = null;
-			Interlocked.Exchange(ref mainWindowSubclassInstalled, 0);
+			// Only give up the installation slot if the subclass never took.
+			// After SetWindowSubclass succeeds the entry stays on EAC's window,
+			// and clearing the flag here would install a second one.
+			Interlocked.CompareExchange(ref mainWindowSubclassInstalled, 0, -1);
 			Log("Output settings window subclass failed: " + ex.Message);
 		}
 	}
 
 	private static IntPtr MainWindowSubclass(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, UIntPtr subclassId, UIntPtr referenceData)
 	{
+		// True once a branch has already passed the message to EAC.
+		bool defaultProcessed = false;
 		try
 		{
 			if (message == NativeMethods.WM_TIMER)
@@ -1002,7 +1033,12 @@ namespace AudioDataPlugIn
 			if (message == NativeMethods.WM_NOTIFY &&
 				IsTrackListCustomDraw(hwnd, lParam))
 			{
-				return HandleTrackListCustomDraw(hwnd, message, wParam, lParam);
+				return HandleTrackListCustomDraw(
+					hwnd,
+					message,
+					wParam,
+					lParam,
+					ref defaultProcessed);
 			}
 			int command = (int)wParam.ToInt64() & 0xFFFF;
 			if (message == NativeMethods.WM_DRAWITEM &&
@@ -1123,7 +1159,12 @@ namespace AudioDataPlugIn
 		catch (Exception ex)
 		{
 			Log("Output settings window subclass callback failed: " + ex.Message);
-			return IntPtr.Zero;
+			// A plugin failure must not consume the message. EAC's window
+			// procedure still needs it for unrelated handling such as
+			// track-list custom draw.
+			return defaultProcessed
+				? IntPtr.Zero
+				: NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
 		}
 		return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
 	}
@@ -1282,7 +1323,8 @@ namespace AudioDataPlugIn
 		IntPtr hwnd,
 		uint message,
 		IntPtr wParam,
-		IntPtr lParam)
+		IntPtr lParam,
+		ref bool defaultProcessed)
 	{
 		NativeMethods.NMLVCUSTOMDRAW draw =
 			(NativeMethods.NMLVCUSTOMDRAW)Marshal.PtrToStructure(
@@ -1290,6 +1332,7 @@ namespace AudioDataPlugIn
 				typeof(NativeMethods.NMLVCUSTOMDRAW));
 		uint stage = draw.CustomDraw.DrawStage;
 		IntPtr result = NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
+		defaultProcessed = true;
 
 		if (stage == CddsPrepaint)
 			return CombineCustomDrawResult(result, CdrfNotifyItemDraw);
