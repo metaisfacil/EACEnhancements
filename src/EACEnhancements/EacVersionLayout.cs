@@ -92,6 +92,8 @@ namespace AudioDataPlugIn
         internal readonly uint PluginSetCurrentPluginPointerVa;
         internal readonly uint PluginGetPluginNamePointerVa;
         internal readonly uint PluginGetPluginGuidPointerVa;
+        internal readonly uint MetadataTokenLexerVa;
+        internal readonly uint MetadataTemplateFormatterVa;
         internal readonly uint FilenameTokenLexerVa;
         internal readonly uint FilenameCharacterReplacementTableVa;
         internal readonly uint ExternalEncoderOptionsVa;
@@ -199,6 +201,8 @@ namespace AudioDataPlugIn
             uint pluginSetCurrentPluginPointerVa,
             uint pluginGetPluginNamePointerVa,
             uint pluginGetPluginGuidPointerVa,
+            uint metadataTokenLexerVa,
+            uint metadataTemplateFormatterVa,
             uint filenameTokenLexerVa,
             uint filenameCharacterReplacementTableVa,
             uint externalEncoderOptionsVa,
@@ -294,6 +298,8 @@ namespace AudioDataPlugIn
             PluginSetCurrentPluginPointerVa = pluginSetCurrentPluginPointerVa;
             PluginGetPluginNamePointerVa = pluginGetPluginNamePointerVa;
             PluginGetPluginGuidPointerVa = pluginGetPluginGuidPointerVa;
+            MetadataTokenLexerVa = metadataTokenLexerVa;
+            MetadataTemplateFormatterVa = metadataTemplateFormatterVa;
             FilenameTokenLexerVa = filenameTokenLexerVa;
             FilenameCharacterReplacementTableVa = filenameCharacterReplacementTableVa;
             ExternalEncoderOptionsVa = externalEncoderOptionsVa;
@@ -314,9 +320,17 @@ namespace AudioDataPlugIn
             ExpectedRangeHibernateDecision = Hex("80 3D " + LittleEndian(rangeHibernateRequestedVa) + " 00");
         }
 
+        // Exposed for tests that verify each supported executable uses its own
+        // addresses. The shared address between versions made the custom
+        // compressor tags ineffective on EAC 1.6.
+        internal static EacVersionLayout[] KnownLayouts
+        {
+            get { return new[] { Eac18, Eac16 }; }
+        }
+
         internal static EacVersionLayout Detect(ProcessModule module, IntPtr imageBase)
         {
-            EacVersionLayout[] layouts = { Eac18, Eac16 };
+            EacVersionLayout[] layouts = KnownLayouts;
             string hash = TryHash(module.FileName);
             foreach (EacVersionLayout candidate in layouts)
             {
@@ -479,6 +493,9 @@ namespace AudioDataPlugIn
             0x007D01FC,
             0x007D0200,
             0x007D0204,
+            // Metadata replacement-tag lexer and template formatter.
+            0x0050C1E0,
+            0x0050CF80,
             0x0048AAE0,
             0x00993E94,
             0x009B1D78,
@@ -577,6 +594,9 @@ namespace AudioDataPlugIn
             0x0074C1EC,
             0x0074C1F0,
             0x0074C1F4,
+            // Metadata replacement-tag lexer and template formatter.
+            0x00508260,
+            0x00509000,
             0x00487530,
             0x00830D04,
             0x0084EBE8,

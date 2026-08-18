@@ -14,11 +14,18 @@ namespace AudioDataPlugIn
         private const int AlbumBarcodeLabelControlId = 0xA31E;
         private const int AlbumCatalogNumberLabelControlId = 0xA31F;
         private const int AlbumLabelLabelControlId = 0xA321;
-        private const uint MetadataTokenLexerStaticVa = 0x0050C1E0;
         private const int MetadataTokenLexerPatchLength = 6;
         private const int LiteralPercentTokenId = 0x1B;
-        private const uint MetadataTemplateFormatterStaticVa = 0x0050CF80;
         private const int MetadataTemplateFormatterPatchLength = 10;
+        // EAC generates replacement-tag lexers from a shared template.
+        // Identify the metadata lexer by its tag references, then identify the
+        // formatter by its call to that lexer. This avoids patching an unrelated
+        // function when an address becomes stale.
+        private const int MetadataTokenLexerScanLength = 0x700;
+        private const int MetadataTemplateFormatterScanLength = 0x400;
+        private const int RequiredMetadataTokenLexerTagMatches = 2;
+        private static readonly string[] MetadataTokenLexerSignatureTags =
+            { "%haslyrics%", "%lyricsfile%", "%albuminterpret%" };
         private const uint FilenameValidationTemplateCapacity = 0x100;
         // The Filename pages reject only negative lexer results and token 0x12
         // when its related option is disabled. Zero is an ordinary token ID.
@@ -118,12 +125,14 @@ namespace AudioDataPlugIn
 
         private static void InstallAlbumMetadataTokenLexerHook()
         {
+            uint lexerStaticVa = layout.MetadataTokenLexerVa;
             RequireBytes(
-                MetadataTokenLexerStaticVa,
+                lexerStaticVa,
                 ExpectedMetadataTokenLexerPrologue,
                 "metadata replacement-tag lexer");
+            RequireMetadataTokenLexerIdentity(lexerStaticVa);
 
-            IntPtr lexerAddress = AddressFromStaticVa(MetadataTokenLexerStaticVa);
+            IntPtr lexerAddress = AddressFromStaticVa(lexerStaticVa);
             metadataTokenLexerTrampoline = NativeMethods.VirtualAlloc(
                 IntPtr.Zero,
                 new UIntPtr((uint)(MetadataTokenLexerPatchLength + 5)),
@@ -153,12 +162,140 @@ namespace AudioDataPlugIn
             IntPtr hook = Marshal.GetFunctionPointerForDelegate(
                 hookedMetadataTokenLexer);
             WriteJumpPatch(
-                MetadataTokenLexerStaticVa,
+                lexerStaticVa,
                 Pointer32(hook),
                 MetadataTokenLexerPatchLength);
             Log(
                 "Album metadata replacement-tag lexer hook active at 0x" +
                 lexerAddress.ToInt64().ToString("X8") + ".");
+        }
+
+        // Verifies that the candidate is EAC's metadata replacement-tag lexer by
+        // checking for PUSH imm32 operands that reference tags unique to that table.
+        // %haslyrics% and %lyricsfile% do not appear in the filename lexer.
+        private static void RequireMetadataTokenLexerIdentity(uint staticVa)
+        {
+            int matches = CountReferencedMetadataTokenTags(
+                staticVa,
+                MetadataTokenLexerScanLength);
+            if (matches < RequiredMetadataTokenLexerTagMatches)
+            {
+                throw new InvalidOperationException(
+                    "The metadata replacement-tag lexer at 0x" +
+                    staticVa.ToString("X8") + " referenced " + matches +
+                    " of the expected replacement tags; at least " +
+                    RequiredMetadataTokenLexerTagMatches + " are required.");
+            }
+        }
+
+        // Verifies the formatter by checking that it directly calls the validated
+        // replacement-tag lexer.
+        private static void RequireMetadataTemplateFormatterIdentity(
+            uint staticVa,
+            uint lexerStaticVa)
+        {
+            if (!CallsTarget(
+                    staticVa,
+                    MetadataTemplateFormatterScanLength,
+                    lexerStaticVa))
+            {
+                throw new InvalidOperationException(
+                    "The metadata template formatter at 0x" +
+                    staticVa.ToString("X8") +
+                    " does not call the replacement-tag lexer at 0x" +
+                    lexerStaticVa.ToString("X8") + ".");
+            }
+        }
+
+        private static int CountReferencedMetadataTokenTags(
+            uint staticVa,
+            int scanLength)
+        {
+            byte[] body = ReadBytes(staticVa, scanLength);
+            bool[] seen = new bool[MetadataTokenLexerSignatureTags.Length];
+            int matches = 0;
+            for (int offset = 0; offset + 5 <= body.Length; offset++)
+            {
+                if (body[offset] != 0x68)
+                    continue;
+
+                uint operand = BitConverter.ToUInt32(body, offset + 1);
+                string literal = TryReadImageWideString(operand, 0x20);
+                if (literal == null)
+                    continue;
+
+                for (int i = 0; i < MetadataTokenLexerSignatureTags.Length; i++)
+                {
+                    if (seen[i])
+                        continue;
+                    if (!literal.StartsWith(
+                            MetadataTokenLexerSignatureTags[i],
+                            StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    seen[i] = true;
+                    matches++;
+                    break;
+                }
+            }
+
+            return matches;
+        }
+
+        private static bool CallsTarget(
+            uint staticVa,
+            int scanLength,
+            uint targetStaticVa)
+        {
+            byte[] body = ReadBytes(staticVa, scanLength);
+            for (int offset = 0; offset + 5 <= body.Length; offset++)
+            {
+                if (body[offset] != 0xE8)
+                    continue;
+
+                int displacement = BitConverter.ToInt32(body, offset + 1);
+                long callee = (long)staticVa + offset + 5 + displacement;
+                if (callee == targetStaticVa)
+                    return true;
+            }
+
+            return false;
+        }
+
+        // Reads a NUL-terminated UTF-16 string from within the mapped EAC image.
+        // Addresses outside the image are rejected.
+        private static string TryReadImageWideString(
+            uint staticVa,
+            int maximumLength)
+        {
+            const uint PreferredImageBase = 0x00400000;
+            long offset = (long)staticVa - PreferredImageBase;
+            if (offset < 0 ||
+                offset + (maximumLength * sizeof(char)) > layout.ImageSize)
+            {
+                return null;
+            }
+
+            try
+            {
+                StringBuilder text = new StringBuilder(maximumLength);
+                IntPtr address = AddressFromStaticVa(staticVa);
+                for (int i = 0; i < maximumLength; i++)
+                {
+                    char character = (char)(ushort)Marshal.ReadInt16(
+                        address,
+                        i * sizeof(char));
+                    if (character == '\0')
+                        break;
+                    text.Append(character);
+                }
+
+                return text.ToString();
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static int HookedMetadataTokenLexer(
@@ -325,13 +462,17 @@ namespace AudioDataPlugIn
 
         private static void InstallAlbumMetadataFormatterHook()
         {
+            uint formatterStaticVa = layout.MetadataTemplateFormatterVa;
             RequireBytes(
-                MetadataTemplateFormatterStaticVa,
+                formatterStaticVa,
                 ExpectedMetadataTemplateFormatterPrologue,
                 "metadata template formatter");
+            RequireMetadataTemplateFormatterIdentity(
+                formatterStaticVa,
+                layout.MetadataTokenLexerVa);
 
             IntPtr formatterAddress =
-                AddressFromStaticVa(MetadataTemplateFormatterStaticVa);
+                AddressFromStaticVa(formatterStaticVa);
             metadataTemplateFormatterTrampoline = NativeMethods.VirtualAlloc(
                 IntPtr.Zero,
                 new UIntPtr((uint)(MetadataTemplateFormatterPatchLength + 5)),
@@ -361,7 +502,7 @@ namespace AudioDataPlugIn
             IntPtr hook = Marshal.GetFunctionPointerForDelegate(
                 hookedMetadataTemplateFormatter);
             WriteJumpPatch(
-                MetadataTemplateFormatterStaticVa,
+                formatterStaticVa,
                 Pointer32(hook),
                 MetadataTemplateFormatterPatchLength);
             Log(

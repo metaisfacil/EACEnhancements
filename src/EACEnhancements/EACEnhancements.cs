@@ -166,6 +166,7 @@ namespace AudioDataPlugIn
         private static bool loggingForcedForProcess;
         private static bool hookInstalled;
         private static string hookStatus = "not initialized";
+        private static string albumMetadataTagStatus = String.Empty;
         private static bool workflowInstalled;
         private static string workflowStatus = "not initialized";
         private static IntPtr workflowCode;
@@ -229,6 +230,27 @@ namespace AudioDataPlugIn
         internal static string WorkflowStatus
         {
             get { return workflowStatus; }
+        }
+
+        // Empty when all custom-tag hooks are installed. Otherwise lists the
+        // unavailable hooks for display in the options and configuration report.
+        internal static string AlbumMetadataTagStatus
+        {
+            get { return albumMetadataTagStatus; }
+        }
+
+        private static void RecordAlbumMetadataTagFailure(
+            string component,
+            Exception error)
+        {
+            albumMetadataTagStatus =
+                albumMetadataTagStatus.Length == 0
+                    ? component
+                    : albumMetadataTagStatus + ", " + component;
+            Log(
+                "Album metadata " + component +
+                " installation failed; CD Label, CD Barcode and CD Catalog # " +
+                "cannot be used in external compressor arguments: " + error);
         }
 
         internal static void Initialize()
@@ -302,7 +324,9 @@ namespace AudioDataPlugIn
                 }
                 catch (Exception error)
                 {
-                    Log("Album metadata replacement-tag lexer hook installation failed: " + error);
+                    RecordAlbumMetadataTagFailure(
+                        "replacement-tag validation",
+                        error);
                 }
                 try
                 {
@@ -310,7 +334,9 @@ namespace AudioDataPlugIn
                 }
                 catch (Exception error)
                 {
-                    Log("Album metadata filename-tag validation hook installation failed: " + error);
+                    RecordAlbumMetadataTagFailure(
+                        "filename-tag validation",
+                        error);
                 }
                 try
                 {
@@ -318,7 +344,9 @@ namespace AudioDataPlugIn
                 }
                 catch (Exception error)
                 {
-                    Log("Album metadata formatter hook installation failed: " + error);
+                    RecordAlbumMetadataTagFailure(
+                        "tag substitution",
+                        error);
                 }
                 try
                 {
