@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -30,6 +30,7 @@ namespace AudioDataPlugIn
         // The Filename pages reject only negative lexer results and token 0x12
         // when its related option is disabled. Zero is an ordinary token ID.
         private const int FilenameValidationAcceptedTokenId = 0;
+        internal const int AlbumMetadataInstallRetryMilliseconds = 1000;
         private const int GenreControlId = 996;
         private const int CommentControlId = 883;
         private const int CdComposerControlId = 880;
@@ -88,6 +89,7 @@ namespace AudioDataPlugIn
         private static IntPtr albumMetadataPendingTabShiftState;
         private static IntPtr validBarcodeBackgroundBrush;
         private static int lastAlbumMetadataInstallTick;
+        private static bool albumMetadataInstallAttempted;
         private static IntPtr metadataTemplateFormatterTrampoline;
         private static MetadataTemplateFormatterDelegate originalMetadataTemplateFormatter;
         private static MetadataTemplateFormatterDelegate hookedMetadataTemplateFormatter;
@@ -649,18 +651,59 @@ namespace AudioDataPlugIn
             if (AreAlbumMetadataControlsAvailable())
                 return;
             int tick = Environment.TickCount;
-            if (tick - lastAlbumMetadataInstallTick < 1000)
+            if (!ShouldAttemptAlbumMetadataInstall(
+                    albumMetadataInstallAttempted,
+                    lastAlbumMetadataInstallTick,
+                    tick))
+            {
                 return;
+            }
+            albumMetadataInstallAttempted = true;
             lastAlbumMetadataInstallTick = tick;
             InstallAlbumMetadataControls(mainWindow);
         }
 
+        // Retried about once a second, so report only when the reason changes.
+        private static string lastAlbumMetadataInstallSkip = String.Empty;
+
+        private static void LogAlbumMetadataInstallSkip(string reason)
+        {
+            if (String.Equals(
+                    lastAlbumMetadataInstallSkip, reason, StringComparison.Ordinal))
+            {
+                return;
+            }
+            lastAlbumMetadataInstallSkip = reason;
+            Log("Album metadata controls were not installed: " + reason + ".");
+        }
+
+        // Environment.TickCount is signed and becomes negative after about 24.9 days
+        // of uptime. Comparing it directly with a zero-initialized tick value caused
+        // the first attempt to be treated as throttled during that interval. Track the
+        // first attempt explicitly; subsequent tick-count subtraction handles wraparound.
+        internal static bool ShouldAttemptAlbumMetadataInstall(
+            bool attempted,
+            int lastTick,
+            int tick)
+        {
+            if (!attempted)
+                return true;
+            return tick - lastTick >= AlbumMetadataInstallRetryMilliseconds;
+        }
+
         internal static void InstallAlbumMetadataControls(IntPtr mainWindow)
         {
-            if (mainWindow == IntPtr.Zero ||
-                (albumBarcodeEdit != IntPtr.Zero &&
-                 NativeMethods.IsWindow(albumBarcodeEdit)))
+            if (mainWindow == IntPtr.Zero)
             {
+                LogAlbumMetadataInstallSkip("EAC's main window was unavailable");
+                return;
+            }
+            if (albumBarcodeEdit != IntPtr.Zero &&
+                NativeMethods.IsWindow(albumBarcodeEdit))
+            {
+                LogAlbumMetadataInstallSkip(
+                    "the CD Barcode field is already a live window (handle 0x" +
+                    albumBarcodeEdit.ToInt64().ToString("X") + ")");
                 return;
             }
 
@@ -686,6 +729,27 @@ namespace AudioDataPlugIn
                 performerLabel == IntPtr.Zero || genreLabel == IntPtr.Zero ||
                 commentLabel == IntPtr.Zero)
             {
+                StringBuilder missing = new StringBuilder();
+                AppendMissingReferenceControl(missing, genre, GenreControlId);
+                AppendMissingReferenceControl(missing, comment, CommentControlId);
+                AppendMissingReferenceControl(
+                    missing, composer, CdComposerControlId);
+                AppendMissingReferenceControl(
+                    missing, performer, CdPerformerControlId);
+                AppendMissingReferenceControl(
+                    missing, titleLabel, CdTitleLabelControlId);
+                AppendMissingReferenceControl(
+                    missing, composerLabel, CdComposerLabelControlId);
+                AppendMissingReferenceControl(
+                    missing, performerLabel, CdPerformerLabelControlId);
+                AppendMissingReferenceControl(
+                    missing, genreLabel, GenreLabelControlId);
+                AppendMissingReferenceControl(
+                    missing, commentLabel, CommentLabelControlId);
+                LogAlbumMetadataInstallSkip(
+                    "EAC reference controls were not found under window 0x" +
+                    mainWindow.ToInt64().ToString("X") + " (missing ids: " +
+                    missing + ")");
                 return;
             }
 
@@ -1697,6 +1761,18 @@ namespace AudioDataPlugIn
                 NativeMethods.IsWindow(albumLabelLabel) &&
                 albumLabelEdit != IntPtr.Zero &&
                 NativeMethods.IsWindow(albumLabelEdit);
+        }
+
+        private static void AppendMissingReferenceControl(
+            StringBuilder missing,
+            IntPtr control,
+            int controlId)
+        {
+            if (control != IntPtr.Zero)
+                return;
+            if (missing.Length > 0)
+                missing.Append(", ");
+            missing.Append(controlId);
         }
 
         private static IntPtr FindDescendantControl(
