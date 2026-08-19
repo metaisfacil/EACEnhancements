@@ -18,6 +18,8 @@ namespace AudioDataPlugIn
     {
         internal delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
 
+        internal const uint TH32CS_SNAPTHREAD = 0x00000004;
+        internal static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
         internal const uint MEM_COMMIT = 0x1000;
         internal const uint MEM_RESERVE = 0x2000;
         internal const uint PAGE_READWRITE = 0x04;
@@ -92,6 +94,18 @@ namespace AudioDataPlugIn
         internal const uint LVM_SETITEMTEXTW = 0x1074;
         internal const uint LVIF_TEXT = 0x0001;
         internal const int LVN_ENDLABELEDITW = -176;
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct THREADENTRY32
+        {
+            internal uint Size;
+            internal uint Usage;
+            internal uint ThreadId;
+            internal uint OwnerProcessId;
+            internal int BasePriority;
+            internal int DeltaPriority;
+            internal uint Flags;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct POINT
@@ -243,6 +257,30 @@ namespace AudioDataPlugIn
 
         [DllImport("kernel32.dll")]
         internal static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll")]
+        internal static extern uint GetCurrentProcessId();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern IntPtr CreateToolhelp32Snapshot(
+            uint flags,
+            uint processId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool Thread32First(
+            IntPtr snapshot,
+            ref THREADENTRY32 entry);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool Thread32Next(
+            IntPtr snapshot,
+            ref THREADENTRY32 entry);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool CloseHandle(IntPtr handle);
 
         [DllImport("kernel32.dll")]
         internal static extern uint GetCurrentThreadId();

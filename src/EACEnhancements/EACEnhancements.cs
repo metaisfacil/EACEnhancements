@@ -180,11 +180,24 @@ namespace AudioDataPlugIn
         private static uint htoaBeepCounterAddress;
         private static uint htoaRangeEndLow;
         private static uint htoaRangeEndHigh;
-        private static CallWndProcHookDelegate workflowCallWndProcHookDelegate;
-        private static CallWndProcHookDelegate workflowGetMessageHookDelegate;
-        private static MainWindowSubclassDelegate mainWindowSubclassDelegate;
-        private static MainWindowSubclassDelegate workflowButtonSubclassDelegate;
-        private static MainWindowSubclassDelegate workflowButtonTooltipSubclassDelegate;
+        // Each delegate below is passed to SetWindowsHookExW or
+        // SetWindowSubclass, which keep the raw stub pointer for the life of
+        // the hooked thread or window. The stub is freed with its delegate, so
+        // build these once and never reassign them: a replaced delegate leaves
+        // the old pointer registered and the next message after the collecting
+        // GC runs freed memory. SetWindowSubclass keys on the procedure and id
+        // together, so a stable pointer also means a reinstall updates its
+        // entry instead of adding a second one.
+        private static readonly CallWndProcHookDelegate
+            workflowCallWndProcHookDelegate = WorkflowCallWndProc;
+        private static readonly CallWndProcHookDelegate
+            workflowGetMessageHookDelegate = WorkflowGetMessage;
+        private static readonly MainWindowSubclassDelegate
+            mainWindowSubclassDelegate = MainWindowSubclass;
+        private static readonly MainWindowSubclassDelegate
+            workflowButtonSubclassDelegate = WorkflowButtonSubclass;
+        private static readonly MainWindowSubclassDelegate
+            workflowButtonTooltipSubclassDelegate = WorkflowButtonTooltipSubclass;
         private static int mainWindowSubclassInstalled;
         private static IntPtr workflowButton;
         private static IntPtr workflowButtonTooltip;

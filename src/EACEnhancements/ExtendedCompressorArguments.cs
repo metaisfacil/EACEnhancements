@@ -37,12 +37,19 @@ namespace AudioDataPlugIn
         private static readonly object ExtendedCompressorArgumentsLock =
             new object();
 
-        private static MainWindowSubclassDelegate
-            extendedCompressorArgumentsSubclassDelegate;
-        private static MainWindowSubclassDelegate
-            extendedCompressorArgumentsParentSubclassDelegate;
-        private static MainWindowSubclassDelegate
-            extendedCompressorArgumentsEditSubclassDelegate;
+        // Built once and never reassigned; see the delegate fields in
+        // EACEnhancements.cs. The compression property sheet is opened and
+        // closed repeatedly, so these would otherwise be replaced while the
+        // previous stubs were still registered.
+        private static readonly MainWindowSubclassDelegate
+            extendedCompressorArgumentsSubclassDelegate =
+                ExtendedCompressorArgumentsSubclass;
+        private static readonly MainWindowSubclassDelegate
+            extendedCompressorArgumentsParentSubclassDelegate =
+                ExtendedCompressorArgumentsParentSubclass;
+        private static readonly MainWindowSubclassDelegate
+            extendedCompressorArgumentsEditSubclassDelegate =
+                ExtendedCompressorArgumentsEditSubclass;
         private static IntPtr extendedCompressorArgumentsParent;
         private static IntPtr extendedCompressorArgumentsPage;
         private static IntPtr extendedCompressorArgumentsEdit;
@@ -380,8 +387,6 @@ namespace AudioDataPlugIn
                 return;
             }
 
-            extendedCompressorArgumentsSubclassDelegate =
-                ExtendedCompressorArgumentsSubclass;
             IntPtr procedure = Marshal.GetFunctionPointerForDelegate(
                 extendedCompressorArgumentsSubclassDelegate);
             if (!NativeMethods.SetWindowSubclass(
@@ -390,7 +395,6 @@ namespace AudioDataPlugIn
                     new UIntPtr(ExtendedCompressorArgumentsSubclassId),
                     UIntPtr.Zero))
             {
-                extendedCompressorArgumentsSubclassDelegate = null;
                 Log(
                     "The external-compressor argument editor could not be extended; Win32 error " +
                     Marshal.GetLastWin32Error() + ".");
@@ -421,8 +425,6 @@ namespace AudioDataPlugIn
             IntPtr page,
             IntPtr edit)
         {
-            extendedCompressorArgumentsEditSubclassDelegate =
-                ExtendedCompressorArgumentsEditSubclass;
             IntPtr editProcedure = Marshal.GetFunctionPointerForDelegate(
                 extendedCompressorArgumentsEditSubclassDelegate);
             if (!NativeMethods.SetWindowSubclass(
@@ -440,8 +442,6 @@ namespace AudioDataPlugIn
             IntPtr parent = NativeMethods.GetParent(page);
             if (parent == IntPtr.Zero || !NativeMethods.IsWindow(parent))
                 return;
-            extendedCompressorArgumentsParentSubclassDelegate =
-                ExtendedCompressorArgumentsParentSubclass;
             IntPtr parentProcedure = Marshal.GetFunctionPointerForDelegate(
                 extendedCompressorArgumentsParentSubclassDelegate);
             if (NativeMethods.SetWindowSubclass(

@@ -63,8 +63,13 @@ namespace AudioDataPlugIn
 		}
 	}
 
+	// A modal dialog disables its owner until it closes. Either entry point can
+	// run this on a plugin thread rather than EAC's, so record the owner state
+	// up front and restore it in the finally. A failure between disabling and
+	// closing otherwise leaves EAC's window permanently unresponsive.
 	private static void RunOutputSettingsDialog(IntPtr ownerWindow, IntPtr mainWindow)
 	{
+		bool ownerWasEnabled = WasDialogOwnerEnabled(ownerWindow);
 		try
 		{
 			byte b = Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa));
@@ -93,8 +98,32 @@ namespace AudioDataPlugIn
 		}
 		finally
 		{
+			RestoreDialogOwner(ownerWindow, ownerWasEnabled);
 			Interlocked.Exchange(ref outputSettingsDialogActive, 0);
 		}
+	}
+
+	internal static bool WasDialogOwnerEnabled(IntPtr ownerWindow)
+	{
+		return ownerWindow != IntPtr.Zero &&
+			NativeMethods.IsWindow(ownerWindow) &&
+			NativeMethods.IsWindowEnabled(ownerWindow);
+	}
+
+	// Restores only an owner that was enabled when the dialog started. EAC
+	// disables its own windows during its modal steps, and those must be left
+	// alone.
+	internal static void RestoreDialogOwner(IntPtr ownerWindow, bool ownerWasEnabled)
+	{
+		if (!ownerWasEnabled ||
+			ownerWindow == IntPtr.Zero ||
+			!NativeMethods.IsWindow(ownerWindow) ||
+			NativeMethods.IsWindowEnabled(ownerWindow))
+		{
+			return;
+		}
+		NativeMethods.EnableWindow(ownerWindow, true);
+		Log("Re-enabled EAC's window after a plugin dialog left it disabled.");
 	}
 
 	internal static string GetSettingsFilePath()
