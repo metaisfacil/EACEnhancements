@@ -1193,25 +1193,7 @@ namespace AudioDataPlugIn
 	{
 		try
 		{
-			int changedTitles = 0;
-			IntPtr cdTitle = NativeMethods.GetDlgItem(mainWindow, CdTitleControlId);
-			if (cdTitle == IntPtr.Zero)
-				throw new InvalidOperationException("EAC's CD title field was not found.");
-
-			string albumTitle = ReadChildControlText(mainWindow, CdTitleControlId);
-			string transformedAlbumTitle = TitleCaseTransformer.TransformAlbumTitle(albumTitle);
-			if (!String.Equals(albumTitle, transformedAlbumTitle, StringComparison.Ordinal))
-			{
-				if (NativeMethods.SendMessageStringW(
-					cdTitle,
-					NativeMethods.WM_SETTEXT,
-					IntPtr.Zero,
-					transformedAlbumTitle) == IntPtr.Zero)
-				{
-					throw new InvalidOperationException("EAC rejected the transformed CD title.");
-				}
-				changedTitles++;
-			}
+			int changedTitles = TransformCurrentAlbumTitle(mainWindow) ? 1 : 0;
 
 			IntPtr trackList = NativeMethods.GetDlgItem(mainWindow, TrackListControlId);
 			if (trackList == IntPtr.Zero)
@@ -1249,6 +1231,37 @@ namespace AudioDataPlugIn
 				MessageBoxButtons.OK,
 				MessageBoxIcon.Error);
 		}
+	}
+
+	internal static bool TransformCurrentAlbumTitle(IntPtr mainWindow)
+	{
+		IntPtr cdTitle = NativeMethods.GetDlgItem(mainWindow, CdTitleControlId);
+		if (cdTitle == IntPtr.Zero)
+			throw new InvalidOperationException("EAC's CD title field was not found.");
+
+		string albumTitle = ReadChildControlText(mainWindow, CdTitleControlId);
+		string transformedAlbumTitle = TitleCaseTransformer.TransformAlbumTitle(albumTitle);
+		bool changed = !String.Equals(albumTitle, transformedAlbumTitle, StringComparison.Ordinal);
+		if (changed && NativeMethods.SendMessageStringW(
+			cdTitle,
+			NativeMethods.WM_SETTEXT,
+			IntPtr.Zero,
+			transformedAlbumTitle) == IntPtr.Zero)
+		{
+			throw new InvalidOperationException("EAC rejected the transformed CD title.");
+		}
+
+		// WM_SETTEXT only changes the edit control. EAC commits CD title 0x3E0
+		// on EN_KILLFOCUS (1.6: 0x0063D4B0; 1.8: 0x00640BF0, verified in
+		// Ghidra), copying it into the disc metadata and marking it dirty.
+		// Commit before track edits can refresh the UI, even when an already
+		// title-cased value is still pending in the control. Keep focus intact.
+		NativeMethods.SendMessageW(
+			mainWindow,
+			NativeMethods.WM_COMMAND,
+			new IntPtr((NativeMethods.EN_KILLFOCUS << 16) | CdTitleControlId),
+			cdTitle);
+		return changed;
 	}
 
 	private static string ReadListViewText(IntPtr listView, int item, int subItem)

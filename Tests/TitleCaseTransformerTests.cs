@@ -1,10 +1,13 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Windows.Forms;
 
 namespace AudioDataPlugIn
 {
     internal static class TitleCaseTransformerTests
     {
+        [STAThread]
         private static int Main()
         {
             try
@@ -32,6 +35,8 @@ namespace AudioDataPlugIn
                 AssertTrack(String.Empty, String.Empty);
                 AssertTrack(null, String.Empty);
                 AssertDatabaseMenuResolution();
+                AssertAlbumTitleCommit("THE BEST OF ROCK", "The Best of Rock", true);
+                AssertAlbumTitleCommit("The Best of Rock", "The Best of Rock", false);
                 Console.WriteLine("Title-case transformer tests passed.");
                 return 0;
             }
@@ -39,6 +44,61 @@ namespace AudioDataPlugIn
             {
                 Console.Error.WriteLine(error);
                 return 1;
+            }
+        }
+
+        private static void AssertAlbumTitleCommit(string input, string expected, bool changed)
+        {
+            using (AlbumTitleHost host = new AlbumTitleHost())
+            {
+                host.TitleEdit = NativeMethods.CreateWindowExW(
+                    0, "EDIT", input, 0x50000000,
+                    0, 0, 240, 24, host.Handle, new IntPtr(992), IntPtr.Zero, IntPtr.Zero);
+                if (host.TitleEdit == IntPtr.Zero)
+                    throw new Exception("Could not create the album title fixture.");
+
+                // Keep the title unfocused, as when the macro is invoked from
+                // the menu while the user has been working in the track list.
+                IntPtr focus = NativeMethods.GetFocus();
+                if (EnhancementRuntime.TransformCurrentAlbumTitle(host.Handle) != changed)
+                    throw new Exception("Incorrect album title change count.");
+                if (host.CommitCount != 1 || host.CommittedTitle != expected)
+                    throw new Exception("Title Case did not commit the album title to disc metadata: " +
+                        host.CommitCount + " commits, title <" + host.CommittedTitle + ">, expected <" + expected + ">.");
+                if (NativeMethods.GetFocus() != focus)
+                    throw new Exception("Title Case changed keyboard focus.");
+
+                // EAC refreshes the displayed title from its committed metadata
+                // when starting a rip; the transformed text must survive that.
+                NativeMethods.SendMessageStringW(
+                    host.TitleEdit, NativeMethods.WM_SETTEXT, IntPtr.Zero, host.CommittedTitle);
+                StringBuilder actual = new StringBuilder(512);
+                NativeMethods.GetWindowTextW(host.TitleEdit, actual, actual.Capacity);
+                if (actual.ToString() != expected)
+                    throw new Exception("The album title reverted on metadata refresh.");
+            }
+        }
+
+        private sealed class AlbumTitleHost : Form
+        {
+            internal IntPtr TitleEdit;
+            internal string CommittedTitle = "Original Disc Metadata";
+            internal int CommitCount;
+
+            protected override void WndProc(ref Message message)
+            {
+                // EAC 1.6 and 1.8 copy the control text into the disc title in
+                // their WM_COMMAND / EN_KILLFOCUS handler for control 992.
+                if (message.Msg == NativeMethods.WM_COMMAND &&
+                    message.WParam.ToInt64() == ((NativeMethods.EN_KILLFOCUS << 16) | 992) &&
+                    TitleEdit != IntPtr.Zero && message.LParam == TitleEdit)
+                {
+                    StringBuilder title = new StringBuilder(512);
+                    NativeMethods.GetWindowTextW(TitleEdit, title, title.Capacity);
+                    CommittedTitle = title.ToString();
+                    CommitCount++;
+                }
+                base.WndProc(ref message);
             }
         }
 
