@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -249,16 +250,23 @@ namespace AudioDataPlugIn
                 compareTwoButton.UseVisualStyleBackColor = true;
                 compareTwoButton.Click += delegate { CompareTwoLogs(); };
 
+                Button musicBrainzButton = new Button();
+                musicBrainzButton.AutoSize = true;
+                musicBrainzButton.Text = "Add Disc ID to MusicBrainz...";
+                musicBrainzButton.UseVisualStyleBackColor = true;
+                musicBrainzButton.Click += delegate { SubmitDisplayedCdTocToMusicBrainz(); };
+
                 FlowLayoutPanel buttons = new FlowLayoutPanel();
                 buttons.AutoSize = true;
                 buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
                 buttons.Dock = DockStyle.Bottom;
                 buttons.FlowDirection = FlowDirection.LeftToRight;
                 buttons.Padding = new Padding(8, 7, 8, 7);
-                buttons.WrapContents = false;
+                buttons.WrapContents = true;
                 buttons.Controls.Add(copyButton);
                 buttons.Controls.Add(compareButton);
                 buttons.Controls.Add(compareTwoButton);
+                buttons.Controls.Add(musicBrainzButton);
 
                 cdTocWindow = new Form();
                 cdTocWindow.ClientSize = new Size(600, 420);
@@ -288,6 +296,26 @@ namespace AudioDataPlugIn
                 Log("Display CD TOC failed: " + error);
                 MessageBox.Show(
                     "EAC Enhancements could not display the current CD TOC.\r\n\r\n" +
+                    error.Message,
+                    "EAC Enhancements",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        private static void SubmitDisplayedCdTocToMusicBrainz()
+        {
+            try
+            {
+                string url = MusicBrainzToc.BuildSubmissionUrl(displayedCdTocEntries);
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception error)
+            {
+                Log("Open MusicBrainz CD TOC submission failed: " + error);
+                MessageBox.Show(
+                    cdTocWindow,
+                    "EAC Enhancements could not open the MusicBrainz disc ID submission page.\r\n\r\n" +
                     error.Message,
                     "EAC Enhancements",
                     MessageBoxButtons.OK,

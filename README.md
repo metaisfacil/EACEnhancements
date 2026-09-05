@@ -17,6 +17,7 @@ Exact Audio Copy that adds a number of quality-of-life features:
 - Improved responsiveness of progress window during secure mode rips
 - Album-level CD label, barcode, and catalog-number fields for external compressor tags
 - Copy/compare CD TOC against pre-existing log files to determine dupes
+- Submit the current CD's disc ID to MusicBrainz from the TOC dialog
 - External compressor argument templates up to 1,000 characters
 
 Exact Audio Copy 1.6 and 1.8 are supported. No patches or launcher needed.
