@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -352,11 +351,6 @@ namespace AudioDataPlugIn
 	{
 		string text = NormalizeRootFolder(settings.RootFolder);
 		string text2 = NormalizeFolderTemplate(settings.FolderTemplate);
-		string text3 = FolderTemplateFormatter.ResolveConditionalCurlyBraces(
-			FolderTemplateFormatter.ResolveConditionalParentheses(
-				ConvertBraceTokens(text2),
-				true),
-			true);
 		Directory.CreateDirectory(text);
 		string text4 = GetSettingsFilePath();
 		if (!NativeMethods.WritePrivateProfileStringW("OutputTemplate", "Root", text, text4) ||
@@ -402,8 +396,6 @@ namespace AudioDataPlugIn
 			settings.IncreaseExternalCompressorArgumentsLimit);
 		if (synchronizeLiveSettings)
 			SaveActiveProfileSettingsToRegistry();
-		string[] array = new string[4] { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
-		string[] array2 = new string[4] { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
 		using (RegistryKey registryKey = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
 		{
 			if (registryKey == null)
@@ -411,13 +403,6 @@ namespace AudioDataPlugIn
 				throw new InvalidOperationException("EAC's extraction settings could not be opened.");
 			}
 			registryKey.SetValue("DirectorySpecification", text, RegistryValueKind.String);
-			for (int i = 0; i < array.Length; i++)
-			{
-				string value = registryKey.GetValue(array[i], array2[i]) as string;
-				string text5 = NamingSchemeTail(value, array2[i]);
-				string value2 = (string.IsNullOrWhiteSpace(text3) ? text5 : (text3 + "\\" + text5));
-				registryKey.SetValue(array[i], value2, RegistryValueKind.String);
-			}
 		}
 		using (RegistryKey registryKey2 = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\StartUp Options"))
 		{
@@ -443,113 +428,73 @@ namespace AudioDataPlugIn
 			", logging=" + settings.EnableLogging + ".");
 	}
 
-	internal static void ApplyConditionalFolderTemplate(int year, string comment)
-	{
-		ApplyConditionalFolderTemplate(year, comment, true);
-	}
-
-	private static void ApplyConditionalFolderTemplate(
-		int year,
-		string comment,
-		bool synchronizeLiveSettings)
-	{
-		try
-		{
-			if (suppressWorkflowFolderTemplate)
-			{
-				Log("Conditional folder template skipped for a folderless 100% log rip.");
-				return;
-			}
-			string iniPath = GetSettingsFilePath();
-			string template = ReadIniValue(iniPath, "FolderTemplate", DefaultFolderTemplate);
-			if (!FolderTemplateFormatter.HasConditionalParentheses(template) &&
-				!FolderTemplateFormatter.HasConditionalCurlyBraces(template))
-				return;
-
-			Dictionary<string, string> metadata;
-			IntPtr mainWindow = ReadAbsolutePointer(layout.MainWindowGlobalVa);
-			if (mainWindow != IntPtr.Zero && NativeMethods.IsWindow(mainWindow))
-				metadata = ReadWorkflowFolderMetadata(mainWindow);
-			else
-				metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-			metadata["year"] = year > 0
-				? year.ToString(CultureInfo.InvariantCulture)
-				: String.Empty;
-			metadata["comment"] = comment ?? String.Empty;
-			Func<string, bool> includeConditional = delegate(string content)
-			{
-				return WorkflowFolderPath.ConditionalTokensHaveValues(
-					content,
-					metadata);
-			};
-			string effectiveFolder = FolderTemplateFormatter.ResolveConditionalCurlyBraces(
-				FolderTemplateFormatter.ResolveConditionalParentheses(
-					ConvertBraceTokens(NormalizeFolderTemplate(template)),
-					includeConditional),
-				includeConditional);
-			bool changed = false;
-			string[] names = { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
-			string[] defaults = { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
-			if (synchronizeLiveSettings)
-				SaveActiveProfileSettingsToRegistry();
-			using (RegistryKey key = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
-			{
-				if (key == null)
-					throw new InvalidOperationException("EAC's extraction settings could not be opened.");
-				for (int i = 0; i < names.Length; i++)
-				{
-					string current = key.GetValue(names[i], defaults[i]) as string;
-					string updated = string.IsNullOrWhiteSpace(effectiveFolder)
-						? NamingSchemeTail(current, defaults[i])
-						: effectiveFolder + "\\" + NamingSchemeTail(current, defaults[i]);
-					if (!String.Equals(current, updated, StringComparison.Ordinal))
-					{
-						key.SetValue(names[i], updated, RegistryValueKind.String);
-						changed = true;
-					}
-				}
-			}
-			// EAC's Options dialog can leave its in-memory naming scheme stale even
-			// when the registry already contains the correct template. Always reload
-			// the live settings before extraction rather than using registry changes
-			// as a proxy for whether a refresh is needed.
-			LiveSettingsRefreshDelegate refresh =
-				(LiveSettingsRefreshDelegate)Marshal.GetDelegateForFunctionPointer(
-					AddressFromStaticVa(layout.LiveSettingsRefreshVa),
-					typeof(LiveSettingsRefreshDelegate));
-			refresh();
-			Log("Conditional folder template applied for year=" + year +
-				", commentPresent=" + !String.IsNullOrWhiteSpace(comment) +
-				", registryChanged=" + changed +
-				": '" + effectiveFolder + "'.");
-		}
-		catch (Exception error)
-		{
-			Log("Conditional folder template could not be applied: " + error);
-		}
-	}
+	private static WorkflowNamingSchemes workflowNamingSchemes;
 
 	private static void ApplyTrackOnlyNamingSchemes()
 	{
-		string[] names = { "FileNamingConvention", "FileNamingConvention2nd", "VariousFileNamingConvention", "VariousFileNamingConvention2nd" };
-		string[] defaults = { "%tracknr2% - %title%", "%tracknr2% - %title%", "%artist% - %title%", "%artist% - %title%" };
 		SaveActiveProfileSettingsToRegistry();
-		using (RegistryKey key = Registry.CurrentUser.CreateSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
+		using (RegistryKey key = Registry.CurrentUser.CreateSubKey(ExtractionOptionsKey))
 		{
 			if (key == null)
 				throw new InvalidOperationException("EAC's extraction settings could not be opened.");
-			for (int index = 0; index < names.Length; index++)
-			{
-				string current = key.GetValue(names[index], defaults[index]) as string;
-				key.SetValue(names[index], NamingSchemeTail(current, defaults[index]), RegistryValueKind.String);
-			}
+			if (workflowNamingSchemes == null)
+				workflowNamingSchemes = WorkflowNamingSchemes.Capture(key);
+			workflowNamingSchemes.ApplyTrackOnly(key);
 		}
+		RefreshLiveOutputSettings();
+	}
+
+	private static void RestoreWorkflowNamingSchemes()
+	{
+		if (workflowNamingSchemes == null)
+			return;
+		using (RegistryKey key = Registry.CurrentUser.CreateSubKey(ExtractionOptionsKey))
+		{
+			if (key == null)
+				throw new InvalidOperationException("EAC's extraction settings could not be opened.");
+			workflowNamingSchemes.Restore(key);
+		}
+		RefreshLiveOutputSettings();
+		workflowNamingSchemes = null;
+	}
+
+	private static void RefreshLiveOutputSettings()
+	{
 		LiveSettingsRefreshDelegate refresh =
 			(LiveSettingsRefreshDelegate)Marshal.GetDelegateForFunctionPointer(
 				AddressFromStaticVa(layout.LiveSettingsRefreshVa),
 				typeof(LiveSettingsRefreshDelegate));
 		refresh();
-		Log("Folder template temporarily removed for the pending 100% log rip.");
+	}
+
+	private static void MigrateLegacyWorkflowNamingSchemes()
+	{
+		try
+		{
+			string iniPath = GetSettingsFilePath();
+			if (ReadIniValue(iniPath, "WorkflowOnlyFolderTemplates", "0") == "1")
+				return;
+			string template = ConvertBraceTokens(NormalizeFolderTemplate(
+				ReadIniValue(iniPath, "FolderTemplate", DefaultFolderTemplate)));
+			SaveActiveProfileSettingsToRegistry();
+			bool changed;
+			using (RegistryKey key = Registry.CurrentUser.CreateSubKey(ExtractionOptionsKey))
+			{
+				if (key == null)
+					throw new InvalidOperationException("EAC's extraction settings could not be opened.");
+				changed = WorkflowNamingSchemes.RemoveLegacyFolderPrefixes(key, template);
+			}
+			if (changed)
+				RefreshLiveOutputSettings();
+			if (!NativeMethods.WritePrivateProfileStringW(
+				"OutputTemplate", "WorkflowOnlyFolderTemplates", "1", iniPath))
+				throw new IOException("Could not record the workflow naming migration.");
+			Log("Workflow-only folder naming migration completed; namingSchemesChanged=" + changed + ".");
+		}
+		catch (Exception error)
+		{
+			Log("Workflow naming migration failed: " + error);
+		}
 	}
 
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -618,7 +563,7 @@ namespace AudioDataPlugIn
 		});
 	}
 
-	private static string NamingSchemeTail(string value, string fallback)
+	internal static string NamingSchemeTail(string value, string fallback)
 	{
 		string text = (string.IsNullOrWhiteSpace(value) ? fallback : value.Trim());
 		text = text.Replace('/', '\\');

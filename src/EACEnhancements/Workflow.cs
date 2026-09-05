@@ -181,14 +181,12 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.EmitCmpDwordAbsoluteImmediate8(RuntimeVa(layout.OutputPathModeVa), 0);
 		x86CodeBuilder.EmitJnz(RuntimeVa(layout.CueSavePromptVa));
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.CueSaveDefaultVa));
-		int offset13 = x86CodeBuilder.Offset;
-		x86CodeBuilder.EmitCmpByteAbsolute(address, 0);
-		int instructionOffset9 = x86CodeBuilder.EmitJzPlaceholder();
-		x86CodeBuilder.EmitJmp(RuntimeVa(layout.WaveformSaveDefaultVa));
-		int offset14 = x86CodeBuilder.Offset;
-		x86CodeBuilder.EmitCmpDwordAbsoluteImmediate8(RuntimeVa(layout.OutputPathModeVa), 1);
-		x86CodeBuilder.EmitJmp(RuntimeVa(layout.WaveformSaveResumeVa));
-		x86CodeBuilder.PatchBranch(instructionOffset9, x86CodeBuilder.AddressOf(offset14));
+		int offset13 = EmitWaveformSaveHook(
+			x86CodeBuilder,
+			address,
+			RuntimeVa(layout.OutputPathModeVa),
+			RuntimeVa(layout.WaveformSaveDefaultVa),
+			RuntimeVa(layout.WaveformSaveResumeVa));
 		int offset15 = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.CopyStatusCompleteFlagVa), 1);
 		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 0);
@@ -359,6 +357,27 @@ namespace AudioDataPlugIn
 		workflowInstalled = true;
 		workflowStatus = "active; payload=0x" + Pointer32(workflowCode).ToString("X8") + ", state=0x" + num.ToString("X8");
 		Log("100% log workflow " + workflowStatus + ".");
+	}
+
+	internal static int EmitWaveformSaveHook(
+		X86CodeBuilder code,
+		uint workflowAutoCloseAddress,
+		uint outputPathModeAddress,
+		uint defaultPathAddress,
+		uint promptAddress)
+	{
+		int hook = code.Offset;
+		code.EmitCmpByteAbsolute(workflowAutoCloseAddress, 0);
+		code.EmitJnz(defaultPathAddress);
+		// Replay BOTH displaced instructions for regular extraction. Ghidra:
+		// 1.8: 00623BE0 CMP [009940A4],1; JNZ 00623C68
+		// 1.6: 00620510 CMP [00830F14],1; JNZ 00620598
+		// EAC checks this mode again after the dialog. Showing the prompt in
+		// standard-directory mode makes it discard the chosen folder later.
+		code.EmitCmpDwordAbsoluteImmediate8(outputPathModeAddress, 1);
+		code.EmitJnz(defaultPathAddress);
+		code.EmitJmp(promptAddress);
+		return hook;
 	}
 
 	private static int EmitRangeEjectHook(
@@ -999,6 +1018,7 @@ namespace AudioDataPlugIn
 			{
 				Interlocked.Exchange(ref mainWindowSubclassInstalled, 1);
 				Log("Output settings window subclass active.");
+				MigrateLegacyWorkflowNamingSchemes();
 				try
 				{
 					MaybeInstallAlbumMetadataControls(mainWindow);
@@ -1856,8 +1876,6 @@ namespace AudioDataPlugIn
 	{
 		if (!suppressWorkflowFolderTemplate)
 			return;
-		suppressWorkflowFolderTemplate = false;
-		workflowOutputDirectory = null;
 		try
 		{
 			OutputTemplateSettings settings = LoadOutputTemplateSettings();
@@ -1865,28 +1883,16 @@ namespace AudioDataPlugIn
 			// the registry.  Do not save EAC's live settings after extraction:
 			// cancellation temporarily clears drive fields such as the detected
 			// read command, and EAC's global save routine would persist that state.
-			SaveOutputTemplateSettings(settings, false);
-			ApplyConditionalFolderTemplateFromMainWindow(mainWindow, false);
+			RestoreWorkflowNamingSchemes();
 			RestoreConfiguredOutputPath(settings.RootFolder);
-			Log("Folder template and configured output path restored after the 100% log workflow.");
+			suppressWorkflowFolderTemplate = false;
+			workflowOutputDirectory = null;
+			Log("Original naming schemes and configured output path restored after the 100% log workflow.");
 		}
 		catch (Exception ex)
 		{
 			Log("Folder template could not be restored after the 100% log workflow: " + ex);
 		}
-	}
-
-	private static void ApplyConditionalFolderTemplateFromMainWindow(
-		IntPtr mainWindow,
-		bool synchronizeLiveSettings = true)
-	{
-		int year;
-		if (!Int32.TryParse(ReadChildControlText(mainWindow, 995), out year))
-			year = 0;
-		ApplyConditionalFolderTemplate(
-			year,
-			ReadChildControlText(mainWindow, 883),
-			synchronizeLiveSettings);
 	}
 
 	private static void PrepareDirectWorkflowDestination(string destination)

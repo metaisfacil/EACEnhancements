@@ -73,6 +73,11 @@ The destination works as follows:
 - **Ask every time**, with **Create new folders...** off: Manually choose the folder
   to directly receive the rip files.
 
+Album-folder templates apply only to the 100% log workflow. Regular EAC
+commands, including compressed Test & Copy (**Shift+F6**), use EAC's own
+filename settings. The workflow temporarily uses the filename portion of those
+settings and restores the full original schemes afterward.
+
 ## Plugin options
 
 Open **Action > EAC Enhancements Options...** to choose the extraction root,

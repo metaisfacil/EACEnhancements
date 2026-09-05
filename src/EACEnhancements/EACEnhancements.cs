@@ -65,9 +65,6 @@ namespace AudioDataPlugIn
             bool aroffset,
             int mode)
         {
-            EnhancementRuntime.ApplyConditionalFolderTemplate(
-                data == null ? 0 : data.Year,
-                data == null ? string.Empty : data.ExtendedDiscInformation);
             EnhancementRuntime.BeginRipSession(drivename, mode);
         }
 
