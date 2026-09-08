@@ -1674,10 +1674,11 @@ namespace AudioDataPlugIn
 						SaveOutputTemplateSettings(selectedSettings, true);
 						if (settings.CreateWorkflowFolders)
 						{
-							PrepareDedicatedWorkflowFolder(
+							if (!PrepareDedicatedWorkflowFolder(
 								mainWindow,
 								selectedSettings,
-								"100% log destination prepared");
+								"100% log destination prepared"))
+								return;
 						}
 						else
 						{
@@ -1687,10 +1688,11 @@ namespace AudioDataPlugIn
 				}
 				else
 				{
-					PrepareDedicatedWorkflowFolder(
+					if (!PrepareDedicatedWorkflowFolder(
 						mainWindow,
 						LoadOutputTemplateSettings(),
-						"100% log standard-directory destination prepared");
+						"100% log standard-directory destination prepared"))
+						return;
 				}
 			}
 
@@ -1939,7 +1941,7 @@ namespace AudioDataPlugIn
 			destination + "'.");
 	}
 
-	private static void PrepareDedicatedWorkflowFolder(
+	private static bool PrepareDedicatedWorkflowFolder(
 		IntPtr mainWindow,
 		OutputTemplateSettings settings,
 		string logPrefix)
@@ -1956,6 +1958,43 @@ namespace AudioDataPlugIn
 			metadata,
 			true,
 			characterReplacements);
+		if (Directory.Exists(destination))
+		{
+			string folderName = Path.GetFileName(destination.TrimEnd('\\'));
+			WorkflowFolderCollisionChoice choice;
+			using (WorkflowFolderCollisionDialog dialog =
+				new WorkflowFolderCollisionDialog(folderName))
+			{
+				dialog.ShowDialog(new WindowHandleOwner(mainWindow));
+				choice = dialog.Choice;
+			}
+
+			if (choice == WorkflowFolderCollisionChoice.Cancel)
+			{
+				Log("100% log workflow cancelled because the generated rip folder already exists.");
+				return false;
+			}
+			if (choice == WorkflowFolderCollisionChoice.SelectFolder)
+			{
+				string parentFolder;
+				string generatedFolderName;
+				WorkflowFolderPicker.GetInitialSelection(
+					destination,
+					out parentFolder,
+					out generatedFolderName);
+				string selectedFolder;
+				if (!WorkflowFolderPicker.TrySelect(
+					mainWindow,
+					parentFolder,
+					generatedFolderName,
+					out selectedFolder))
+				{
+					Log("100% log alternate-folder selection cancelled.");
+					return false;
+				}
+				destination = selectedFolder;
+			}
+		}
 		Directory.CreateDirectory(destination);
 
 		// EAC derives CUE, playlist, and log paths directly from these live
@@ -1967,6 +2006,7 @@ namespace AudioDataPlugIn
 		WriteEacPathBuffer(layout.StandardDirectoryPathVa, destination);
 		WriteEacPathBuffer(layout.ActualPathVa, destination);
 		Log(logPrefix + ": '" + destination + "'.");
+		return true;
 	}
 
 	private static Dictionary<char, string> ReadEacFilenameCharacterReplacements()

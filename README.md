@@ -79,6 +79,9 @@ commands, including compressed Test & Copy (**Shift+F6**), use EAC's own
 filename settings. The workflow temporarily uses the filename portion of those
 settings and restores the full original schemes afterward.
 
+If the generated album folder already exists, the workflow asks whether to use
+that folder, select a different folder name, or cancel before extraction begins.
+
 ## Plugin options
 
 Open **Action > EAC Enhancements Options...** to choose the extraction root,
