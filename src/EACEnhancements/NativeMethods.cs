@@ -27,6 +27,7 @@ namespace AudioDataPlugIn
         internal const uint WAIT_TIMEOUT = 0x00000102;
         internal const uint QS_ALLINPUT = 0x04FF;
         internal const uint MWMO_INPUTAVAILABLE = 0x0004;
+        internal const uint PM_NOREMOVE = 0x0000;
         internal const uint PM_REMOVE = 0x0001;
         internal const uint MF_BYCOMMAND = 0x00000000;
         internal const uint MF_BYPOSITION = 0x00000400;
@@ -61,8 +62,14 @@ namespace AudioDataPlugIn
         internal const uint WM_SYSKEYDOWN = 0x0104;
         internal const uint WM_CHAR = 0x0102;
         internal const uint WM_IME_COMPOSITION = 0x010F;
+        internal const int HTCAPTION = 2;
+        internal const uint WM_NCMOUSEMOVE = 0x00A0;
+        internal const uint WM_NCLBUTTONDOWN = 0x00A1;
+        internal const uint WM_NCRBUTTONDOWN = 0x00A4;
         internal const uint WM_LBUTTONUP = 0x0202;
         internal const uint WM_MOUSEMOVE = 0x0200;
+        internal const uint WM_MBUTTONDBLCLK = 0x0209;
+        internal const uint WM_MOUSEHOVER = 0x02A1;
         internal const uint WM_MOUSELEAVE = 0x02A3;
         internal const uint WM_CUT = 0x0300;
         internal const uint WM_PASTE = 0x0302;
@@ -300,6 +307,10 @@ namespace AudioDataPlugIn
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool SetEvent(IntPtr handle);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool ResetEvent(IntPtr handle);
 
         [DllImport("user32.dll", SetLastError = true)]
         internal static extern uint MsgWaitForMultipleObjectsEx(

@@ -189,6 +189,8 @@ namespace AudioDataPlugIn
             workflowCallWndProcHookDelegate = WorkflowCallWndProc;
         private static readonly CallWndProcHookDelegate
             workflowGetMessageHookDelegate = WorkflowGetMessage;
+        private static readonly CallWndProcHookDelegate
+            scanDialogModalLoopGuardDelegate = ScanDialogModalLoopGuard;
         private static readonly MainWindowSubclassDelegate
             mainWindowSubclassDelegate = MainWindowSubclass;
         private static readonly MainWindowSubclassDelegate
@@ -222,6 +224,12 @@ namespace AudioDataPlugIn
         private static int assistedPumpCount;
         private static int audioTransferCount;
         private static bool firstAssistLogged;
+        private static int subChannelAssistCount;
+        private static bool subChannelAssistLogged;
+        private static IntPtr scanDialogModalLoopGuardHook;
+        private static int scanDialogModalLoopGuardThreadId;
+        private static bool scanDialogModalLoopGuardAttempted;
+        private static bool scanDialogModalLoopGuardLogged;
         private static DateTime ripSessionStartedUtc;
         private static int ripSessionGeneration;
         private static int ripSessionSuspiciousCount;
@@ -231,6 +239,16 @@ namespace AudioDataPlugIn
 
         [ThreadStatic]
         private static bool insideAssistedPump;
+
+        // Set only while the sub-channel assist dispatches a message, so the
+        // WH_GETMESSAGE guard acts on nested modal loops (a caption drag) and
+        // not on the plugin's own message retrieval.
+        [ThreadStatic]
+        private static bool scanDialogModalLoopGuardActive;
+        [ThreadStatic]
+        private static IntPtr scanDialogModalLoopDialog;
+        [ThreadStatic]
+        private static List<NativeMethods.MSG> scanDialogModalLoopDeferred;
 
         internal static string HookStatus
         {
