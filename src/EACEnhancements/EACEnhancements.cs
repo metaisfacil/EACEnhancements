@@ -224,8 +224,9 @@ namespace AudioDataPlugIn
         private static int assistedPumpCount;
         private static int audioTransferCount;
         private static bool firstAssistLogged;
-        private static int subChannelAssistCount;
-        private static bool subChannelAssistLogged;
+        private static int analyzingDialogAssistCount;
+        private static bool analyzingDialogAssistLogged;
+        private static bool unrecognizedModalDialogLogged;
         private static IntPtr scanDialogModalLoopGuardHook;
         private static int scanDialogModalLoopGuardThreadId;
         private static bool scanDialogModalLoopGuardAttempted;

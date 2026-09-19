@@ -63,6 +63,7 @@ namespace AudioDataPlugIn
         internal const uint WM_CHAR = 0x0102;
         internal const uint WM_IME_COMPOSITION = 0x010F;
         internal const int HTCAPTION = 2;
+        internal const int DWLP_DLGPROC = 4;
         internal const uint WM_NCMOUSEMOVE = 0x00A0;
         internal const uint WM_NCLBUTTONDOWN = 0x00A1;
         internal const uint WM_NCRBUTTONDOWN = 0x00A4;

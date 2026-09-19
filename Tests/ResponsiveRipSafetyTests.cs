@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 
 namespace AudioDataPlugIn
 {
@@ -73,15 +72,30 @@ namespace AudioDataPlugIn
             AssertNested(NativeMethods.WM_MOUSEMOVE, other, dialog, false);
             AssertNested(NativeMethods.WM_MOUSEMOVE, dialog, IntPtr.Zero, false);
 
-            AssertSubChannelQuery(0x02, 10, 0x42, 0x40, 0x02, true);
-            AssertSubChannelQuery(0x02, 10, 0x42, 0x40, 0x03, true);
-            AssertSubChannelQuery(0x02, 10, 0x42, 0x40, 0x01, false);
-            AssertSubChannelQuery(0x02, 10, 0x42, 0x00, 0x02, false);
-            AssertSubChannelQuery(0x02, 10, 0xBE, 0x40, 0x02, false);
-            AssertSubChannelQuery(0x02, 12, 0x42, 0x40, 0x02, false);
-            AssertSubChannelQuery(0x00, 10, 0x42, 0x40, 0x02, false);
-            if (EnhancementRuntime.IsSubChannelCodeQuery(IntPtr.Zero))
-                throw new Exception("A null SRB was classified as a sub-channel query.");
+            // Every supported executable lists its own three cue sheet
+            // "Analyzing" dialog procedures (gaps, second pass, UPC/ISRC).
+            foreach (EacVersionLayout layout in EacVersionLayout.KnownLayouts)
+            {
+                uint[] procs = layout.AnalyzingDialogProcVas;
+                if (procs == null || procs.Length != 3)
+                    throw new Exception(layout.Name + " must list three Analyzing dialog procedures.");
+                foreach (uint proc in procs)
+                {
+                    if (proc == 0 || !EnhancementRuntime.IsAnalyzingDialogProc(procs, proc))
+                        throw new Exception(layout.Name + " has an unusable Analyzing dialog procedure.");
+                }
+                if (EnhancementRuntime.IsAnalyzingDialogProc(procs, 0) ||
+                    EnhancementRuntime.IsAnalyzingDialogProc(procs, 0x00401000))
+                    throw new Exception(layout.Name + " matched an unknown dialog procedure.");
+            }
+            foreach (uint proc in EacVersionLayout.KnownLayouts[0].AnalyzingDialogProcVas)
+            {
+                if (EnhancementRuntime.IsAnalyzingDialogProc(
+                    EacVersionLayout.KnownLayouts[1].AnalyzingDialogProcVas, proc))
+                    throw new Exception("Analyzing dialog procedures must differ between EAC versions.");
+            }
+            if (EnhancementRuntime.IsAnalyzingDialogProc(null, 0x004F1300))
+                throw new Exception("A missing procedure list matched a dialog.");
 
             Console.WriteLine("Responsive rip reentrancy safety tests passed.");
             return 0;
@@ -161,42 +175,6 @@ namespace AudioDataPlugIn
                     "Unexpected modal-loop guard policy for message 0x" +
                     message.ToString("X") + " to 0x" + hwnd.ToInt64().ToString("X") +
                     " with dialog 0x" + scanDialog.ToInt64().ToString("X") + ".");
-            }
-        }
-
-        // Builds an ASPI SRB_ExecSCSICmd image the way EAC's UPC/ISRC readers do
-        // and checks whether the completion hook would assist its wait.
-        private static void AssertSubChannelQuery(
-            byte srbCommand,
-            byte cdbLength,
-            byte opcode,
-            byte subQ,
-            byte format,
-            bool expected)
-        {
-            IntPtr srb = Marshal.AllocHGlobal(0x50);
-            try
-            {
-                for (int i = 0; i < 0x50; i++)
-                    Marshal.WriteByte(srb, i, 0);
-                Marshal.WriteByte(srb, 0x00, srbCommand);
-                Marshal.WriteByte(srb, 0x15, cdbLength);
-                Marshal.WriteByte(srb, 0x30, opcode);
-                Marshal.WriteByte(srb, 0x32, subQ);
-                Marshal.WriteByte(srb, 0x33, format);
-                Marshal.WriteByte(srb, 0x38, 0x18);
-                bool actual = EnhancementRuntime.IsSubChannelCodeQuery(srb);
-                if (actual != expected)
-                {
-                    throw new Exception(
-                        "Unexpected sub-channel query classification for CDB " +
-                        opcode.ToString("X2") + "/" + subQ.ToString("X2") + "/" +
-                        format.ToString("X2") + ".");
-                }
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(srb);
             }
         }
     }

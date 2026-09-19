@@ -94,23 +94,15 @@ namespace AudioDataPlugIn
 		return result;
 	}
 
-	// ASPI SRB_ExecSCSICmd layout.  EAC issues every drive command through one
-	// global SRB and passes its address to the completion routine this hook wraps.
-	private const int SrbCommandOffset = 0x00;
+	// ASPI SRB_ExecSCSICmd: EAC issues every drive command through one global
+	// SRB and passes its address to the completion routine this hook wraps.
 	private const int SrbStatusOffset = 0x01;
-	private const int SrbCdbLengthOffset = 0x15;
-	private const int SrbCdbOffset = 0x30;
-	private const byte SrbExecScsiCommand = 0x02;
-	private const byte ScsiReadSubChannel = 0x42;
-	private const byte SubChannelSubQ = 0x40;
-	private const byte SubChannelMediaCatalogNumber = 0x02;
-	private const byte SubChannelIsrc = 0x03;
 
 	private enum AssistedWait
 	{
 		None,
 		RipSession,
-		SubChannelCodeQuery
+		AnalyzingDialog
 	}
 
 	private static bool WaitForCommandWhilePumping(
@@ -133,8 +125,8 @@ namespace AudioDataPlugIn
 		}
 
 		// EAC normally waits forever here.  Slow corrective reads can therefore
-		// starve the rip dialog for seconds at a time, and the cue sheet UPC/ISRC
-		// scan blocks its dialog once per query (twice per absent code).  Drain
+		// starve the rip dialog for seconds at a time, and cue sheet creation
+		// blocks its gap-detection and UPC/ISRC dialogs once per command.  Drain
 		// queued work so input cannot prevent Windows from generating low-priority
 		// paint messages, but dispatch only what the wait kind allows.  Hold
 		// everything else and repost it after the drive event completes;
@@ -202,39 +194,16 @@ namespace AudioDataPlugIn
 		{
 			return AssistedWait.RipSession;
 		}
-		// The cue sheet UPC/ISRC scan runs from a dialog procedure on EAC's UI
-		// thread outside any rip session (and can outlive EndOfSession during
-		// finalization).  Assist only the two READ SUB-CHANNEL queries it issues,
-		// and only when this thread owns the windows that need servicing.
-		if (IsSubChannelCodeQuery(commandState) &&
-			IsMainWindowThread(currentThreadId))
+		// Cue sheet creation runs gap detection and the UPC/ISRC scan from
+		// modal "Analyzing" dialog procedures on EAC's UI thread outside any rip
+		// session (and possibly after EndOfSession during finalization).  Assist
+		// only while one of those known dialogs is up and this thread owns it.
+		if (IsMainWindowThread(currentThreadId) &&
+			FindAnalyzingDialog() != IntPtr.Zero)
 		{
-			return AssistedWait.SubChannelCodeQuery;
+			return AssistedWait.AnalyzingDialog;
 		}
 		return AssistedWait.None;
-	}
-
-	internal static bool IsSubChannelCodeQuery(IntPtr commandState)
-	{
-		if (commandState == IntPtr.Zero)
-		{
-			return false;
-		}
-		if (Marshal.ReadByte(Add(commandState, SrbCommandOffset)) !=
-				SrbExecScsiCommand ||
-			Marshal.ReadByte(Add(commandState, SrbCdbLengthOffset)) != 10)
-		{
-			return false;
-		}
-		IntPtr cdb = Add(commandState, SrbCdbOffset);
-		if (Marshal.ReadByte(cdb) != ScsiReadSubChannel ||
-			Marshal.ReadByte(Add(cdb, 2)) != SubChannelSubQ)
-		{
-			return false;
-		}
-		byte format = Marshal.ReadByte(Add(cdb, 3));
-		return format == SubChannelMediaCatalogNumber ||
-			format == SubChannelIsrc;
 	}
 
 	private static bool IsMainWindowThread(uint threadId)
@@ -250,11 +219,12 @@ namespace AudioDataPlugIn
 				threadId;
 	}
 
-	// Locates the modal dialog driving the UPC/ISRC scan: the main window's
-	// most recently active popup while the main window itself is disabled.
-	// Returns zero when no such dialog is up, which limits the assist to
-	// paint and timer messages.
-	private static IntPtr FindSubChannelScanDialog()
+	// Locates a known "Analyzing" dialog: the main window's most recently
+	// active popup while the main window itself is disabled, whose dialog
+	// procedure is one EAC uses for gap or UPC/ISRC detection.  EAC hands the
+	// procedure straight to DialogBoxParamW, so DWLP_DLGPROC identifies it.
+	// Returns zero for any other window, which disables the assist.
+	private static IntPtr FindAnalyzingDialog()
 	{
 		IntPtr mainWindow = ReadAbsolutePointer(layout.MainWindowGlobalVa);
 		if (mainWindow == IntPtr.Zero ||
@@ -270,7 +240,38 @@ namespace AudioDataPlugIn
 		{
 			return IntPtr.Zero;
 		}
-		return popup;
+		uint dialogProc = (uint)NativeMethods.GetWindowLongW(
+			popup,
+			NativeMethods.DWLP_DLGPROC);
+		if (IsAnalyzingDialogProc(layout.AnalyzingDialogProcVas, dialogProc))
+		{
+			return popup;
+		}
+		if (!unrecognizedModalDialogLogged)
+		{
+			unrecognizedModalDialogLogged = true;
+			Log(
+				"Drive command issued under modal dialog 0x" +
+				popup.ToInt64().ToString("X8") + " with dialog procedure 0x" +
+				dialogProc.ToString("X8") + "; not assisted.");
+		}
+		return IntPtr.Zero;
+	}
+
+	internal static bool IsAnalyzingDialogProc(uint[] knownProcs, uint dialogProc)
+	{
+		if (knownProcs == null || dialogProc == 0)
+		{
+			return false;
+		}
+		foreach (uint known in knownProcs)
+		{
+			if (known == dialogProc)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static uint PumpOneMessage(
@@ -288,8 +289,8 @@ namespace AudioDataPlugIn
 		{
 			return NativeMethods.WAIT_TIMEOUT;
 		}
-		IntPtr scanDialog = kind == AssistedWait.SubChannelCodeQuery
-			? FindSubChannelScanDialog()
+		IntPtr scanDialog = kind == AssistedWait.AnalyzingDialog
+			? FindAnalyzingDialog()
 			: IntPtr.Zero;
 		bool modalLoopGuarded = scanDialog != IntPtr.Zero &&
 			EnsureScanDialogModalLoopGuard(currentThreadId);
@@ -341,13 +342,13 @@ namespace AudioDataPlugIn
 			}
 			else
 			{
-				subChannelAssistCount++;
-				if (!subChannelAssistLogged)
+				analyzingDialogAssistCount++;
+				if (!analyzingDialogAssistLogged)
 				{
-					subChannelAssistLogged = true;
+					analyzingDialogAssistLogged = true;
 					Log(
-						"Sub-channel code query assist activated on thread " +
-						currentThreadId + "; scan dialog 0x" +
+						"Analyzing dialog assist activated on thread " +
+						currentThreadId + "; dialog 0x" +
 						scanDialog.ToInt64().ToString("X8") + ".");
 				}
 			}
@@ -374,7 +375,7 @@ namespace AudioDataPlugIn
 		IntPtr scanDialog,
 		List<NativeMethods.MSG> deferredMessages)
 	{
-		if (kind != AssistedWait.SubChannelCodeQuery)
+		if (kind != AssistedWait.AnalyzingDialog)
 		{
 			NativeMethods.DispatchMessageW(ref message);
 			return;
@@ -530,11 +531,11 @@ namespace AudioDataPlugIn
 		// session is exempt only because ripping sets the busy flag that skips
 		// the poll.
 		//
-		// A single UPC/ISRC query can take the drive hundreds of milliseconds, so
-		// deferring input for its duration makes the scan dialog visibly stutter.
-		// Unlike the rip dialog, its window procedure only records Cancel in a
-		// flag that EAC checks between queries; it never re-enters the drive or
-		// ends the dialog.  Service client-area mouse traffic aimed at that
+		// A single gap-detection or UPC/ISRC command can take the drive hundreds
+		// of milliseconds, so deferring input for its duration makes the dialog
+		// visibly stutter.  Unlike the rip dialog, these window procedures only
+		// record Cancel in a flag that EAC checks between commands; they never
+		// re-enter the drive or end the dialog.  Service client-area mouse traffic aimed at that
 		// dialog and its controls: that covers hover, cursor updates and the
 		// Cancel button, whose click sends WM_COMMAND synchronously.  Nothing
 		// else is dispatched.  Other non-client presses and Alt/F10 keys would
