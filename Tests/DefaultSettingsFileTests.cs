@@ -38,6 +38,8 @@ namespace AudioDataPlugIn
                     contents,
                     "IncreaseExternalCompressorArgumentsLimit=1");
                 AssertContains(contents, "EnableLogging=0");
+                AssertContains(contents,
+                    "ShowAdditionalWorkflows=0");
 
                 const string sentinel = "[OutputTemplate]\r\nEnableLogging=1\r\nCustom=keep\r\n";
                 File.WriteAllText(iniPath, sentinel, Encoding.Unicode);

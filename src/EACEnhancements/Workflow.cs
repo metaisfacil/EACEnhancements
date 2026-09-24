@@ -47,6 +47,8 @@ namespace AudioDataPlugIn
 	private const uint CdisDropHilited = 0x00001000;
 	internal const uint HtoaTrackBackgroundColor = 0x00E1E1E1;
 	private const string HtoaDefaultRangeFilename = "HTOA.flac";
+	private const string FullDiscDefaultRangeFilenameTemplate =
+		"%albumartist% - %albumtitle%.flac";
 	private const int RangeOutputPathBufferBytes = 8192;
 	private static readonly byte[] ExpectedLiveSettingsRefreshPrologue =
 		Hex("55 89 E5 89 84 24 00 F0 FF FF 81 EC 48 18 00 00");
@@ -83,8 +85,8 @@ namespace AudioDataPlugIn
 			layout.LiveSettingsRefreshVa,
 			ExpectedLiveSettingsRefreshPrologue,
 			"live settings refresh");
-		workflowCode = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(4096u), 12288u, 64u);
-		workflowData = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(16384u), 12288u, 4u);
+		workflowCode = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(8192u), 12288u, 64u);
+		workflowData = NativeMethods.VirtualAlloc(IntPtr.Zero, new UIntPtr(32768u), 12288u, 4u);
 		if (workflowCode == IntPtr.Zero || workflowData == IntPtr.Zero)
 		{
 			throw new InvalidOperationException("VirtualAlloc for the workflow payload failed with Win32 error " + Marshal.GetLastWin32Error() + ".");
@@ -97,6 +99,8 @@ namespace AudioDataPlugIn
 		uint htoaBeepCountersAddress = num + 116;
 		uint htoaDefaultFilenameAddress = num + 128;
 		uint htoaOutputPathAddress = num + 256;
+		uint fullDiscStateAddress = num + 103;
+		uint fullDiscOutputPathAddress = num + 9216;
 		byte[] htoaDefaultFilenameBytes = Encoding.Unicode.GetBytes(HtoaDefaultRangeFilename + "\0");
 		Marshal.Copy(
 			htoaDefaultFilenameBytes,
@@ -110,6 +114,8 @@ namespace AudioDataPlugIn
 		EnhancementRuntime.htoaOutputPathAddress = htoaOutputPathAddress;
 		htoaEjectCounterAddress = htoaEjectCountersAddress;
 		htoaBeepCounterAddress = htoaBeepCountersAddress;
+		fullDiscRangeStateAddress = fullDiscStateAddress;
+		EnhancementRuntime.fullDiscOutputPathAddress = fullDiscOutputPathAddress;
 		X86CodeBuilder x86CodeBuilder = new X86CodeBuilder(workflowCode);
 		int offset = x86CodeBuilder.Offset;
 		x86CodeBuilder.Emit(Hex("3D 14 03 00 00"));
@@ -143,6 +149,8 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.PatchBranch(instructionOffset3, x86CodeBuilder.AddressOf(offset3));
 		x86CodeBuilder.PatchBranch(instructionOffset4, x86CodeBuilder.AddressOf(offset2));
 		int offset6 = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 4);
+		int fullDiscGapsBranch = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 2);
 		int instructionOffset5 = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 1);
@@ -158,7 +166,14 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.GapsResumeVa));
 		x86CodeBuilder.PatchBranch(instructionOffset5, x86CodeBuilder.AddressOf(offset8));
 		x86CodeBuilder.PatchBranch(instructionOffset6, x86CodeBuilder.AddressOf(offset7));
+		int fullDiscGaps = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.ChainFlagVa), 5);
+		EmitPostCommand(x86CodeBuilder, 586u);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.GapsResumeVa));
+		x86CodeBuilder.PatchBranch(fullDiscGapsBranch, x86CodeBuilder.AddressOf(fullDiscGaps));
 		int offset9 = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 5);
+		int fullDiscCueBranch = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 3);
 		int instructionOffset7 = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 1);
@@ -175,8 +190,16 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.CueChainResumeVa));
 		x86CodeBuilder.PatchBranch(instructionOffset7, x86CodeBuilder.AddressOf(offset11));
 		x86CodeBuilder.PatchBranch(instructionOffset8, x86CodeBuilder.AddressOf(offset10));
+		int fullDiscCue = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCopyBytesPreservingRegisters(num, RuntimeVa(layout.TrackSelectionArrayVa), TrackSelectionCount);
+		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.ChainFlagVa), 0);
+		EmitPostCommand(x86CodeBuilder, StartFullDiscRangeCommand);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.CueChainResumeVa));
+		x86CodeBuilder.PatchBranch(fullDiscCueBranch, x86CodeBuilder.AddressOf(fullDiscCue));
 		int offset12 = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 3);
+		x86CodeBuilder.EmitJz(RuntimeVa(layout.CueSaveDefaultVa));
+		x86CodeBuilder.EmitCmpByteAbsolute(RuntimeVa(layout.ChainFlagVa), 5);
 		x86CodeBuilder.EmitJz(RuntimeVa(layout.CueSaveDefaultVa));
 		x86CodeBuilder.EmitCmpDwordAbsoluteImmediate8(RuntimeVa(layout.OutputPathModeVa), 0);
 		x86CodeBuilder.EmitJnz(RuntimeVa(layout.CueSavePromptVa));
@@ -208,6 +231,25 @@ namespace AudioDataPlugIn
 		int regularCompletion = x86CodeBuilder.Offset;
 		x86CodeBuilder.PatchBranch(htoaInactiveBranch, x86CodeBuilder.AddressOf(regularCompletion));
 		x86CodeBuilder.PatchBranch(htoaFirstPassBranch, x86CodeBuilder.AddressOf(htoaFirstPass));
+		x86CodeBuilder.EmitCmpByteAbsolute(fullDiscStateAddress, 0);
+		int fullDiscInactiveBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.Emit(Hex("6A 00"));
+		x86CodeBuilder.EmitPushImmediate(811u);
+		x86CodeBuilder.EmitPushImmediate(273u);
+		x86CodeBuilder.Emit(Hex("FF 75 08"));
+		x86CodeBuilder.EmitCall(RuntimeVa(layout.PostMessageWThunkVa));
+		x86CodeBuilder.EmitCmpByteAbsolute(fullDiscStateAddress, 1);
+		int fullDiscFirstPassBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.EmitMovByteAbsolute(fullDiscStateAddress, 0);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RipCompleteResumeVa));
+		int fullDiscFirstPass = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
+		x86CodeBuilder.EmitMovByteAbsolute(fullDiscStateAddress, 2);
+		EmitPostCommand(x86CodeBuilder, StartFullDiscSecondPassCommand);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RipCompleteResumeVa));
+		int standardCompletion = x86CodeBuilder.Offset;
+		x86CodeBuilder.PatchBranch(fullDiscInactiveBranch, x86CodeBuilder.AddressOf(standardCompletion));
+		x86CodeBuilder.PatchBranch(fullDiscFirstPassBranch, x86CodeBuilder.AddressOf(fullDiscFirstPass));
 		x86CodeBuilder.EmitCmpByteAbsolute(address, 0);
 		int instructionOffset10 = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitMovByteAbsolute(address, 0);
@@ -225,10 +267,20 @@ namespace AudioDataPlugIn
 		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.RangeDialogAcceptedFlagVa), 1);
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeDialogBypassVa));
 		int regularRangeDialog = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(fullDiscStateAddress, 0);
+		int regularFullDiscRangeDialogBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.RangeDialogAcceptedFlagVa), 1);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeDialogBypassVa));
+		int standardRangeDialog = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitMovByteAbsolute(RuntimeVa(layout.RangeDialogAcceptedFlagVa), 0);
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeDialogResumeVa));
 		x86CodeBuilder.PatchBranch(regularRangeDialogBranch, x86CodeBuilder.AddressOf(regularRangeDialog));
+		x86CodeBuilder.PatchBranch(regularFullDiscRangeDialogBranch, x86CodeBuilder.AddressOf(standardRangeDialog));
 		int rangeSaveHook = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCmpByteAbsolute(fullDiscStateAddress, 3);
+		int reuseFullDiscOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
+		x86CodeBuilder.EmitCmpByteAbsolute(fullDiscStateAddress, 1);
+		int useFullDiscOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 3);
 		int reuseHtoaOutputPathBranch = x86CodeBuilder.EmitJzPlaceholder();
 		x86CodeBuilder.EmitCmpByteAbsolute(htoaStateAddress, 1);
@@ -236,6 +288,14 @@ namespace AudioDataPlugIn
 		int promptWithCurrentFilename = x86CodeBuilder.Offset;
 		x86CodeBuilder.Emit(Hex("68 FF 0F 00 00"));
 		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveResumeVa));
+		int reuseFullDiscOutputPath = x86CodeBuilder.Offset;
+		x86CodeBuilder.EmitCopyBytesPreservingRegisters(
+			fullDiscOutputPathAddress,
+			RuntimeVa(layout.RangeOutputPathVa),
+			RangeOutputPathBufferBytes);
+		x86CodeBuilder.EmitJmp(RuntimeVa(layout.RangeSaveBypassVa));
+		x86CodeBuilder.PatchBranch(useFullDiscOutputPathBranch, x86CodeBuilder.AddressOf(reuseFullDiscOutputPath));
+		x86CodeBuilder.PatchBranch(reuseFullDiscOutputPathBranch, x86CodeBuilder.AddressOf(reuseFullDiscOutputPath));
 		int useHtoaDefaultFilename = x86CodeBuilder.Offset;
 		x86CodeBuilder.EmitCmpByteAbsolute(commandLineHtoaAddress, 0);
 		int interactiveHtoaFilenameBranch =
@@ -284,6 +344,7 @@ namespace AudioDataPlugIn
 		int rangeEjectHook1 = EmitRangeEjectHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			fullDiscStateAddress,
 			commandLineHtoaAddress,
 			htoaEjectCountersAddress,
 			layout.RangeEjectResume1Va,
@@ -291,6 +352,7 @@ namespace AudioDataPlugIn
 		int rangeEjectHook2 = EmitRangeEjectHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			fullDiscStateAddress,
 			commandLineHtoaAddress,
 			htoaEjectCountersAddress + 4,
 			layout.RangeEjectResume2Va,
@@ -298,6 +360,7 @@ namespace AudioDataPlugIn
 		int rangeEjectHook3 = EmitRangeEjectHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			fullDiscStateAddress,
 			commandLineHtoaAddress,
 			htoaEjectCountersAddress + 8,
 			layout.RangeEjectResume3Va,
@@ -305,6 +368,7 @@ namespace AudioDataPlugIn
 		int rangeBeepHook1 = EmitRangeBeepHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			fullDiscStateAddress,
 			commandLineHtoaAddress,
 			htoaBeepCountersAddress,
 			layout.RangeBeepResume1Va,
@@ -312,6 +376,7 @@ namespace AudioDataPlugIn
 		int rangeBeepHook2 = EmitRangeBeepHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			fullDiscStateAddress,
 			commandLineHtoaAddress,
 			htoaBeepCountersAddress + 4,
 			layout.RangeBeepResume2Va,
@@ -319,20 +384,26 @@ namespace AudioDataPlugIn
 		int rangeBeepHook3 = EmitRangeBeepHook(
 			x86CodeBuilder,
 			htoaStateAddress,
+			fullDiscStateAddress,
 			commandLineHtoaAddress,
 			htoaBeepCountersAddress + 8,
 			layout.RangeBeepResume3Va,
 			layout.RangeBeepSkip3Va);
 		int rangeHibernateInitHook = EmitRangeHibernateInitHook(
 			x86CodeBuilder,
-			htoaStateAddress);
+			htoaStateAddress,
+			fullDiscStateAddress);
 		int rangeHibernateCheckboxHook = EmitRangeHibernateCheckboxHook(
 			x86CodeBuilder,
-			htoaStateAddress);
+			htoaStateAddress,
+			fullDiscStateAddress);
 		int rangeHibernateDecisionHook = EmitRangeHibernateDecisionHook(
 			x86CodeBuilder,
-			htoaStateAddress);
+			htoaStateAddress,
+			fullDiscStateAddress);
 		byte[] array2 = x86CodeBuilder.ToArray();
+		if (array2.Length > 8192)
+			throw new InvalidOperationException("The workflow payload exceeds its allocated code buffer.");
 		Marshal.Copy(array2, 0, workflowCode, array2.Length);
 		NativeMethods.FlushInstructionCache(NativeMethods.GetCurrentProcess(), workflowCode, new UIntPtr((uint)array2.Length));
 		WriteJumpPatch(layout.RipCompleteHookVa, x86CodeBuilder.AddressOf(offset15), 7);
@@ -383,6 +454,7 @@ namespace AudioDataPlugIn
 	private static int EmitRangeEjectHook(
 		X86CodeBuilder code,
 		uint htoaStateAddress,
+		uint fullDiscStateAddress,
 		uint commandLineHtoaAddress,
 		uint counterAddress,
 		uint normalResumeVa,
@@ -396,22 +468,31 @@ namespace AudioDataPlugIn
 		code.EmitCmpByteAbsolute(commandLineHtoaAddress, 2);
 		int suppressBetweenCommandLineWorkflows =
 			code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 1);
+		int suppressFullDiscPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 2);
+		int suppressFullDiscPass1Unwind = code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(RuntimeVa(layout.EjectWhenDoneVa), 0);
 		code.EmitJmp(RuntimeVa(normalResumeVa));
 		int suppress = code.Offset;
 		code.EmitIncrementDwordAbsolute(counterAddress);
+		code.EmitJmp(RuntimeVa(suppressEjectVa));
+		int suppressFullDisc = code.Offset;
 		code.EmitJmp(RuntimeVa(suppressEjectVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
 		code.PatchBranch(
 			suppressBetweenCommandLineWorkflows,
 			code.AddressOf(suppress));
+		code.PatchBranch(suppressFullDiscPass1, code.AddressOf(suppressFullDisc));
+		code.PatchBranch(suppressFullDiscPass1Unwind, code.AddressOf(suppressFullDisc));
 		return hook;
 	}
 
 	private static int EmitRangeBeepHook(
 		X86CodeBuilder code,
 		uint htoaStateAddress,
+		uint fullDiscStateAddress,
 		uint commandLineHtoaAddress,
 		uint counterAddress,
 		uint normalResumeVa,
@@ -425,20 +506,28 @@ namespace AudioDataPlugIn
 		code.EmitCmpByteAbsolute(commandLineHtoaAddress, 2);
 		int suppressBetweenCommandLineWorkflows =
 			code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 1);
+		int suppressFullDiscPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 2);
+		int suppressFullDiscPass1Unwind = code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(RuntimeVa(layout.BeepWhenDoneVa), 0);
 		code.EmitJmp(RuntimeVa(normalResumeVa));
 		int suppress = code.Offset;
 		code.EmitIncrementDwordAbsolute(counterAddress);
+		code.EmitJmp(RuntimeVa(suppressBeepVa));
+		int suppressFullDisc = code.Offset;
 		code.EmitJmp(RuntimeVa(suppressBeepVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
 		code.PatchBranch(
 			suppressBetweenCommandLineWorkflows,
 			code.AddressOf(suppress));
+		code.PatchBranch(suppressFullDiscPass1, code.AddressOf(suppressFullDisc));
+		code.PatchBranch(suppressFullDiscPass1Unwind, code.AddressOf(suppressFullDisc));
 		return hook;
 	}
 
-	private static int EmitRangeHibernateInitHook(X86CodeBuilder code, uint htoaStateAddress)
+	private static int EmitRangeHibernateInitHook(X86CodeBuilder code, uint htoaStateAddress, uint fullDiscStateAddress)
 	{
 		int hook = code.Offset;
 		code.EmitCmpByteAbsolute(htoaStateAddress, 0);
@@ -446,19 +535,29 @@ namespace AudioDataPlugIn
 		code.EmitMovByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
 		code.EmitJmp(RuntimeVa(layout.RangeHibernateInitResumeVa));
 		int regular = code.Offset;
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 0);
+		int standardInitialization = code.EmitJzPlaceholder();
+		code.EmitMovByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
+		code.EmitJmp(RuntimeVa(layout.RangeHibernateInitResumeVa));
+		int standard = code.Offset;
 		code.EmitMovAlToByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa));
 		code.EmitJmp(RuntimeVa(layout.RangeHibernateInitResumeVa));
 		code.PatchBranch(regularInitialization, code.AddressOf(regular));
+		code.PatchBranch(standardInitialization, code.AddressOf(standard));
 		return hook;
 	}
 
-	private static int EmitRangeHibernateCheckboxHook(X86CodeBuilder code, uint htoaStateAddress)
+	private static int EmitRangeHibernateCheckboxHook(X86CodeBuilder code, uint htoaStateAddress, uint fullDiscStateAddress)
 	{
 		int hook = code.Offset;
 		code.EmitCmpByteAbsolute(htoaStateAddress, 1);
 		int suppressDuringPass1 = code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
 		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 1);
+		int suppressFullDiscPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 2);
+		int suppressFullDiscPass1Unwind = code.EmitJzPlaceholder();
 		code.EmitMovAlToByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa));
 		code.EmitJmp(RuntimeVa(layout.RangeHibernateCheckboxResumeVa));
 		int suppress = code.Offset;
@@ -466,16 +565,22 @@ namespace AudioDataPlugIn
 		code.EmitJmp(RuntimeVa(layout.RangeHibernateCheckboxResumeVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		code.PatchBranch(suppressFullDiscPass1, code.AddressOf(suppress));
+		code.PatchBranch(suppressFullDiscPass1Unwind, code.AddressOf(suppress));
 		return hook;
 	}
 
-	private static int EmitRangeHibernateDecisionHook(X86CodeBuilder code, uint htoaStateAddress)
+	private static int EmitRangeHibernateDecisionHook(X86CodeBuilder code, uint htoaStateAddress, uint fullDiscStateAddress)
 	{
 		int hook = code.Offset;
 		code.EmitCmpByteAbsolute(htoaStateAddress, 1);
 		int suppressDuringPass1 = code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(htoaStateAddress, 2);
 		int suppressDuringPass1Unwind = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 1);
+		int suppressFullDiscPass1 = code.EmitJzPlaceholder();
+		code.EmitCmpByteAbsolute(fullDiscStateAddress, 2);
+		int suppressFullDiscPass1Unwind = code.EmitJzPlaceholder();
 		code.EmitCmpByteAbsolute(RuntimeVa(layout.RangeHibernateRequestedVa), 0);
 		code.EmitJmp(RuntimeVa(layout.RangeHibernateDecisionResumeVa));
 		int suppress = code.Offset;
@@ -483,6 +588,8 @@ namespace AudioDataPlugIn
 		code.EmitJmp(RuntimeVa(layout.RangeHibernateDecisionSkipVa));
 		code.PatchBranch(suppressDuringPass1, code.AddressOf(suppress));
 		code.PatchBranch(suppressDuringPass1Unwind, code.AddressOf(suppress));
+		code.PatchBranch(suppressFullDiscPass1, code.AddressOf(suppress));
+		code.PatchBranch(suppressFullDiscPass1Unwind, code.AddressOf(suppress));
 		return hook;
 	}
 
@@ -589,6 +696,7 @@ namespace AudioDataPlugIn
 			flag = true;
 			Log("Installed Action-menu command 0x" + HtoaWorkflowCommand.ToString("X") + ": " + HtoaWorkflowMenuText + ".");
 		}
+		UpdateAdditionalWorkflowMenu(mainWindow, AreAdditionalWorkflowsEnabled());
 		bool flag2 = NativeMethods.GetMenuState(intPtr, 41746u, 0u) != uint.MaxValue;
 		if (workflowInstalled && !flag2)
 		{
@@ -685,6 +793,96 @@ namespace AudioDataPlugIn
 		return RequestWorkflowButtonInstallation(mainWindow);
 	}
 
+	private static void UpdateAdditionalWorkflowMenu(IntPtr mainWindow, bool enabled)
+	{
+		IntPtr actionMenu = FindActionMenu(NativeMethods.GetMenu(mainWindow));
+		if (actionMenu == IntPtr.Zero)
+			return;
+		if (UpdateAdditionalWorkflowMenuItems(actionMenu, enabled && workflowInstalled))
+			NativeMethods.DrawMenuBar(mainWindow);
+	}
+
+	internal static bool UpdateAdditionalWorkflowMenuItems(IntPtr actionMenu, bool enabled)
+	{
+		bool present = NativeMethods.GetMenuState(actionMenu,
+			FullDiscRangeWorkflowCommand, NativeMethods.MF_BYCOMMAND) != uint.MaxValue;
+		if (enabled && !present)
+		{
+			int position = FindMenuCommandPosition(actionMenu, CustomWorkflowCommand);
+			if (position < 0)
+				throw new InvalidOperationException("Could not find the existing 100% log workflow in the Action menu.");
+			uint separatorPosition = (uint)(position + 1);
+			if (!NativeMethods.InsertMenuW(actionMenu, separatorPosition,
+				NativeMethods.MF_BYPOSITION | NativeMethods.MF_SEPARATOR,
+				UIntPtr.Zero, null))
+				throw new InvalidOperationException("Could not add the additional-workflow separator to the Action menu.");
+			if (!NativeMethods.InsertMenuW(actionMenu, separatorPosition + 1,
+				NativeMethods.MF_BYPOSITION | NativeMethods.MF_STRING | NativeMethods.MF_GRAYED,
+				new UIntPtr(FullDiscRangeWorkflowCommand),
+				FullDiscRangeWorkflowMenuText))
+			{
+				NativeMethods.RemoveMenu(actionMenu, separatorPosition, NativeMethods.MF_BYPOSITION);
+				throw new InvalidOperationException("Could not add the full-disc range workflow to the Action menu.");
+			}
+			if (!NativeMethods.InsertMenuW(actionMenu, separatorPosition + 2,
+				NativeMethods.MF_BYPOSITION | NativeMethods.MF_SEPARATOR,
+				UIntPtr.Zero, null))
+			{
+				NativeMethods.RemoveMenu(actionMenu, separatorPosition + 1, NativeMethods.MF_BYPOSITION);
+				NativeMethods.RemoveMenu(actionMenu, separatorPosition, NativeMethods.MF_BYPOSITION);
+				throw new InvalidOperationException("Could not add the lower additional-workflow separator to the Action menu.");
+			}
+			Log("Installed Action-menu command 0x" + FullDiscRangeWorkflowCommand.ToString("X") +
+				": " + FullDiscRangeWorkflowMenuText + ".");
+			return true;
+		}
+		else if (!enabled && present)
+		{
+			int rangePosition = FindMenuCommandPosition(actionMenu, FullDiscRangeWorkflowCommand);
+			int regularPosition = FindMenuCommandPosition(actionMenu, CustomWorkflowCommand);
+			uint upperSeparatorState = rangePosition > 0
+				? NativeMethods.GetMenuState(actionMenu, (uint)(rangePosition - 1),
+					NativeMethods.MF_BYPOSITION)
+				: uint.MaxValue;
+			uint lowerSeparatorState = rangePosition >= 0 &&
+				rangePosition + 1 < NativeMethods.GetMenuItemCount(actionMenu)
+				? NativeMethods.GetMenuState(actionMenu, (uint)(rangePosition + 1),
+					NativeMethods.MF_BYPOSITION)
+				: uint.MaxValue;
+			bool removeUpperSeparator = rangePosition == regularPosition + 2 &&
+				regularPosition >= 0 &&
+				upperSeparatorState != uint.MaxValue &&
+				(upperSeparatorState & NativeMethods.MF_SEPARATOR) != 0;
+			bool removeLowerSeparator = removeUpperSeparator &&
+				lowerSeparatorState != uint.MaxValue &&
+				(lowerSeparatorState & NativeMethods.MF_SEPARATOR) != 0;
+			if (removeLowerSeparator &&
+				!NativeMethods.RemoveMenu(actionMenu, (uint)(rangePosition + 1),
+					NativeMethods.MF_BYPOSITION))
+				throw new InvalidOperationException("Could not remove the lower additional-workflow separator from the Action menu.");
+			if (!NativeMethods.RemoveMenu(actionMenu, FullDiscRangeWorkflowCommand,
+				NativeMethods.MF_BYCOMMAND))
+				throw new InvalidOperationException("Could not remove the full-disc range workflow from the Action menu.");
+			if (removeUpperSeparator &&
+				!NativeMethods.RemoveMenu(actionMenu, (uint)(rangePosition - 1),
+					NativeMethods.MF_BYPOSITION))
+				throw new InvalidOperationException("Could not remove the upper additional-workflow separator from the Action menu.");
+			return true;
+		}
+		return false;
+	}
+
+	private static int FindMenuCommandPosition(IntPtr menu, uint command)
+	{
+		int count = NativeMethods.GetMenuItemCount(menu);
+		for (int position = 0; position < count; position++)
+		{
+			if (NativeMethods.GetMenuItemID(menu, position) == command)
+				return position;
+		}
+		return -1;
+	}
+
 	private static IntPtr FindActionMenu(IntPtr menu)
 	{
 		int menuItemCount = NativeMethods.GetMenuItemCount(menu);
@@ -710,6 +908,7 @@ namespace AudioDataPlugIn
 	{
 		int lastEnabled = -1;
 		int lastHtoaEnabled = -1;
+		int lastFullDiscEnabled = -1;
 		int lastTocEnabled = -1;
 		while (NativeMethods.IsWindow(mainWindow))
 		{
@@ -720,6 +919,7 @@ namespace AudioDataPlugIn
 					mainWindow,
 					ref lastEnabled,
 					ref lastHtoaEnabled,
+					ref lastFullDiscEnabled,
 					ref lastTocEnabled);
 			}
 			catch (Exception ex)
@@ -734,6 +934,7 @@ namespace AudioDataPlugIn
 		IntPtr mainWindow,
 		ref int lastEnabled,
 		ref int lastHtoaEnabled,
+		ref int lastFullDiscEnabled,
 		ref int lastTocEnabled)
 	{
 		IntPtr menu = NativeMethods.GetMenu(mainWindow);
@@ -789,6 +990,26 @@ namespace AudioDataPlugIn
 			{
 				lastHtoaEnabled = state;
 				Log("HTOA 100% log menu is now " + (htoaEnabled ? "enabled" : "disabled") + ".");
+			}
+		}
+		uint fullDiscMenuState = NativeMethods.GetMenuState(intPtr,
+			FullDiscRangeWorkflowCommand, NativeMethods.MF_BYCOMMAND);
+		if (fullDiscMenuState != uint.MaxValue)
+		{
+			bool fullDiscEnabled = workflowInstalled &&
+				IsCompressedCopyRangeEnabled(menu) && IsGapDetectionTocReady();
+			if (((fullDiscMenuState & 3u) == 0) != fullDiscEnabled)
+			{
+				NativeMethods.EnableMenuItem(intPtr, FullDiscRangeWorkflowCommand,
+					fullDiscEnabled ? NativeMethods.MF_ENABLED : NativeMethods.MF_GRAYED);
+				NativeMethods.DrawMenuBar(mainWindow);
+			}
+			int state = fullDiscEnabled ? 1 : 0;
+			if (lastFullDiscEnabled != state)
+			{
+				lastFullDiscEnabled = state;
+				Log("Full-disc range workflow menu is now " +
+					(fullDiscEnabled ? "enabled" : "disabled") + ".");
 			}
 		}
 		IntPtr toolsMenu = FindToolsMenu(menu);
@@ -1115,6 +1336,30 @@ namespace AudioDataPlugIn
 				return IntPtr.Zero;
 			}
 			if (message == NativeMethods.WM_COMMAND &&
+				command == (int)RefreshAdditionalWorkflowMenuCommand)
+			{
+				UpdateAdditionalWorkflowMenu(hwnd, AreAdditionalWorkflowsEnabled());
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND && lParam == IntPtr.Zero &&
+				command == (int)FullDiscRangeWorkflowCommand)
+			{
+				StartFullDiscRangeWorkflow(hwnd);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND && lParam == IntPtr.Zero &&
+				command == (int)StartFullDiscRangeCommand)
+			{
+				StartFullDiscRangeRip(hwnd);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND && lParam == IntPtr.Zero &&
+				command == (int)StartFullDiscSecondPassCommand)
+			{
+				StartFullDiscSecondPass(hwnd);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND &&
 				lParam == IntPtr.Zero &&
 				command == (int)HtoaWorkflowCommand)
 			{
@@ -1409,6 +1654,224 @@ namespace AudioDataPlugIn
 			(itemState & interactiveState) == 0;
 	}
 
+	private static void StartFullDiscRangeWorkflow(IntPtr mainWindow)
+	{
+		if (!workflowInstalled || !AreAdditionalWorkflowsEnabled() ||
+			!IsGapDetectionTocReady() ||
+			!IsCompressedCopyRangeEnabled(NativeMethods.GetMenu(mainWindow)) ||
+			fullDiscRangeStateAddress == 0 || workflowSelectionBackupAddress == 0)
+			return;
+		if (Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa)) != 0 ||
+			Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress)) != 0 ||
+			Marshal.ReadByte(new IntPtr((int)fullDiscRangeStateAddress)) != 0 ||
+			ripSessionActive)
+			return;
+
+		try
+		{
+			IList<CdTocEntry> tracks = ReadCurrentCdToc();
+			int audioTrackCount = CountLeadingAudioTracks(tracks);
+			ulong lastSector = (ulong)(tracks[audioTrackCount - 1].NextStartSector - 1);
+			string outputPath = ChooseFullDiscRangeOutputPath(mainWindow);
+			if (outputPath == null)
+				return;
+			PrepareFullDiscCueDestination(outputPath);
+			fullDiscRangeEndLow = unchecked((uint)lastSector);
+			fullDiscRangeEndHigh = unchecked((uint)(lastSector >> 32));
+			IntPtr selection = AddressFromStaticVa(layout.TrackSelectionArrayVa);
+			byte[] saved = new byte[TrackSelectionCount];
+			Marshal.Copy(selection, saved, 0, saved.Length);
+			Marshal.Copy(saved, 0, new IntPtr((int)workflowSelectionBackupAddress), saved.Length);
+			byte[] audioTracks = new byte[TrackSelectionCount];
+			for (int i = 0; i < audioTrackCount; i++)
+				audioTracks[i] = 1;
+			Marshal.Copy(audioTracks, 0, selection, audioTracks.Length);
+			Marshal.WriteByte(AddressFromStaticVa(layout.ChainFlagVa), 4);
+			if (!NativeMethods.PostMessageW(mainWindow, NativeMethods.WM_COMMAND,
+				new IntPtr(539), IntPtr.Zero))
+				throw new InvalidOperationException("EAC could not queue gap detection.");
+			Log("Full-disc range workflow queued gap detection, cue sheet, and two range passes for sectors 0-" + lastSector + " at '" + outputPath + "'.");
+		}
+		catch (Exception error)
+		{
+			RestoreFullDiscCueDestination();
+			AbortCustomWorkflowIfActive(mainWindow, NativeMethods.WM_COMMAND,
+				FullDiscRangeWorkflowCommand);
+			Log("Full-disc range workflow could not start: " + error);
+			MessageBox.Show(new WindowHandleOwner(mainWindow),
+				"The full-disc range workflow could not be started.\r\n\r\n" + error.Message,
+				"EAC Enhancements", MessageBoxButtons.OK, MessageBoxIcon.Error);
+		}
+	}
+
+	internal static int CountLeadingAudioTracks(IList<CdTocEntry> tracks)
+	{
+		if (tracks == null || tracks.Count == 0 || tracks[0].IsDataTrack)
+			throw new InvalidOperationException("The full-disc range workflow requires a disc that begins with audio.");
+		int count = 0;
+		while (count < tracks.Count && !tracks[count].IsDataTrack)
+			count++;
+		for (int i = count; i < tracks.Count; i++)
+		{
+			if (!tracks[i].IsDataTrack)
+				throw new InvalidOperationException("The full-disc range workflow cannot cross a data track between audio tracks.");
+		}
+		if (tracks[count - 1].NextStartSector <= 0)
+			throw new InvalidOperationException("EAC's current CD TOC has no audio end sector.");
+		return count;
+	}
+
+	private static void StartFullDiscRangeRip(IntPtr mainWindow)
+	{
+		if (fullDiscRangeStateAddress == 0 || fullDiscOutputPathAddress == 0 ||
+			Marshal.ReadByte(new IntPtr((int)fullDiscRangeStateAddress)) != 0)
+			return;
+		try
+		{
+			RestoreFullDiscCueDestination();
+			WriteFullDiscRange();
+			Marshal.WriteByte(AddressFromStaticVa(layout.RangeHibernateRequestedVa), 0);
+			Marshal.WriteByte(new IntPtr((int)fullDiscRangeStateAddress), 1);
+			if (!NativeMethods.PostMessageW(mainWindow, NativeMethods.WM_COMMAND,
+				new IntPtr((int)CompressedCopyRangeCommand), IntPtr.Zero))
+				throw new InvalidOperationException("EAC could not queue the first range pass.");
+			Log("Full-disc range pass 1 queued.");
+		}
+		catch (Exception error)
+		{
+			Marshal.WriteByte(new IntPtr((int)fullDiscRangeStateAddress), 0);
+			Log("Full-disc range pass 1 could not start: " + error);
+			MessageBox.Show(new WindowHandleOwner(mainWindow),
+				"The full-disc range rip could not be started.\r\n\r\n" + error.Message,
+				"EAC Enhancements", MessageBoxButtons.OK, MessageBoxIcon.Error);
+		}
+	}
+
+	internal static string ResolveFullDiscRangeFilename(
+		IDictionary<string, string> metadata,
+		IDictionary<char, string> characterReplacements)
+	{
+		return WorkflowFolderPath.Resolve(
+			FullDiscDefaultRangeFilenameTemplate,
+			metadata,
+			characterReplacements);
+	}
+
+	private static string ChooseFullDiscRangeOutputPath(IntPtr mainWindow)
+	{
+		string filename = ResolveFullDiscRangeFilename(
+			ReadWorkflowFolderMetadata(mainWindow),
+			ReadEacFilenameCharacterReplacements());
+		using (SaveFileDialog dialog = new SaveFileDialog())
+		{
+			dialog.Title = "Save full-disc range rip";
+			dialog.Filter = "FLAC files (*.flac)|*.flac|All files (*.*)|*.*";
+			dialog.DefaultExt = "flac";
+			dialog.AddExtension = true;
+			dialog.OverwritePrompt = true;
+			dialog.RestoreDirectory = true;
+			dialog.FileName = filename;
+			string directory = ReadEacPathBuffer(layout.ActualPathVa);
+			if (!Directory.Exists(directory))
+				directory = ReadEacPathBuffer(layout.StandardDirectoryPathVa);
+			if (Directory.Exists(directory))
+				dialog.InitialDirectory = directory;
+			return dialog.ShowDialog(new WindowHandleOwner(mainWindow)) == DialogResult.OK
+				? Path.GetFullPath(dialog.FileName)
+				: null;
+		}
+	}
+
+	private static string ReadEacPathBuffer(uint staticVa)
+	{
+		char[] characters = new char[EacPathBufferCapacity];
+		Marshal.Copy(AddressFromStaticVa(staticVa), characters, 0, characters.Length);
+		int terminator = Array.IndexOf(characters, '\0');
+		if (terminator < 0)
+			throw new PathTooLongException("EAC's current output directory has no terminator.");
+		return new String(characters, 0, terminator);
+	}
+
+	private static void PrepareFullDiscCueDestination(string outputPath)
+	{
+		if (fullDiscOriginalStandardPath != null || fullDiscOriginalActualPath != null)
+			throw new InvalidOperationException("A full-disc cue destination is already active.");
+		byte[] encoded = Encoding.Unicode.GetBytes(outputPath + "\0");
+		if (encoded.Length > RangeOutputPathBufferBytes)
+			throw new PathTooLongException("The full-disc output filename is too long for EAC.");
+		string directory = Path.GetDirectoryName(outputPath);
+		if (!Directory.Exists(directory))
+			throw new DirectoryNotFoundException("The selected full-disc output directory does not exist.");
+		int pathBufferBytes = EacPathBufferCapacity * sizeof(char);
+		byte[] originalStandardPath = new byte[pathBufferBytes];
+		byte[] originalActualPath = new byte[pathBufferBytes];
+		Marshal.Copy(AddressFromStaticVa(layout.StandardDirectoryPathVa),
+			originalStandardPath, 0, pathBufferBytes);
+		Marshal.Copy(AddressFromStaticVa(layout.ActualPathVa),
+			originalActualPath, 0, pathBufferBytes);
+		fullDiscOriginalStandardPath = originalStandardPath;
+		fullDiscOriginalActualPath = originalActualPath;
+		try
+		{
+			WriteEacPathBuffer(layout.StandardDirectoryPathVa, directory);
+			WriteEacPathBuffer(layout.ActualPathVa, directory);
+			byte[] buffer = new byte[RangeOutputPathBufferBytes];
+			Buffer.BlockCopy(encoded, 0, buffer, 0, encoded.Length);
+			Marshal.Copy(buffer, 0,
+				new IntPtr(unchecked((int)fullDiscOutputPathAddress)), buffer.Length);
+		}
+		catch
+		{
+			RestoreFullDiscCueDestination();
+			throw;
+		}
+	}
+
+	private static void RestoreFullDiscCueDestination()
+	{
+		if (fullDiscOriginalStandardPath == null || fullDiscOriginalActualPath == null)
+			return;
+		Marshal.Copy(fullDiscOriginalStandardPath, 0,
+			AddressFromStaticVa(layout.StandardDirectoryPathVa),
+			fullDiscOriginalStandardPath.Length);
+		Marshal.Copy(fullDiscOriginalActualPath, 0,
+			AddressFromStaticVa(layout.ActualPathVa),
+			fullDiscOriginalActualPath.Length);
+		fullDiscOriginalStandardPath = null;
+		fullDiscOriginalActualPath = null;
+		Log("EAC's original output directories restored after full-disc cue creation.");
+	}
+
+	private static void StartFullDiscSecondPass(IntPtr mainWindow)
+	{
+		if (fullDiscRangeStateAddress == 0 ||
+			Marshal.ReadByte(new IntPtr((int)fullDiscRangeStateAddress)) != 2)
+			return;
+		try
+		{
+			WriteFullDiscRange();
+			Marshal.WriteByte(AddressFromStaticVa(layout.RangeHibernateRequestedVa), 0);
+			Marshal.WriteByte(new IntPtr((int)fullDiscRangeStateAddress), 3);
+			if (!NativeMethods.PostMessageW(mainWindow, NativeMethods.WM_COMMAND,
+				new IntPtr((int)CompressedCopyRangeCommand), IntPtr.Zero))
+				throw new InvalidOperationException("EAC could not queue the second range pass.");
+			Log("Full-disc range pass 2 queued with EAC's retained output filename.");
+		}
+		catch (Exception error)
+		{
+			Marshal.WriteByte(new IntPtr((int)fullDiscRangeStateAddress), 0);
+			Log("Full-disc range pass 2 could not start: " + error);
+		}
+	}
+
+	private static void WriteFullDiscRange()
+	{
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeStartLowVa), 0);
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeStartHighVa), 0);
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeEndLowVa), unchecked((int)fullDiscRangeEndLow));
+		Marshal.WriteInt32(AddressFromStaticVa(layout.RangeEndHighVa), unchecked((int)fullDiscRangeEndHigh));
+	}
+
 	private static bool StartHtoaWorkflow(IntPtr mainWindow)
 	{
 		if (htoaWorkflowStateAddress == 0 || !IsHtoaAvailable() ||
@@ -1418,6 +1881,8 @@ namespace AudioDataPlugIn
 			return false;
 		}
 		if (Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress)) != 0 ||
+			(fullDiscRangeStateAddress != 0 &&
+			 Marshal.ReadByte(new IntPtr((int)fullDiscRangeStateAddress)) != 0) ||
 			Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa)) != 0 ||
 			ripSessionActive)
 		{
@@ -1670,7 +2135,8 @@ namespace AudioDataPlugIn
 							settings.ShowWorkflowSetupAlert,
 							settings.CreateWorkflowFolders,
 							settings.EnableLogging,
-							settings.IncreaseExternalCompressorArgumentsLimit);
+							settings.IncreaseExternalCompressorArgumentsLimit,
+							settings.ShowAdditionalWorkflows);
 						SaveOutputTemplateSettings(selectedSettings, true);
 						if (settings.CreateWorkflowFolders)
 						{
@@ -2197,22 +2663,28 @@ namespace AudioDataPlugIn
 			? (byte)0
 			: Marshal.ReadByte(new IntPtr((int)htoaWorkflowStateAddress));
 		bool htoaActive = htoaState == 1 || htoaState == 2 || htoaState == 3;
-		if (message == 272u && htoaState == 1)
+		byte fullDiscState = fullDiscRangeStateAddress == 0
+			? (byte)0
+			: Marshal.ReadByte(new IntPtr((int)fullDiscRangeStateAddress));
+		bool fullDiscActive = fullDiscState == 1 || fullDiscState == 2 || fullDiscState == 3;
+		if (message == 272u && (htoaState == 1 || fullDiscState == 1))
 		{
 			IntPtr hibernateCheckbox = NativeMethods.GetDlgItem(hwnd, HtoaHibernateControlId);
 			if (hibernateCheckbox != IntPtr.Zero)
 			{
 				NativeMethods.EnableWindow(hibernateCheckbox, false);
-				Log("HTOA pass 1 hibernate checkbox disabled.");
+				Log(htoaState == 1
+					? "HTOA pass 1 hibernate checkbox disabled."
+					: "Full-disc range pass 1 hibernate checkbox disabled.");
 			}
 		}
-		bool preparationActive = b == 2 || b == 3;
+		bool preparationActive = b == 2 || b == 3 || b == 4 || b == 5;
 		bool outputSelectionPending =
 			!preparationActive &&
 			!ripSessionActive &&
 			workflowAutoCloseFlagAddress != 0 &&
 			Marshal.ReadByte(new IntPtr((int)workflowAutoCloseFlagAddress)) != 0;
-		if (!preparationActive && !outputSelectionPending && !htoaActive)
+		if (!preparationActive && !outputSelectionPending && !htoaActive && !fullDiscActive)
 		{
 			return;
 		}
@@ -2256,6 +2728,8 @@ namespace AudioDataPlugIn
 		{
 			if (htoaActive)
 				AbortHtoaWorkflow(hwnd, message, num, htoaState);
+			else if (fullDiscActive)
+				AbortFullDiscRangeWorkflow(hwnd, message, num, fullDiscState);
 			else if (preparationActive)
 				AbortCustomWorkflowIfActive(hwnd, message, num);
 			else
@@ -2273,6 +2747,17 @@ namespace AudioDataPlugIn
 		Marshal.WriteByte(stateAddress, 0);
 		Log(
 			"Aborted HTOA 100% log pass " + state + " before message 0x" +
+			message.ToString("X") + ", command 0x" + command.ToString("X") +
+			", hwnd=0x" + hwnd.ToInt64().ToString("X8") + ".");
+	}
+
+	private static void AbortFullDiscRangeWorkflow(IntPtr hwnd, uint message, uint command, byte state)
+	{
+		if (fullDiscRangeStateAddress == 0)
+			return;
+		Marshal.WriteByte(new IntPtr((int)fullDiscRangeStateAddress), 0);
+		RestoreFullDiscCueDestination();
+		Log("Aborted full-disc range pass " + state + " before message 0x" +
 			message.ToString("X") + ", command 0x" + command.ToString("X") +
 			", hwnd=0x" + hwnd.ToInt64().ToString("X8") + ".");
 	}
@@ -2296,7 +2781,7 @@ namespace AudioDataPlugIn
 	{
 		IntPtr ptr = AddressFromStaticVa(layout.ChainFlagVa);
 		byte b = Marshal.ReadByte(ptr);
-		if (b == 2 || b == 3)
+		if (b == 2 || b == 3 || b == 4 || b == 5)
 		{
 			Marshal.WriteByte(ptr, 0);
 			if (workflowAutoCloseFlagAddress != 0)
@@ -2309,8 +2794,14 @@ namespace AudioDataPlugIn
 				Marshal.Copy(new IntPtr((int)workflowSelectionBackupAddress), array, 0, array.Length);
 				Marshal.Copy(array, 0, AddressFromStaticVa(layout.TrackSelectionArrayVa), array.Length);
 			}
-			Log("Aborted 100% log chain at stage " + b + " before message 0x" + message.ToString("X") + ", command 0x" + command.ToString("X") + ", hwnd=0x" + hwnd.ToInt64().ToString("X8") + ".");
-			RequestWorkflowFolderTemplateRestore();
+			Log("Aborted " + (b >= 4 ? "full-disc range" : "100% log") +
+				" chain at stage " + b + " before message 0x" + message.ToString("X") +
+				", command 0x" + command.ToString("X") + ", hwnd=0x" +
+				hwnd.ToInt64().ToString("X8") + ".");
+			if (b == 2 || b == 3)
+				RequestWorkflowFolderTemplateRestore();
+			if (b == 4 || b == 5)
+				RestoreFullDiscCueDestination();
 		}
 	}
 

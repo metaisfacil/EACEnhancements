@@ -121,6 +121,10 @@ namespace AudioDataPlugIn
         private const uint StartHtoaSecondPassCommand = 0xA31A;
         private const uint TitleCaseTransformCommand = 0xA31B;
         private const uint DisplayCdTocCommand = 0xA31C;
+        private const uint FullDiscRangeWorkflowCommand = 0xA31D;
+        private const uint StartFullDiscRangeCommand = 0xA31E;
+        private const uint StartFullDiscSecondPassCommand = 0xA31F;
+        private const uint RefreshAdditionalWorkflowMenuCommand = 0xA320;
         private const uint CompressedCopyRangeCommand = 0x0304;
         private const uint WorkflowDestinationCommand = 0xA313;
         private const uint StartPreparedWorkflowCommand = 0xA314;
@@ -134,6 +138,8 @@ namespace AudioDataPlugIn
         private const string CustomWorkflowMenuText =
             "&Test && Copy + Cue (100% Log)\tCtrl+Alt+Shift+1";
         private const string HtoaWorkflowMenuText = "Test && Copy &HTOA (100% Log)";
+        private const string FullDiscRangeWorkflowMenuText =
+            "Test && Copy Range Rip (Non-100% Log)";
         private const string TitleCaseTransformMenuText =
             "&Title Case (EAC Enhancements)";
         private const string DisplayCdTocMenuText =
@@ -177,6 +183,12 @@ namespace AudioDataPlugIn
         private static uint htoaBeepCounterAddress;
         private static uint htoaRangeEndLow;
         private static uint htoaRangeEndHigh;
+        private static uint fullDiscRangeStateAddress;
+        private static uint fullDiscOutputPathAddress;
+        private static byte[] fullDiscOriginalStandardPath;
+        private static byte[] fullDiscOriginalActualPath;
+        private static uint fullDiscRangeEndLow;
+        private static uint fullDiscRangeEndHigh;
         // Each delegate below is passed to SetWindowsHookExW or
         // SetWindowSubclass, which keep the raw stub pointer for the life of
         // the hooked thread or window. The stub is freed with its delegate, so
@@ -237,6 +249,9 @@ namespace AudioDataPlugIn
         private static int ripSessionHtoaPass;
         private static DateTime htoaRipStartedUtc;
         private static int htoaRipSuspiciousCount;
+        private static int ripSessionFullDiscRangePass;
+        private static DateTime fullDiscRangeRipStartedUtc;
+        private static int fullDiscRangeRipSuspiciousCount;
 
         [ThreadStatic]
         private static bool insideAssistedPump;

@@ -14,10 +14,16 @@ namespace AudioDataPlugIn
 	{
 		ripSessionStartedUtc = DateTime.UtcNow;
 		ripSessionHtoaPass = GetCurrentHtoaRipPass();
+		ripSessionFullDiscRangePass = GetCurrentFullDiscRangeRipPass();
 		if (ripSessionHtoaPass == 1)
 		{
 			htoaRipStartedUtc = ripSessionStartedUtc;
 			Interlocked.Exchange(ref htoaRipSuspiciousCount, 0);
+		}
+		if (ripSessionFullDiscRangePass == 1)
+		{
+			fullDiscRangeRipStartedUtc = ripSessionStartedUtc;
+			Interlocked.Exchange(ref fullDiscRangeRipSuspiciousCount, 0);
 		}
 		Interlocked.Increment(ref ripSessionGeneration);
 		Interlocked.Exchange(ref ripSessionSuspiciousCount, 0);
@@ -56,6 +62,8 @@ namespace AudioDataPlugIn
 		DateTime startedUtc = ripSessionStartedUtc;
 		int htoaPass = ripSessionHtoaPass;
 		ripSessionHtoaPass = 0;
+		int fullDiscRangePass = ripSessionFullDiscRangePass;
+		ripSessionFullDiscRangePass = 0;
 		int generation = Interlocked.CompareExchange(ref ripSessionGeneration, 0, 0);
 		int suspiciousCount = Interlocked.CompareExchange(ref ripSessionSuspiciousCount, 0, 0);
 		bool restoreWorkflowDestination = suppressWorkflowFolderTemplate;
@@ -65,6 +73,12 @@ namespace AudioDataPlugIn
 		{
 			Interlocked.Add(ref htoaRipSuspiciousCount, suspiciousCount);
 			Log("HTOA rip error report deferred until pass 2 completes.");
+			return;
+		}
+		if (fullDiscRangePass == 1 && GetCurrentFullDiscRangeRipPass() != 0)
+		{
+			Interlocked.Add(ref fullDiscRangeRipSuspiciousCount, suspiciousCount);
+			Log("Full-disc range rip error report deferred until pass 2 completes.");
 			return;
 		}
 		bool htoaWorkflowReport = htoaPass == 2;
@@ -80,6 +94,22 @@ namespace AudioDataPlugIn
 			// The first pass was cancelled instead of advancing to pass two.
 			htoaRipStartedUtc = default(DateTime);
 			Interlocked.Exchange(ref htoaRipSuspiciousCount, 0);
+		}
+		bool fullDiscRangeWorkflowReport = fullDiscRangePass == 2;
+		DateTime fullDiscFinalPassStartedUtc = fullDiscRangeWorkflowReport
+			? ripSessionStartedUtc
+			: default(DateTime);
+		if (fullDiscRangeWorkflowReport)
+		{
+			if (fullDiscRangeRipStartedUtc != default(DateTime))
+				startedUtc = fullDiscRangeRipStartedUtc;
+			suspiciousCount += Interlocked.Exchange(ref fullDiscRangeRipSuspiciousCount, 0);
+			fullDiscRangeRipStartedUtc = default(DateTime);
+		}
+		else if (fullDiscRangePass == 1)
+		{
+			fullDiscRangeRipStartedUtc = default(DateTime);
+			Interlocked.Exchange(ref fullDiscRangeRipSuspiciousCount, 0);
 		}
 		bool commandLineWorkflow = IsCommandLineWorkflow();
 		bool reportErrors =
@@ -97,7 +127,26 @@ namespace AudioDataPlugIn
 			reportErrors,
 			restoreWorkflowDestination,
 			preferredOutputDirectory,
-			htoaWorkflowReport);
+			htoaWorkflowReport,
+			fullDiscRangeWorkflowReport,
+			fullDiscFinalPassStartedUtc);
+	}
+
+	private static int GetCurrentFullDiscRangeRipPass()
+	{
+		if (fullDiscRangeStateAddress == 0)
+			return 0;
+		try
+		{
+			byte state = Marshal.ReadByte(new IntPtr((int)fullDiscRangeStateAddress));
+			if (state == 1 || state == 2)
+				return 1;
+			return state == 3 ? 2 : 0;
+		}
+		catch
+		{
+			return 0;
+		}
 	}
 
 	private static int GetCurrentHtoaRipPass()
@@ -129,7 +178,9 @@ namespace AudioDataPlugIn
 		bool reportErrors,
 		bool restoreWorkflowDestination,
 		string preferredOutputDirectory,
-		bool htoaWorkflowReport)
+		bool htoaWorkflowReport,
+		bool fullDiscRangeWorkflowReport,
+		DateTime fullDiscFinalPassStartedUtc)
 	{
 		Thread thread = new Thread((ThreadStart)delegate
 		{
@@ -140,7 +191,9 @@ namespace AudioDataPlugIn
 				reportErrors,
 				restoreWorkflowDestination,
 				preferredOutputDirectory,
-				htoaWorkflowReport);
+				htoaWorkflowReport,
+				fullDiscRangeWorkflowReport,
+				fullDiscFinalPassStartedUtc);
 		});
 		thread.IsBackground = true;
 		thread.Name = "EAC Enhancements rip completion watcher";
@@ -154,7 +207,9 @@ namespace AudioDataPlugIn
 		bool reportErrors,
 		bool restoreWorkflowDestination,
 		string preferredOutputDirectory,
-		bool htoaWorkflowReport)
+		bool htoaWorkflowReport,
+		bool fullDiscRangeWorkflowReport,
+		DateTime fullDiscFinalPassStartedUtc)
 	{
 		bool restorationRequested = false;
 		bool commandLineWorkflow = IsCommandLineWorkflow();
@@ -204,6 +259,7 @@ namespace AudioDataPlugIn
 				return;
 			FileInfo fileInfo = null;
 			string text = null;
+			bool completeReportFound = false;
 			DateTime dateTime2 = DateTime.UtcNow.AddSeconds(15.0);
 			while (DateTime.UtcNow < dateTime2)
 			{
@@ -212,11 +268,23 @@ namespace AudioDataPlugIn
 				{
 					try
 					{
+						if (fullDiscRangeWorkflowReport &&
+							fileInfo.LastWriteTimeUtc < fullDiscFinalPassStartedUtc)
+						{
+							Thread.Sleep(300);
+							continue;
+						}
 						text = File.ReadAllText(fileInfo.FullName);
-						if (htoaWorkflowReport
+						bool complete = htoaWorkflowReport
 							? RipLogErrorParser.IsHtoaWorkflowComplete(text)
-							: RipLogErrorParser.IsLatestReportComplete(text))
+							: fullDiscRangeWorkflowReport
+								? RipLogErrorParser.IsFullDiscRangeWorkflowComplete(text)
+								: RipLogErrorParser.IsLatestReportComplete(text);
+						if (complete)
+						{
+							completeReportFound = true;
 							break;
+						}
 					}
 					catch
 					{
@@ -225,9 +293,13 @@ namespace AudioDataPlugIn
 				}
 				Thread.Sleep(300);
 			}
+			if (fullDiscRangeWorkflowReport && !completeReportFound)
+				text = null;
 			List<string> list = htoaWorkflowReport
 				? RipLogErrorParser.ParseHtoaWorkflow(text, suspiciousCount)
-				: RipLogErrorParser.Parse(text, suspiciousCount);
+				: fullDiscRangeWorkflowReport
+					? RipLogErrorParser.ParseFullDiscRangeWorkflow(text, suspiciousCount)
+					: RipLogErrorParser.Parse(text, suspiciousCount);
 			if (list.Count == 0)
 			{
 				Log("Rip error report: no extraction errors detected" + ((fileInfo == null) ? "." : (" in '" + fileInfo.FullName + "'.")));

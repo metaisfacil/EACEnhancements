@@ -23,6 +23,9 @@ namespace AudioDataPlugIn
                     "%albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%comment%}}}",
                     metadata),
                 "GULLET - Hide & Sick (2004) [FLAC] {cpcs-004}");
+            AssertEqual(
+                EnhancementRuntime.ResolveFullDiscRangeFilename(metadata, null),
+                "GULLET - Hide & Sick.flac");
 
             metadata["year"] = String.Empty;
             metadata["comment"] = String.Empty;
@@ -116,6 +119,11 @@ namespace AudioDataPlugIn
                 "GULLET\\2004\\Hide ／ Sick＼Deluxe");
 
             metadata["albumtitle"] = "A: \"B\" & C#";
+            AssertEqual(
+                EnhancementRuntime.ResolveFullDiscRangeFilename(
+                    metadata, characterReplacements),
+                "GULLET - A" + characterReplacements[':'] +
+                " ''B''  and  C.flac");
             AssertEqual(
                 WorkflowFolderPath.Resolve(
                     "Literal & %albumtitle%",

@@ -14,6 +14,7 @@ namespace AudioDataPlugIn
             AssertLocalizedColumnExpansion();
             AssertLanguageFileParsing();
             AssertToolsMenuResolution();
+            AssertFullDiscRangeAudioBoundary();
             Console.WriteLine("CD TOC display tests passed.");
             return 0;
         }
@@ -54,6 +55,43 @@ namespace AudioDataPlugIn
                 "English EAC table");
             AssertEqual(" 0:00.00", CdTocFormatter.FormatMsf(0), "zero MSF");
             AssertEqual("99:59.74", CdTocFormatter.FormatMsf(449999), "maximum MSF");
+        }
+
+        private static void AssertFullDiscRangeAudioBoundary()
+        {
+            List<CdTocEntry> tracks = new List<CdTocEntry>
+            {
+                new CdTocEntry { TrackNumber = 1, StartSector = 0, NextStartSector = 1000 },
+                new CdTocEntry { TrackNumber = 2, StartSector = 1000, NextStartSector = 2000 },
+                new CdTocEntry { TrackNumber = 3, StartSector = 13400,
+                    NextStartSector = 15000, IsDataTrack = true }
+            };
+            if (EnhancementRuntime.CountLeadingAudioTracks(tracks) != 2 ||
+                tracks[EnhancementRuntime.CountLeadingAudioTracks(tracks) - 1].NextStartSector - 1 != 1999)
+                throw new Exception("Enhanced CD range must end at the last audio sector.");
+
+            tracks.RemoveAt(2);
+            if (EnhancementRuntime.CountLeadingAudioTracks(tracks) != 2)
+                throw new Exception("Audio-only discs must retain every track.");
+
+            tracks.Insert(0, new CdTocEntry { IsDataTrack = true });
+            AssertUnsupportedAudioLayout(tracks, "Leading data track");
+            tracks.RemoveAt(0);
+            tracks.Insert(1, new CdTocEntry { IsDataTrack = true });
+            AssertUnsupportedAudioLayout(tracks, "Interleaved data track");
+        }
+
+        private static void AssertUnsupportedAudioLayout(
+            IList<CdTocEntry> tracks, string description)
+        {
+            try
+            {
+                EnhancementRuntime.CountLeadingAudioTracks(tracks);
+                throw new Exception(description + " was accepted for a continuous audio range.");
+            }
+            catch (InvalidOperationException)
+            {
+            }
         }
 
         private static void AssertLocalizedColumnExpansion()

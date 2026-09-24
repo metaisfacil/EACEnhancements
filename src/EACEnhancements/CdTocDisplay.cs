@@ -16,6 +16,7 @@ namespace AudioDataPlugIn
         internal int TrackNumber;
         internal long StartSector;
         internal long NextStartSector;
+        internal bool IsDataTrack;
         internal bool HasPeak;
         // Matches the userscript's normalized 0..1000 representation.
         internal double Peak;
@@ -185,6 +186,7 @@ namespace AudioDataPlugIn
                 entry.TrackNumber = Marshal.ReadInt32(track);
                 entry.StartSector = ReadTocInt64(track, TocStartSectorOffset);
                 entry.NextStartSector = ReadTocInt64(track, TocNextStartSectorOffset);
+                entry.IsDataTrack = (Marshal.ReadByte(track, -1) & 4) != 0;
                 if (entry.TrackNumber < 1 || entry.TrackNumber > 99 ||
                     entry.StartSector < 0 ||
                     entry.NextStartSector <= entry.StartSector)

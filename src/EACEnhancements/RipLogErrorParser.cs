@@ -12,7 +12,7 @@ namespace AudioDataPlugIn
             return ParseSelectedText(
                 SelectLatestReport(logText),
                 suspiciousCallbackCount,
-                false,
+                null,
                 null,
                 null);
         }
@@ -31,7 +31,26 @@ namespace AudioDataPlugIn
             return ParseSelectedText(
                 String.Join("\r\n", reports.ToArray()),
                 suspiciousCallbackCount,
-                true,
+                "Missing HTOA Test/Copy CRC",
+                firstCrc,
+                secondCrc);
+        }
+
+        internal static List<string> ParseFullDiscRangeWorkflow(
+            string logText,
+            int suspiciousCallbackCount)
+        {
+            List<string> reports = SelectLatestReports(logText, 2);
+            string firstCrc = reports.Count > 0
+                ? SelectRangeCopyCrc(reports[0])
+                : null;
+            string secondCrc = reports.Count > 1
+                ? SelectRangeCopyCrc(reports[1])
+                : null;
+            return ParseSelectedText(
+                String.Join("\r\n", reports.ToArray()),
+                suspiciousCallbackCount,
+                "Missing full-disc range Test/Copy CRC",
                 firstCrc,
                 secondCrc);
         }
@@ -39,9 +58,9 @@ namespace AudioDataPlugIn
         private static List<string> ParseSelectedText(
             string text,
             int suspiciousCallbackCount,
-            bool compareHtoaRangeCrcs,
-            string firstHtoaCrc,
-            string secondHtoaCrc)
+            string missingRangeCrcLabel,
+            string firstRangeCrc,
+            string secondRangeCrc)
         {
             ErrorCollection errors = new ErrorCollection();
             string[] lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
@@ -109,14 +128,14 @@ namespace AudioDataPlugIn
             for (int i = suspiciousLogCount; i < suspiciousCallbackCount; i++)
                 errors.Add("Suspicious position", null, false);
 
-            if (compareHtoaRangeCrcs)
+            if (missingRangeCrcLabel != null)
             {
-                if (firstHtoaCrc == null || secondHtoaCrc == null)
+                if (firstRangeCrc == null || secondRangeCrc == null)
                 {
-                    errors.Add("Missing HTOA Test/Copy CRC", null, true);
+                    errors.Add(missingRangeCrcLabel, null, true);
                 }
-                else if (!firstHtoaCrc.Equals(
-                    secondHtoaCrc,
+                else if (!firstRangeCrc.Equals(
+                    secondRangeCrc,
                     StringComparison.OrdinalIgnoreCase))
                 {
                     errors.Add("Mismatched Test/Copy CRC", null, true);
@@ -142,6 +161,16 @@ namespace AudioDataPlugIn
         }
 
         internal static bool IsHtoaWorkflowComplete(string logText)
+        {
+            return AreLatestTwoRangeReportsComplete(logText);
+        }
+
+        internal static bool IsFullDiscRangeWorkflowComplete(string logText)
+        {
+            return AreLatestTwoRangeReportsComplete(logText);
+        }
+
+        private static bool AreLatestTwoRangeReportsComplete(string logText)
         {
             List<string> reports = SelectLatestReports(logText, 2);
             if (reports.Count != 2)

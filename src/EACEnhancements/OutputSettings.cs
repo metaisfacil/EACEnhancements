@@ -15,6 +15,7 @@ namespace AudioDataPlugIn
 	{
 	private const string DefaultFolderTemplate =
 		"%albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%comment%}}}";
+	private const string AdditionalWorkflowsIniKey = "ShowAdditionalWorkflows";
 
 	internal static void ShowPluginOptions()
 	{
@@ -73,7 +74,9 @@ namespace AudioDataPlugIn
 		{
 			byte b = Marshal.ReadByte(AddressFromStaticVa(layout.ChainFlagVa));
 			WindowHandleOwner owner = new WindowHandleOwner(ownerWindow);
-			if (b != 0 || ripSessionActive)
+			if (b != 0 || ripSessionActive ||
+				(fullDiscRangeStateAddress != 0 &&
+				 Marshal.ReadByte(new IntPtr((int)fullDiscRangeStateAddress)) != 0))
 			{
 				MessageBox.Show(owner, "Output settings cannot be changed while an extraction or 100% log preparation step is active.", "EAC Enhancements", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
 				return;
@@ -180,6 +183,7 @@ namespace AudioDataPlugIn
 					IncreaseExternalCompressorArgumentsLimitIniKey +
 					"=1");
 				writer.WriteLine("EnableLogging=0");
+				writer.WriteLine(AdditionalWorkflowsIniKey + "=0");
 			}
 		}
 		catch (IOException)
@@ -263,6 +267,8 @@ namespace AudioDataPlugIn
 				IncreaseExternalCompressorArgumentsLimitIniKey,
 				"1"),
 			true);
+		bool showAdditionalWorkflows = ParseIniBoolean(
+			ReadIniValue(text, AdditionalWorkflowsIniKey, "0"), false);
 		using (RegistryKey registryKey = Registry.CurrentUser.OpenSubKey("Software\\AWSoftware\\EACU\\Extraction Options"))
 		{
 			if (string.IsNullOrWhiteSpace(value) && registryKey != null)
@@ -281,7 +287,8 @@ namespace AudioDataPlugIn
 			showWorkflowSetupAlert,
 			createWorkflowFolders,
 			enableLogging,
-			increaseExternalCompressorArgumentsLimit);
+			increaseExternalCompressorArgumentsLimit,
+			showAdditionalWorkflows);
 	}
 
 	private static bool IsRipErrorAlertEnabled()
@@ -297,6 +304,20 @@ namespace AudioDataPlugIn
 		{
 			Log("Could not read the rip-error-alert option; defaulting to enabled: " + error.Message);
 			return true;
+		}
+	}
+
+	private static bool AreAdditionalWorkflowsEnabled()
+	{
+		try
+		{
+			return ParseIniBoolean(ReadIniValue(
+				GetSettingsFilePath(), AdditionalWorkflowsIniKey, "0"), false);
+		}
+		catch (Exception error)
+		{
+			Log("Could not read the additional-workflows option: " + error.Message);
+			return false;
 		}
 	}
 
@@ -381,6 +402,11 @@ namespace AudioDataPlugIn
 				"OutputTemplate",
 				"EnableLogging",
 				settings.EnableLogging ? "1" : "0",
+				text4) ||
+			!NativeMethods.WritePrivateProfileStringW(
+				"OutputTemplate",
+				AdditionalWorkflowsIniKey,
+				settings.ShowAdditionalWorkflows ? "1" : "0",
 				text4))
 		{
 			int errorCode = Marshal.GetLastWin32Error();
@@ -416,6 +442,8 @@ namespace AudioDataPlugIn
 		if (intPtr != IntPtr.Zero && NativeMethods.IsWindow(intPtr))
 		{
 			NativeMethods.SendMessageW(intPtr, 273u, new IntPtr(788), IntPtr.Zero);
+			NativeMethods.PostMessageW(intPtr, NativeMethods.WM_COMMAND,
+				new IntPtr((int)RefreshAdditionalWorkflowMenuCommand), IntPtr.Zero);
 		}
 		Log(
 			"Enhancement settings updated: root='" + text +
@@ -425,7 +453,8 @@ namespace AudioDataPlugIn
 			", createWorkflowFolders=" + settings.CreateWorkflowFolders +
 			", extendedCompressorArguments=" +
 			settings.IncreaseExternalCompressorArgumentsLimit +
-			", logging=" + settings.EnableLogging + ".");
+			", logging=" + settings.EnableLogging +
+			", additionalWorkflows=" + settings.ShowAdditionalWorkflows + ".");
 	}
 
 	private static WorkflowNamingSchemes workflowNamingSchemes;

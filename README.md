@@ -87,6 +87,12 @@ that folder, select a different folder name, or cancel before extraction begins.
 Open **Action > EAC Enhancements Options...** to choose the extraction root,
 folder template, new-folder behavior, rip-error alerts, and diagnostic logging.
 
+**Show additional non-standard custom ripping workflows** is off by default.
+Enable it to add **Action > Test & Copy Range Rip (Non-100% Log)**. This workflow
+asks for the rip destination, detects gaps, creates the cue sheet in the
+selected folder, then runs two full-disc compressed range passes from sector 0
+through the last audio sector.
+
 The **Check Rip Configuration...** button reports both EAC settings that can
 affect 100% log score and additional configuration changes that are strongly
 recommended. It does not change any settings for you.

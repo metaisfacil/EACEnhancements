@@ -550,6 +550,9 @@ namespace AudioDataPlugIn
         internal static extern int GetMenuItemCount(IntPtr menu);
 
         [DllImport("user32.dll")]
+        internal static extern uint GetMenuItemID(IntPtr menu, int position);
+
+        [DllImport("user32.dll")]
         internal static extern IntPtr GetSubMenu(IntPtr menu, int position);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -582,6 +585,10 @@ namespace AudioDataPlugIn
             uint flags,
             UIntPtr newItem,
             string text);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool RemoveMenu(IntPtr menu, uint position, uint flags);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

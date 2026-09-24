@@ -24,6 +24,8 @@ internal sealed class OutputTemplateSettings
 
 	internal bool IncreaseExternalCompressorArgumentsLimit { get; private set; }
 
+	internal bool ShowAdditionalWorkflows { get; private set; }
+
 	internal OutputTemplateSettings(
 		string rootFolder,
 		string folderTemplate,
@@ -31,7 +33,8 @@ internal sealed class OutputTemplateSettings
 		bool showWorkflowSetupAlert,
 		bool createWorkflowFolders,
 		bool enableLogging,
-		bool increaseExternalCompressorArgumentsLimit)
+		bool increaseExternalCompressorArgumentsLimit,
+		bool showAdditionalWorkflows)
 	{
 		RootFolder = rootFolder;
 		FolderTemplate = folderTemplate;
@@ -41,6 +44,8 @@ internal sealed class OutputTemplateSettings
 		EnableLogging = enableLogging;
 		IncreaseExternalCompressorArgumentsLimit =
 			increaseExternalCompressorArgumentsLimit;
+		ShowAdditionalWorkflows =
+			showAdditionalWorkflows;
 	}
 }
 
@@ -74,6 +79,8 @@ internal sealed class OutputTemplateDialog : Form
 
 	private readonly CheckBox increaseExternalCompressorArgumentsLimitCheckBox;
 
+	private readonly CheckBox additionalWorkflowsCheckBox;
+
 	private readonly ToolTip createWorkflowFoldersToolTip;
 
 	private readonly Button updateCheckButton;
@@ -93,7 +100,7 @@ internal sealed class OutputTemplateDialog : Form
 		base.ShowInTaskbar = false;
 		Font = SystemFonts.MessageBoxFont;
 		base.AutoScaleMode = AutoScaleMode.Font;
-		base.ClientSize = new Size(680, 414);
+		base.ClientSize = new Size(680, 444);
 		base.Padding = new Padding(16);
 
 		TableLayoutPanel layout = new TableLayoutPanel
@@ -102,7 +109,7 @@ internal sealed class OutputTemplateDialog : Form
 			Margin = Padding.Empty,
 			Padding = Padding.Empty,
 			ColumnCount = 3,
-			RowCount = 11
+			RowCount = 12
 		};
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 97F));
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -111,6 +118,7 @@ internal sealed class OutputTemplateDialog : Form
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
@@ -252,6 +260,18 @@ internal sealed class OutputTemplateDialog : Form
 		layout.Controls.Add(loggingCheckBox, 1, 8);
 		layout.SetColumnSpan(loggingCheckBox, 2);
 
+		additionalWorkflowsCheckBox = new CheckBox
+		{
+			AutoSize = true,
+			Anchor = AnchorStyles.Left,
+			Margin = Padding.Empty,
+			Text = "Show additional non-standard custom ripping workflows",
+			Checked = settings.ShowAdditionalWorkflows,
+			UseVisualStyleBackColor = true
+		};
+		layout.Controls.Add(additionalWorkflowsCheckBox, 1, 9);
+		layout.SetColumnSpan(additionalWorkflowsCheckBox, 2);
+
 		Button setupCheckButton = new Button
 		{
 			Anchor = AnchorStyles.Left | AnchorStyles.Top,
@@ -306,7 +326,7 @@ internal sealed class OutputTemplateDialog : Form
 		bottomRow.Controls.Add(updateCheckButton, 1, 0);
 		bottomRow.Controls.Add(saveButton, 3, 0);
 		bottomRow.Controls.Add(cancelButton, 4, 0);
-		layout.Controls.Add(bottomRow, 0, 10);
+		layout.Controls.Add(bottomRow, 0, 11);
 		layout.SetColumnSpan(bottomRow, 3);
 
 		base.Controls.Add(layout);
@@ -456,7 +476,8 @@ internal sealed class OutputTemplateDialog : Form
 				workflowSetupAlertCheckBox.Checked,
 				createWorkflowFoldersCheckBox.Checked,
 				loggingCheckBox.Checked,
-				increaseExternalCompressorArgumentsLimitCheckBox.Checked);
+				increaseExternalCompressorArgumentsLimitCheckBox.Checked,
+				additionalWorkflowsCheckBox.Checked);
 			base.DialogResult = DialogResult.OK;
 		}
 		catch (Exception ex)

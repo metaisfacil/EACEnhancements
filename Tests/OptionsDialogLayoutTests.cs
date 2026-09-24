@@ -16,7 +16,8 @@ namespace AudioDataPlugIn
                 true,
                 true,
                 false,
-                true);
+                true,
+                false);
             using (OutputTemplateDialog dialog = new OutputTemplateDialog(settings, IntPtr.Zero))
             {
                 dialog.CreateControl();
@@ -39,6 +40,11 @@ namespace AudioDataPlugIn
                     "Enable EAC Enhancements diagnostic logging");
                 if (loggingOption == null || loggingOption.Checked)
                     throw new Exception("Diagnostic logging is not disabled by default.");
+                CheckBox additionalWorkflows = FindCheckBox(
+                    dialog,
+                    "Show additional non-standard custom ripping workflows");
+                if (additionalWorkflows == null || additionalWorkflows.Checked)
+                    throw new Exception("Additional workflows are not disabled by default.");
                 CheckBox compressorLimitOption = FindCheckBox(
                     dialog,
                     "Increase limit of external compressor arguments from 500 to 1000 characters");
@@ -71,6 +77,11 @@ namespace AudioDataPlugIn
                 int updateTop = updateCheck.PointToScreen(System.Drawing.Point.Empty).Y;
                 if (updateTop != saveTop)
                     throw new Exception("The update-check button is not aligned with the bottom row.");
+                additionalWorkflows.Checked = true;
+                save.PerformClick();
+                if (dialog.Settings == null ||
+                    !dialog.Settings.ShowAdditionalWorkflows)
+                    throw new Exception("The additional-workflows choice was not saved by the dialog.");
                 dialog.Close();
             }
 

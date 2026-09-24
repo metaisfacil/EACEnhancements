@@ -17,6 +17,10 @@ internal static class RipLogErrorParserTests
         TestMismatchedHtoaCrcs();
         TestIncompleteHtoaCrcPair();
         TestIncompleteHtoaSecondReportIsNotComplete();
+        TestCleanFullDiscRangeWorkflow();
+        TestMismatchedFullDiscRangeCrcs();
+        TestMissingFullDiscRangeCrc();
+        TestIncompleteFullDiscRangeReportIsNotComplete();
         TestTracksAbsentFromAccurateRipAreNotMismatches();
         TestAccurateRipResultsAreNeverErrors();
         TestCleanLog();
@@ -197,6 +201,65 @@ internal static class RipLogErrorParserTests
             failures++;
             Console.Error.WriteLine("An incomplete second HTOA report was considered complete.");
         }
+    }
+
+    private static void TestCleanFullDiscRangeWorkflow()
+    {
+        string log = FullDiscRangeReport("AAAA1234", null) +
+            "------------------------------------------------------------\r\n" +
+            FullDiscRangeReport("aaaa1234", null);
+        AssertEqual(RipLogErrorParser.ParseFullDiscRangeWorkflow(log, 0));
+        if (!RipLogErrorParser.IsFullDiscRangeWorkflowComplete(log))
+        {
+            failures++;
+            Console.Error.WriteLine("Two complete full-disc range reports were not recognized as complete.");
+        }
+    }
+
+    private static void TestMismatchedFullDiscRangeCrcs()
+    {
+        string log = FullDiscRangeReport("AAAA1234", "Read error") +
+            "------------------------------------------------------------\r\n" +
+            FullDiscRangeReport("BBBB5678", "Sync error");
+        AssertEqual(
+            RipLogErrorParser.ParseFullDiscRangeWorkflow(log, 0),
+            "Read error \u2014 selected range",
+            "Sync error \u2014 selected range",
+            "Mismatched Test/Copy CRC \u2014 selected range");
+    }
+
+    private static void TestMissingFullDiscRangeCrc()
+    {
+        string log = FullDiscRangeReport("AAAA1234", null) +
+            "------------------------------------------------------------\r\n" +
+            FullDiscRangeReport(null, null);
+        AssertEqual(RipLogErrorParser.ParseFullDiscRangeWorkflow(log, 0),
+            "Missing full-disc range Test/Copy CRC \u2014 selected range");
+    }
+
+    private static void TestIncompleteFullDiscRangeReportIsNotComplete()
+    {
+        string log = FullDiscRangeReport("AAAA1234", null) +
+            "------------------------------------------------------------\r\n" +
+            "Exact Audio Copy V1.8 from 15. July 2024\r\n" +
+            "Range status and errors\r\n";
+        if (RipLogErrorParser.IsFullDiscRangeWorkflowComplete(log))
+        {
+            failures++;
+            Console.Error.WriteLine("An incomplete full-disc range report was considered complete.");
+        }
+    }
+
+    private static string FullDiscRangeReport(string copyCrc, string error)
+    {
+        return
+            "Exact Audio Copy V1.8 from 15. July 2024\r\n" +
+            "Range status and errors\r\n" +
+            "Selected range   (Sectors 0-300000)\r\n" +
+            (error == null ? String.Empty : error + "\r\n") +
+            (copyCrc == null ? String.Empty : "Copy CRC " + copyCrc + "\r\n") +
+            (error == null ? "No errors occurred\r\n" : "There were errors\r\n") +
+            "End of status report\r\n";
     }
 
     private static string HtoaReport(string time, string copyCrc, string error)
