@@ -301,6 +301,8 @@ namespace AudioDataPlugIn
 
         private static void PersistExtendedCompressorArguments(string value)
         {
+            if (settingsMigrationFailed)
+                return;
             // The disabled option deliberately freezes the plugin-owned value.
             // In particular, do not remove it merely because EAC currently has
             // a stock-length value.

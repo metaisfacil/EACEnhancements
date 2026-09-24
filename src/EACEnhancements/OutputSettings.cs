@@ -16,6 +16,25 @@ namespace AudioDataPlugIn
 	private const string DefaultFolderTemplate =
 		"%albumartist% - %albumtitle% (((%year%))) [FLAC] {{{%comment%}}}";
 	private const string AdditionalWorkflowsIniKey = "ShowAdditionalWorkflows";
+	private const string LegacySettingsSection = "OutputTemplate";
+	private const string OutputSettingsSection = "Output";
+	private const string WorkflowSettingsSection = "Workflows";
+	private const string ExtractionSettingsSection = "Extraction";
+	private const string DiagnosticsSettingsSection = "Diagnostics";
+	private const string InternalSettingsSection = "Internal";
+	private static readonly IDictionary<string, string> IniKeySections =
+		new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+		{
+			{ "Root", OutputSettingsSection },
+			{ "FolderTemplate", OutputSettingsSection },
+			{ "CreateWorkflowFolders", OutputSettingsSection },
+			{ "ShowWorkflowSetupAlert", WorkflowSettingsSection },
+			{ "ShowRipErrorAlert", WorkflowSettingsSection },
+			{ AdditionalWorkflowsIniKey, WorkflowSettingsSection },
+			{ IncreaseExternalCompressorArgumentsLimitIniKey, ExtractionSettingsSection },
+			{ "EnableLogging", DiagnosticsSettingsSection },
+			{ "WorkflowOnlyFolderTemplates", InternalSettingsSection }
+		};
 
 	internal static void ShowPluginOptions()
 	{
@@ -163,6 +182,8 @@ namespace AudioDataPlugIn
 					root = configuredRoot;
 			}
 		}
+		root = NormalizeRootFolder(root);
+		NormalizeFolderTemplate(folderTemplate);
 
 		try
 		{
@@ -173,17 +194,23 @@ namespace AudioDataPlugIn
 				FileShare.Read))
 			using (StreamWriter writer = new StreamWriter(stream, Encoding.Unicode))
 			{
-				writer.WriteLine("[" + OutputTemplateSection + "]");
+				writer.WriteLine("[" + OutputSettingsSection + "]");
 				writer.WriteLine("Root=" + SingleLineIniValue(root));
 				writer.WriteLine("FolderTemplate=" + SingleLineIniValue(folderTemplate));
-				writer.WriteLine("ShowRipErrorAlert=1");
-				writer.WriteLine("ShowWorkflowSetupAlert=1");
 				writer.WriteLine("CreateWorkflowFolders=1");
+				writer.WriteLine();
+				writer.WriteLine("[" + WorkflowSettingsSection + "]");
+				writer.WriteLine("ShowWorkflowSetupAlert=1");
+				writer.WriteLine("ShowRipErrorAlert=1");
+				writer.WriteLine(AdditionalWorkflowsIniKey + "=0");
+				writer.WriteLine();
+				writer.WriteLine("[" + ExtractionSettingsSection + "]");
 				writer.WriteLine(
 					IncreaseExternalCompressorArgumentsLimitIniKey +
 					"=1");
+				writer.WriteLine();
+				writer.WriteLine("[" + DiagnosticsSettingsSection + "]");
 				writer.WriteLine("EnableLogging=0");
-				writer.WriteLine(AdditionalWorkflowsIniKey + "=0");
 			}
 		}
 		catch (IOException)
@@ -217,12 +244,20 @@ namespace AudioDataPlugIn
 		string operation,
 		Exception error)
 	{
+		bool migration = String.Equals(operation, "migrate", StringComparison.OrdinalIgnoreCase);
 		string action = String.Equals(operation, "create", StringComparison.OrdinalIgnoreCase)
 			? "create"
-			: "update";
+			: migration ? "validate and migrate" : "update";
 		string reason = error == null || String.IsNullOrWhiteSpace(error.Message)
 			? "Windows did not provide an error description."
 			: error.Message.Trim();
+		if (migration)
+			return "EAC Enhancements could not validate and migrate its settings file:" +
+				Environment.NewLine + Environment.NewLine + iniPath +
+				Environment.NewLine + Environment.NewLine +
+				"Reason: " + reason +
+				Environment.NewLine + Environment.NewLine +
+				"The original file was left unchanged. Correct the problem and restart EAC.";
 		return
 			"EAC Enhancements could not " + action + " its settings file:" +
 			Environment.NewLine + Environment.NewLine + iniPath +
@@ -361,53 +396,132 @@ namespace AudioDataPlugIn
 
 	private static string ReadIniValue(string iniPath, string key, string fallback)
 	{
-		StringBuilder stringBuilder = new StringBuilder(2048);
-		NativeMethods.GetPrivateProfileStringW("OutputTemplate", key, fallback, stringBuilder, stringBuilder.Capacity, iniPath);
-		return stringBuilder.ToString();
+		string section;
+		if (!IniKeySections.TryGetValue(key, out section))
+			section = LegacySettingsSection;
+		string value = ReadIniSectionValue(iniPath, section, key);
+		if (value == null && !String.Equals(section, LegacySettingsSection, StringComparison.OrdinalIgnoreCase))
+			value = ReadIniSectionValue(iniPath, LegacySettingsSection, key);
+		return value ?? fallback;
+	}
+
+	private static string ReadIniSectionValue(string iniPath, string section, string key)
+	{
+		string missing = "__EACEnhancementsMissing_" + Guid.NewGuid().ToString("N") + "__";
+		StringBuilder value = new StringBuilder(32768);
+		uint length = NativeMethods.GetPrivateProfileStringW(
+			section, key, missing, value, value.Capacity, iniPath);
+		if (length >= value.Capacity - 1)
+			throw new InvalidDataException("The " + key + " setting is too long to read safely.");
+		return String.Equals(value.ToString(), missing, StringComparison.Ordinal)
+			? null
+			: value.ToString();
+	}
+
+	private static bool WriteIniValue(string iniPath, string key, string value)
+	{
+		string section;
+		if (!IniKeySections.TryGetValue(key, out section))
+			throw new ArgumentException("Unknown EAC Enhancements setting: " + key, "key");
+		return NativeMethods.WritePrivateProfileStringW(section, key, value, iniPath);
+	}
+
+	private static bool MigrateSettingsFileInPlace(string iniPath)
+	{
+		if (!File.Exists(iniPath))
+			return false;
+		bool changed = false;
+		foreach (KeyValuePair<string, string> setting in IniKeySections)
+		{
+			string oldValue = ReadIniSectionValue(iniPath, LegacySettingsSection, setting.Key);
+			if (oldValue == null)
+				continue;
+			if (ReadIniSectionValue(iniPath, setting.Value, setting.Key) == null &&
+				!NativeMethods.WritePrivateProfileStringW(
+					setting.Value, setting.Key, oldValue, iniPath))
+				throw new IOException("Could not migrate the " + setting.Key + " setting to [" + setting.Value + "].");
+			if (!NativeMethods.WritePrivateProfileStringW(
+				LegacySettingsSection, setting.Key, null, iniPath))
+				throw new IOException("Could not remove the migrated " + setting.Key + " setting from [OutputTemplate].");
+			changed = true;
+		}
+		bool legacySectionExists;
+		bool hasLegacyContent = LegacySettingsSectionHasContent(iniPath, out legacySectionExists);
+		if (legacySectionExists && !hasLegacyContent)
+		{
+			if (!NativeMethods.WritePrivateProfileStringW(
+				LegacySettingsSection, null, null, iniPath))
+				throw new IOException("Could not remove the empty [OutputTemplate] section.");
+			changed = true;
+		}
+		return changed;
+	}
+
+	private static bool LegacySettingsSectionHasContent(
+		string iniPath, out bool sectionExists)
+	{
+		sectionExists = false;
+		bool inLegacySection = false;
+		foreach (string line in File.ReadAllLines(iniPath))
+		{
+			string trimmed = line.Trim();
+			if (trimmed.StartsWith("[", StringComparison.Ordinal) &&
+				trimmed.EndsWith("]", StringComparison.Ordinal))
+			{
+				inLegacySection = String.Equals(
+					trimmed.Substring(1, trimmed.Length - 2).Trim(),
+					LegacySettingsSection,
+					StringComparison.OrdinalIgnoreCase);
+				if (inLegacySection)
+					sectionExists = true;
+			}
+			else if (inLegacySection && trimmed.Length != 0)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static void SaveOutputTemplateSettings(
 		OutputTemplateSettings settings,
 		bool synchronizeLiveSettings)
 	{
+		if (settingsMigrationFailed)
+			throw new InvalidOperationException(
+				"The settings file failed startup validation and cannot be changed until EAC restarts with a valid file.");
 		string text = NormalizeRootFolder(settings.RootFolder);
 		string text2 = NormalizeFolderTemplate(settings.FolderTemplate);
 		Directory.CreateDirectory(text);
 		string text4 = GetSettingsFilePath();
-		if (!NativeMethods.WritePrivateProfileStringW("OutputTemplate", "Root", text, text4) ||
-			!NativeMethods.WritePrivateProfileStringW("OutputTemplate", "FolderTemplate", text2, text4) ||
-			!NativeMethods.WritePrivateProfileStringW(
-				"OutputTemplate",
+		if (!WriteIniValue(text4, "Root", text) ||
+			!WriteIniValue(text4, "FolderTemplate", text2) ||
+			!WriteIniValue(
+				text4,
 				"ShowRipErrorAlert",
-				settings.ShowRipErrorAlert ? "1" : "0",
-				text4) ||
-			!NativeMethods.WritePrivateProfileStringW(
-				"OutputTemplate",
+				settings.ShowRipErrorAlert ? "1" : "0") ||
+			!WriteIniValue(
+				text4,
 				"ShowWorkflowSetupAlert",
-				settings.ShowWorkflowSetupAlert ? "1" : "0",
-				text4) ||
-			!NativeMethods.WritePrivateProfileStringW(
-				"OutputTemplate",
+				settings.ShowWorkflowSetupAlert ? "1" : "0") ||
+			!WriteIniValue(
+				text4,
 				"CreateWorkflowFolders",
-				settings.CreateWorkflowFolders ? "1" : "0",
-				text4) ||
-			!NativeMethods.WritePrivateProfileStringW(
-				"OutputTemplate",
+				settings.CreateWorkflowFolders ? "1" : "0") ||
+			!WriteIniValue(
+				text4,
 				IncreaseExternalCompressorArgumentsLimitIniKey,
 				settings.IncreaseExternalCompressorArgumentsLimit
 					? "1"
-					: "0",
-				text4) ||
-			!NativeMethods.WritePrivateProfileStringW(
-				"OutputTemplate",
+					: "0") ||
+			!WriteIniValue(
+				text4,
 				"EnableLogging",
-				settings.EnableLogging ? "1" : "0",
-				text4) ||
-			!NativeMethods.WritePrivateProfileStringW(
-				"OutputTemplate",
+				settings.EnableLogging ? "1" : "0") ||
+			!WriteIniValue(
+				text4,
 				AdditionalWorkflowsIniKey,
-				settings.ShowAdditionalWorkflows ? "1" : "0",
-				text4))
+				settings.ShowAdditionalWorkflows ? "1" : "0"))
 		{
 			int errorCode = Marshal.GetLastWin32Error();
 			Exception error = errorCode == 0
@@ -498,6 +612,8 @@ namespace AudioDataPlugIn
 
 	private static void MigrateLegacyWorkflowNamingSchemes()
 	{
+		if (settingsMigrationFailed)
+			return;
 		try
 		{
 			string iniPath = GetSettingsFilePath();
@@ -515,8 +631,7 @@ namespace AudioDataPlugIn
 			}
 			if (changed)
 				RefreshLiveOutputSettings();
-			if (!NativeMethods.WritePrivateProfileStringW(
-				"OutputTemplate", "WorkflowOnlyFolderTemplates", "1", iniPath))
+			if (!WriteIniValue(iniPath, "WorkflowOnlyFolderTemplates", "1"))
 				throw new IOException("Could not record the workflow naming migration.");
 			Log("Workflow-only folder naming migration completed; namingSchemesChanged=" + changed + ".");
 		}

@@ -26,7 +26,14 @@ namespace AudioDataPlugIn
                     throw new Exception("The default INI does not exist after creation.");
 
                 string contents = File.ReadAllText(iniPath, Encoding.Unicode);
-                AssertContains(contents, "[OutputTemplate]");
+                if (contents.Contains("[EACEnhancements]"))
+                    throw new Exception("The default INI was versioned before startup validation.");
+                AssertContains(contents, "[Output]");
+                AssertContains(contents, "[Workflows]");
+                AssertContains(contents, "[Extraction]");
+                AssertContains(contents, "[Diagnostics]");
+                if (contents.Contains("[OutputTemplate]"))
+                    throw new Exception("New settings still use the legacy section.");
                 AssertContains(contents, "Root=");
                 AssertContains(
                     contents,
@@ -40,6 +47,14 @@ namespace AudioDataPlugIn
                 AssertContains(contents, "EnableLogging=0");
                 AssertContains(contents,
                     "ShowAdditionalWorkflows=0");
+                if (!EnhancementRuntime.MigrateSettingsFile(iniPath))
+                    throw new Exception("The validated default INI was not versioned.");
+                contents = File.ReadAllText(iniPath, Encoding.Unicode);
+                if (!contents.StartsWith(
+                    "[EACEnhancements]\r\nVersion=" +
+                    EnhancementRuntime.CurrentPluginSettingsVersion() + "\r\n",
+                    StringComparison.Ordinal))
+                    throw new Exception("The validated default INI does not start with the plugin version.");
 
                 const string sentinel = "[OutputTemplate]\r\nEnableLogging=1\r\nCustom=keep\r\n";
                 File.WriteAllText(iniPath, sentinel, Encoding.Unicode);

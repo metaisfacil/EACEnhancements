@@ -147,7 +147,7 @@ namespace AudioDataPlugIn
         internal const string WorkflowButtonTooltipText = "Test & Copy + Cue (100% Log)";
         private const string OutputSettingsMenuText = "EAC Enhancements &Options...";
         private const string OutputTemplateIniName = "EACEnhancements.ini";
-        private const string OutputTemplateSection = "OutputTemplate";
+        private static bool settingsMigrationFailed;
         private const string LoggingEnvironmentVariable = "EACENHANCEMENTS_LOGGING";
         private const string ExtractionOptionsKey =
             @"Software\AWSoftware\EACU\Extraction Options";
@@ -339,20 +339,24 @@ namespace AudioDataPlugIn
 
                 initialized = true;
                 Exception settingsFileError = null;
+                string settingsFileOperation = "create";
                 try
                 {
                     EnsureDefaultSettingsFile();
+                    settingsFileOperation = "migrate";
+                    MigrateSettingsFile(GetSettingsFilePath());
                 }
                 catch (Exception error)
                 {
                     // A read-only installation must not prevent the plugin from loading.
                     settingsFileError = error;
+                    settingsMigrationFailed = settingsFileOperation == "migrate";
                 }
                 InitializeLoggingPreference();
                 if (settingsFileError != null)
                 {
-                    Log("Default settings file could not be created: " + settingsFileError);
-                    ShowSettingsFileError("create", settingsFileError);
+                    Log("Settings file " + settingsFileOperation + " failed: " + settingsFileError);
+                    ShowSettingsFileError(settingsFileOperation, settingsFileError);
                 }
 
                 InitializeCommandLine();
