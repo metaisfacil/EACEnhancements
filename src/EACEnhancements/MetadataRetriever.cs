@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
 using HelperFunctionsLib;
 
 namespace MetadataPlugIn
@@ -49,12 +48,17 @@ namespace MetadataPlugIn
 
         public void ShowOptions()
         {
-            MessageBox.Show(
+            // There is an as-of-yet undiagnosed EAC bug that can cause a deadlock
+            // under certain conditions involving a display-change callback on a
+            // thread with no message loop. A later SystemEvents callback could
+            // then wait on that thread forever. As part of triage, the plugin
+            // avoids initializing Screen itself. This may be reverted later.
+            AudioDataPlugIn.NativeMethods.MessageBoxW(
+                IntPtr.Zero,
                 "This metadata provider is used automatically by --eace-metadata. " +
                 "It does not have configurable options.",
                 "EAC Enhancements",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                0x40u);
         }
 
         public string GetPluginName()

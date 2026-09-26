@@ -48,7 +48,20 @@ namespace AudioDataPlugIn
 			IntPtr ownerWindow = NativeMethods.GetActiveWindow();
 			if (ownerWindow == IntPtr.Zero || !NativeMethods.IsWindow(ownerWindow))
 				ownerWindow = mainWindow;
-			RunOutputSettingsDialog(ownerWindow, mainWindow);
+			uint mainWindowThread = mainWindow == IntPtr.Zero
+				? 0u
+				: NativeMethods.GetWindowThreadProcessId(mainWindow, IntPtr.Zero);
+			if (mainWindowThread == NativeMethods.GetCurrentThreadId())
+			{
+				RunOutputSettingsDialog(ownerWindow, mainWindow);
+			}
+			else
+			{
+				// PluginHandler can call ShowOptions on a worker thread. A WinForms
+				// dialog there can register SystemEvents handlers with a context that
+				// has no message loop after ShowOptions returns.
+				StartOutputSettingsDialogThread(mainWindow, mainWindow);
+			}
 		}
 		catch (Exception ex)
 		{
@@ -65,14 +78,7 @@ namespace AudioDataPlugIn
 			if (Interlocked.CompareExchange(ref outputSettingsDialogActive, 1, 0) == 0)
 			{
 				IntPtr mainWindow = ReadAbsolutePointer(layout.MainWindowGlobalVa);
-				Thread thread = new Thread((ThreadStart)delegate
-				{
-					RunOutputSettingsDialog(mainWindow, mainWindow);
-				});
-				thread.IsBackground = true;
-				thread.Name = "EAC Enhancements output settings";
-				thread.SetApartmentState(ApartmentState.STA);
-				thread.Start();
+				StartOutputSettingsDialogThread(mainWindow, mainWindow);
 			}
 		}
 		catch (Exception ex)
@@ -80,6 +86,20 @@ namespace AudioDataPlugIn
 			Interlocked.Exchange(ref outputSettingsDialogActive, 0);
 			Log("Output settings command failed: " + ex);
 		}
+	}
+
+	private static void StartOutputSettingsDialogThread(
+		IntPtr ownerWindow,
+		IntPtr mainWindow)
+	{
+		Thread thread = new Thread((ThreadStart)delegate
+		{
+			RunOutputSettingsDialog(ownerWindow, mainWindow);
+		});
+		thread.IsBackground = true;
+		thread.Name = "EAC Enhancements output settings";
+		thread.SetApartmentState(ApartmentState.STA);
+		thread.Start();
 	}
 
 	// A modal dialog disables its owner until it closes. Either entry point can
@@ -227,11 +247,11 @@ namespace AudioDataPlugIn
 	{
 		try
 		{
-			MessageBox.Show(
+			NativeMethods.MessageBoxW(
+				IntPtr.Zero,
 				FormatSettingsFileError(GetSettingsFilePath(), operation, error),
 				"EAC Enhancements - Settings File Unavailable",
-				MessageBoxButtons.OK,
-				MessageBoxIcon.Warning);
+				0x30u);
 		}
 		catch
 		{
