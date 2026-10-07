@@ -1137,6 +1137,55 @@ namespace AudioDataPlugIn
             }
         }
 
+        internal static bool IsSelectAllShortcutMessage(
+            uint message,
+            IntPtr key,
+            IntPtr hookAction,
+            bool control,
+            bool alt,
+            bool shift)
+        {
+            return
+                (hookAction.ToInt64() & NativeMethods.PM_REMOVE) != 0 &&
+                message == NativeMethods.WM_KEYDOWN &&
+                key.ToInt64() == NativeMethods.VK_A &&
+                control &&
+                !alt &&
+                !shift;
+        }
+
+        // EAC runs without a common-controls v6 manifest, so neither its own
+        // metadata edits nor the ones added here get the v6 Ctrl+A handling.
+        // Selects all text when hwnd is an edit on the album metadata panel,
+        // including the edit inside an editable combo box such as Genre.
+        private static bool TrySelectAllInAlbumMetadataEdit(IntPtr hwnd)
+        {
+            if (albumMetadataParent == IntPtr.Zero ||
+                !NativeMethods.IsChild(albumMetadataParent, hwnd))
+            {
+                return false;
+            }
+
+            StringBuilder className = new StringBuilder(64);
+            if (NativeMethods.GetClassNameW(
+                    hwnd,
+                    className,
+                    className.Capacity) == 0 ||
+                !className.ToString().EndsWith(
+                    "edit",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            NativeMethods.SendMessageW(
+                hwnd,
+                NativeMethods.EM_SETSEL,
+                IntPtr.Zero,
+                new IntPtr(-1));
+            return true;
+        }
+
         private static bool IsAlbumMetadataEdit(IntPtr control)
         {
             return control == albumLabelEdit ||

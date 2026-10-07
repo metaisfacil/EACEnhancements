@@ -29,6 +29,7 @@ namespace AudioDataPlugIn
                 }
                 AssertClickNotificationFiltering();
                 AssertWorkflowShortcutFiltering();
+                AssertSelectAllShortcutFiltering();
                 AssertWorkflowInvocationGate();
                 AssertHtoaDetection();
                 AssertHtoaTrackHighlighting();
@@ -173,6 +174,61 @@ namespace AudioDataPlugIn
             {
                 throw new InvalidOperationException(
                     "A partial, different, or non-removed keystroke matched the workflow shortcut.");
+            }
+        }
+
+        private static void AssertSelectAllShortcutFiltering()
+        {
+            if (!EnhancementRuntime.IsSelectAllShortcutMessage(
+                NativeMethods.WM_KEYDOWN,
+                new IntPtr(NativeMethods.VK_A),
+                new IntPtr(NativeMethods.PM_REMOVE),
+                true,
+                false,
+                false))
+            {
+                throw new InvalidOperationException(
+                    "Ctrl+A was not recognized as the select-all shortcut.");
+            }
+
+            if (EnhancementRuntime.IsSelectAllShortcutMessage(
+                    NativeMethods.WM_KEYDOWN,
+                    new IntPtr(NativeMethods.VK_A),
+                    IntPtr.Zero,
+                    true,
+                    false,
+                    false) ||
+                EnhancementRuntime.IsSelectAllShortcutMessage(
+                    NativeMethods.WM_KEYDOWN,
+                    new IntPtr(NativeMethods.VK_A),
+                    new IntPtr(NativeMethods.PM_REMOVE),
+                    false,
+                    false,
+                    false) ||
+                EnhancementRuntime.IsSelectAllShortcutMessage(
+                    NativeMethods.WM_KEYDOWN,
+                    new IntPtr(NativeMethods.VK_A),
+                    new IntPtr(NativeMethods.PM_REMOVE),
+                    true,
+                    true,
+                    false) ||
+                EnhancementRuntime.IsSelectAllShortcutMessage(
+                    NativeMethods.WM_KEYDOWN,
+                    new IntPtr(NativeMethods.VK_A),
+                    new IntPtr(NativeMethods.PM_REMOVE),
+                    true,
+                    false,
+                    true) ||
+                EnhancementRuntime.IsSelectAllShortcutMessage(
+                    NativeMethods.WM_SYSKEYDOWN,
+                    new IntPtr(NativeMethods.VK_A),
+                    new IntPtr(NativeMethods.PM_REMOVE),
+                    true,
+                    false,
+                    false))
+            {
+                throw new InvalidOperationException(
+                    "A non-removed, modified, or unmodified A keystroke matched the select-all shortcut.");
             }
         }
 

@@ -2605,6 +2605,21 @@ namespace AudioDataPlugIn
 					IsKeyDown(NativeMethods.VK_CONTROL),
 					IsKeyDown(NativeMethods.VK_MENU),
 					IsKeyDown(NativeMethods.VK_SHIFT));
+				if (inMainWindow &&
+					IsSelectAllShortcutMessage(
+						mSG.message,
+						mSG.wParam,
+						wParam,
+						IsKeyDown(NativeMethods.VK_CONTROL),
+						IsKeyDown(NativeMethods.VK_MENU),
+						IsKeyDown(NativeMethods.VK_SHIFT)) &&
+					TrySelectAllInAlbumMetadataEdit(mSG.hwnd))
+				{
+					// Consume the keystroke so EAC's accelerators and the
+					// edit's Ctrl+A control character never see it.
+					mSG.message = NativeMethods.WM_NULL;
+					Marshal.StructureToPtr(mSG, lParam, false);
+				}
 				if (inMainWindow && shortcut)
 				{
 					// Remove the keystroke before EAC's accelerator/dialog

@@ -78,6 +78,7 @@ namespace AudioDataPlugIn
         internal const uint WM_UNDO = 0x0304;
         internal const uint WM_SETFONT = 0x0030;
         internal const uint WM_GETFONT = 0x0031;
+        internal const uint EM_SETSEL = 0x00B1;
         internal const uint EM_SETLIMITTEXT = 0x00C5;
         internal const uint EM_GETLIMITTEXT = 0x00D5;
         internal const uint CB_GETCOUNT = 0x0146;
@@ -95,6 +96,7 @@ namespace AudioDataPlugIn
         internal const uint VK_CONTROL = 0x11;
         internal const uint VK_MENU = 0x12;
         internal const uint VK_1 = 0x31;
+        internal const uint VK_A = 0x41;
         internal const uint MB_OK = 0x00000000;
         internal const uint MB_ICONWARNING = 0x00000030;
         internal const uint LVM_GETITEMCOUNT = 0x1004;
