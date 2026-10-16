@@ -34,7 +34,9 @@ namespace AudioDataPlugIn
 	private const int HtoaHibernateControlId = 0x10D9;
 	private const int TrackListControlId = 0x000E;
 	private const int CdTitleControlId = 0x03E0;
+	private const int CdArtistControlId = 0x03E1;
 	private const int TrackTitleSubItem = 1;
+	private const int TrackArtistSubItem = 2;
 	private const int NmCustomDraw = -12;
 	private const uint CddsPrepaint = 0x00000001;
 	private const uint CddsItem = 0x00010000;
@@ -744,6 +746,8 @@ namespace AudioDataPlugIn
 				TitleCaseTransformCommand.ToString("X") + ": " +
 				TitleCaseTransformMenuText + ".");
 		}
+		if (workflowInstalled && EnsureNormalizeSpacesMenuItem(transformMenu))
+			flag = true;
 		IntPtr toolsMenu = FindToolsMenu(menu);
 		bool tocDisplayInstalled = toolsMenu != IntPtr.Zero &&
 			NativeMethods.GetMenuState(
@@ -791,6 +795,25 @@ namespace AudioDataPlugIn
 			NativeMethods.DrawMenuBar(mainWindow);
 		}
 		return RequestWorkflowButtonInstallation(mainWindow);
+	}
+
+	internal static bool EnsureNormalizeSpacesMenuItem(IntPtr transformMenu)
+	{
+		if (NativeMethods.GetMenuState(transformMenu, NormalizeSpacesTransformCommand,
+			NativeMethods.MF_BYCOMMAND) != uint.MaxValue)
+			return false;
+
+		int titleCasePosition = FindMenuCommandPosition(transformMenu, TitleCaseTransformCommand);
+		if (titleCasePosition < 0)
+			throw new InvalidOperationException("The Title Case menu item was not found.");
+		if (!NativeMethods.InsertMenuW(transformMenu, (uint)(titleCasePosition + 1),
+			NativeMethods.MF_BYPOSITION | NativeMethods.MF_STRING,
+			new UIntPtr(NormalizeSpacesTransformCommand), NormalizeSpacesTransformMenuText))
+			throw new InvalidOperationException("Could not add Normalize Spaces to the CD information menu: " +
+				Marshal.GetLastWin32Error() + ".");
+		Log("Installed Database > Transform Current CD Information command 0x" +
+			NormalizeSpacesTransformCommand.ToString("X") + ": " + NormalizeSpacesTransformMenuText + ".");
+		return true;
 	}
 
 	private static void UpdateAdditionalWorkflowMenu(IntPtr mainWindow, bool enabled)
@@ -1320,7 +1343,14 @@ namespace AudioDataPlugIn
 				lParam == IntPtr.Zero &&
 				command == (int)TitleCaseTransformCommand)
 			{
-				TransformCurrentCdInformation(hwnd);
+				TransformCurrentCdInformation(hwnd, false);
+				return IntPtr.Zero;
+			}
+			if (message == NativeMethods.WM_COMMAND &&
+				lParam == IntPtr.Zero &&
+				command == (int)NormalizeSpacesTransformCommand)
+			{
+				TransformCurrentCdInformation(hwnd, true);
 				return IntPtr.Zero;
 			}
 			if (message == NativeMethods.WM_COMMAND &&
@@ -1434,11 +1464,16 @@ namespace AudioDataPlugIn
 		return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
 	}
 
-	private static void TransformCurrentCdInformation(IntPtr mainWindow)
+	private static void TransformCurrentCdInformation(IntPtr mainWindow, bool normalizeSpaces)
 	{
 		try
 		{
-			int changedTitles = TransformCurrentAlbumTitle(mainWindow) ? 1 : 0;
+			int changedTitles = TransformCurrentAlbumTitle(mainWindow, normalizeSpaces
+				? (Func<string, string>)SpaceNormalizer.Transform
+				: TitleCaseTransformer.TransformAlbumTitle) ? 1 : 0;
+			if (normalizeSpaces && TransformAlbumTextField(
+				mainWindow, CdArtistControlId, SpaceNormalizer.Transform))
+				changedTitles++;
 
 			IntPtr trackList = NativeMethods.GetDlgItem(mainWindow, TrackListControlId);
 			if (trackList == IntPtr.Zero)
@@ -1453,18 +1488,31 @@ namespace AudioDataPlugIn
 			{
 				string trackTitle = ReadListViewText(trackList, track, TrackTitleSubItem);
 				string transformedTrackTitle =
+					normalizeSpaces ? SpaceNormalizer.Transform(trackTitle) :
 					TitleCaseTransformer.TransformTrackTitle(trackTitle);
-				if (String.Equals(trackTitle, transformedTrackTitle, StringComparison.Ordinal))
-					continue;
-
-				WriteTrackTitle(mainWindow, trackList, track, transformedTrackTitle);
-				changedTitles++;
+				if (!String.Equals(trackTitle, transformedTrackTitle, StringComparison.Ordinal))
+				{
+					WriteTrackText(mainWindow, trackList, track, TrackTitleSubItem, transformedTrackTitle);
+					changedTitles++;
+				}
+				if (normalizeSpaces)
+				{
+					string artist = ReadListViewText(trackList, track, TrackArtistSubItem);
+					string transformedArtist = SpaceNormalizer.Transform(artist);
+					if (!String.Equals(artist, transformedArtist, StringComparison.Ordinal))
+					{
+						WriteTrackText(mainWindow, trackList, track, TrackArtistSubItem, transformedArtist);
+						changedTitles++;
+					}
+				}
 			}
 
 			NativeMethods.InvalidateRect(trackList, IntPtr.Zero, false);
 			Log(
-				"Transformed current CD information: " + changedTitles +
-				" title" + (changedTitles == 1 ? String.Empty : "s") + " changed.");
+				(normalizeSpaces ? "Normalized spaces in current CD information: " :
+				"Transformed current CD information: ") + changedTitles +
+				(normalizeSpaces ? " field" : " title") +
+				(changedTitles == 1 ? String.Empty : "s") + " changed.");
 		}
 		catch (Exception ex)
 		{
@@ -1480,12 +1528,23 @@ namespace AudioDataPlugIn
 
 	internal static bool TransformCurrentAlbumTitle(IntPtr mainWindow)
 	{
-		IntPtr cdTitle = NativeMethods.GetDlgItem(mainWindow, CdTitleControlId);
-		if (cdTitle == IntPtr.Zero)
-			throw new InvalidOperationException("EAC's CD title field was not found.");
+		return TransformCurrentAlbumTitle(mainWindow, TitleCaseTransformer.TransformAlbumTitle);
+	}
 
-		string albumTitle = ReadChildControlText(mainWindow, CdTitleControlId);
-		string transformedAlbumTitle = TitleCaseTransformer.TransformAlbumTitle(albumTitle);
+	internal static bool TransformCurrentAlbumTitle(IntPtr mainWindow, Func<string, string> transform)
+	{
+		return TransformAlbumTextField(mainWindow, CdTitleControlId, transform);
+	}
+
+	internal static bool TransformAlbumTextField(IntPtr mainWindow, int controlId,
+		Func<string, string> transform)
+	{
+		IntPtr cdTitle = NativeMethods.GetDlgItem(mainWindow, controlId);
+		if (cdTitle == IntPtr.Zero)
+			throw new InvalidOperationException("EAC's CD text field " + controlId + " was not found.");
+
+		string albumTitle = ReadChildControlText(mainWindow, controlId);
+		string transformedAlbumTitle = transform(albumTitle);
 		bool changed = !String.Equals(albumTitle, transformedAlbumTitle, StringComparison.Ordinal);
 		if (changed && NativeMethods.SendMessageStringW(
 			cdTitle,
@@ -1493,18 +1552,20 @@ namespace AudioDataPlugIn
 			IntPtr.Zero,
 			transformedAlbumTitle) == IntPtr.Zero)
 		{
-			throw new InvalidOperationException("EAC rejected the transformed CD title.");
+			throw new InvalidOperationException("EAC rejected the transformed CD text field " + controlId + ".");
 		}
 
 		// WM_SETTEXT only changes the edit control. EAC commits CD title 0x3E0
 		// on EN_KILLFOCUS (1.6: 0x0063D4B0; 1.8: 0x00640BF0, verified in
 		// Ghidra), copying it into the disc metadata and marking it dirty.
 		// Commit before track edits can refresh the UI, even when an already
-		// title-cased value is still pending in the control. Keep focus intact.
+		// transformed value is still pending in the control. Keep focus intact.
+		// Artist 0x3E1 also commits on EN_KILLFOCUS (1.6: 0x0063D2F8;
+		// 1.8: 0x00640A38, verified in Ghidra).
 		NativeMethods.SendMessageW(
 			mainWindow,
 			NativeMethods.WM_COMMAND,
-			new IntPtr((NativeMethods.EN_KILLFOCUS << 16) | CdTitleControlId),
+			new IntPtr((NativeMethods.EN_KILLFOCUS << 16) | controlId),
 			cdTitle);
 		return changed;
 	}
@@ -1533,19 +1594,20 @@ namespace AudioDataPlugIn
 		}
 	}
 
-	private static void WriteTrackTitle(
+	private static void WriteTrackText(
 		IntPtr mainWindow,
 		IntPtr trackList,
 		int track,
-		string title)
+		int subItem,
+		string value)
 	{
-		IntPtr text = Marshal.StringToHGlobalUni(title);
+		IntPtr text = Marshal.StringToHGlobalUni(value);
 		try
 		{
 			NativeMethods.LVITEM item = new NativeMethods.LVITEM();
 			item.Mask = NativeMethods.LVIF_TEXT;
 			item.Item = track;
-			item.SubItem = TrackTitleSubItem;
+			item.SubItem = subItem;
 			item.Text = text;
 
 			NativeMethods.NMLVDISPINFO notification = new NativeMethods.NMLVDISPINFO();
@@ -1577,7 +1639,7 @@ namespace AudioDataPlugIn
 				ref item) == IntPtr.Zero)
 			{
 				throw new InvalidOperationException(
-					"EAC rejected the transformed title for track " + (track + 1) + ".");
+					"EAC rejected the transformed text for track " + (track + 1) + ".");
 			}
 		}
 		finally

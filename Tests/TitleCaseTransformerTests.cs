@@ -37,6 +37,10 @@ namespace AudioDataPlugIn
                 AssertDatabaseMenuResolution();
                 AssertAlbumTitleCommit("THE BEST OF ROCK", "The Best of Rock", true);
                 AssertAlbumTitleCommit("The Best of Rock", "The Best of Rock", false);
+                AssertAlbumTitleCommit("\u3000Live\u00A0\u2009in\u202FTokyo\u3000",
+                    " Live  in Tokyo ", true, SpaceNormalizer.Transform);
+                AssertAlbumTitleCommit("Live  in Tokyo", "Live  in Tokyo", false,
+                    SpaceNormalizer.Transform);
                 Console.WriteLine("Title-case transformer tests passed.");
                 return 0;
             }
@@ -49,6 +53,12 @@ namespace AudioDataPlugIn
 
         private static void AssertAlbumTitleCommit(string input, string expected, bool changed)
         {
+            AssertAlbumTitleCommit(input, expected, changed, TitleCaseTransformer.TransformAlbumTitle);
+        }
+
+        private static void AssertAlbumTitleCommit(string input, string expected, bool changed,
+            Func<string, string> transform)
+        {
             using (AlbumTitleHost host = new AlbumTitleHost())
             {
                 host.TitleEdit = NativeMethods.CreateWindowExW(
@@ -60,7 +70,7 @@ namespace AudioDataPlugIn
                 // Keep the title unfocused, as when the macro is invoked from
                 // the menu while the user has been working in the track list.
                 IntPtr focus = NativeMethods.GetFocus();
-                if (EnhancementRuntime.TransformCurrentAlbumTitle(host.Handle) != changed)
+                if (EnhancementRuntime.TransformCurrentAlbumTitle(host.Handle, transform) != changed)
                     throw new Exception("Incorrect album title change count.");
                 if (host.CommitCount != 1 || host.CommittedTitle != expected)
                     throw new Exception("Title Case did not commit the album title to disc metadata: " +

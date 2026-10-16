@@ -125,6 +125,7 @@ namespace AudioDataPlugIn
         private const uint StartFullDiscRangeCommand = 0xA31E;
         private const uint StartFullDiscSecondPassCommand = 0xA31F;
         private const uint RefreshAdditionalWorkflowMenuCommand = 0xA320;
+        private const uint NormalizeSpacesTransformCommand = 0xA328;
         private const uint CompressedCopyRangeCommand = 0x0304;
         private const uint WorkflowDestinationCommand = 0xA313;
         private const uint StartPreparedWorkflowCommand = 0xA314;
@@ -142,6 +143,8 @@ namespace AudioDataPlugIn
             "Test && Copy Range Rip (Non-100% Log)";
         private const string TitleCaseTransformMenuText =
             "&Title Case (EAC Enhancements)";
+        private const string NormalizeSpacesTransformMenuText =
+            "Normalize &Spaces (EAC Enhancements)";
         private const string DisplayCdTocMenuText =
             "Display CD TOC... (EAC Enhancements)";
         internal const string WorkflowButtonTooltipText = "Test & Copy + Cue (100% Log)";
