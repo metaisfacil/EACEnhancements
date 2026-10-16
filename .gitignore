@@ -21,3 +21,6 @@
 *.bak
 *.cache
 ~$*
+
+# Research
+Research/
