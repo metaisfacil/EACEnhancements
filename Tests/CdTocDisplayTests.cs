@@ -1,19 +1,23 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Forms;
 
 namespace AudioDataPlugIn
 {
     internal static class CdTocDisplayTests
     {
+        [STAThread]
         private static int Main()
         {
             AssertEnglishRipLogTable();
             AssertLocalizedColumnExpansion();
             AssertLanguageFileParsing();
             AssertToolsMenuResolution();
+            AssertDialogWithoutDisc();
             AssertFullDiscRangeAudioBoundary();
             Console.WriteLine("CD TOC display tests passed.");
             return 0;
@@ -55,6 +59,108 @@ namespace AudioDataPlugIn
                 "English EAC table");
             AssertEqual(" 0:00.00", CdTocFormatter.FormatMsf(0), "zero MSF");
             AssertEqual("99:59.74", CdTocFormatter.FormatMsf(449999), "maximum MSF");
+        }
+
+        private static void AssertDialogWithoutDisc()
+        {
+            using (Form host = new Form())
+            {
+                IntPtr root = CreateMenu();
+                IntPtr action = CreateMenu();
+                IntPtr tools = CreateMenu();
+                AppendPopup(root, CreateMenu(), "&EAC");
+                AppendPopup(root, CreateMenu(), "&Edit");
+                AppendPopup(root, action, "&Action");
+                AppendPopup(root, CreateMenu(), "&Database");
+                AppendPopup(root, tools, "&Tools");
+                NativeMethods.AppendMenuW(action, NativeMethods.MF_GRAYED,
+                    new UIntPtr(0x303), "Copy");
+                NativeMethods.AppendMenuW(tools, NativeMethods.MF_GRAYED,
+                    new UIntPtr(0xA31C), "Display CD TOC");
+                NativeMethods.AppendMenuW(tools, NativeMethods.MF_STRING,
+                    new UIntPtr(0xA329), "Parse Tracklist");
+                if (!SetMenu(host.Handle, root))
+                    throw new Exception("Could not attach the menu fixture.");
+                try
+                {
+                    // No EAC memory layout is installed in this process. The no-disc
+                    // path must open without trying to read a TOC from native memory.
+                    InvokeRuntime("SynchronizeWorkflowMenuState", host.Handle, -1, -1, -1, -1);
+                    if ((NativeMethods.GetMenuState(tools, 0xA31C, 0) & 3) != 0)
+                        throw new Exception("The TOC dialog must remain enabled without a disc.");
+                    if ((NativeMethods.GetMenuState(tools, 0xA329, 0) & 3) == 0)
+                        throw new Exception("Parse Tracklist still requires a disc.");
+
+                    InvokeRuntime("ShowCurrentCdToc", host.Handle);
+                    Form dialog = (Form)ReadRuntimeField("cdTocWindow");
+                    AssertTocButtons(dialog, false);
+                    RichTextBox text = (RichTextBox)ReadRuntimeField("cdTocTextBox");
+                    if (!text.Text.Contains("No CD is inserted into this drive."))
+                        throw new Exception("The no-disc dialog needs an explanation.");
+
+                    List<CdTocEntry> entries = new List<CdTocEntry>
+                    {
+                        new CdTocEntry { TrackNumber = 1, StartSector = 0, NextStartSector = 75 }
+                    };
+                    EnhancementRuntime.ShowCdToc(host.Handle, entries);
+                    if (ReadRuntimeField("cdTocWindow") != dialog)
+                        throw new Exception("The existing TOC dialog must be reused.");
+                    AssertTocButtons(dialog, true);
+                    AssertEqual(CdTocFormatter.Format(entries, new CdTocLabels()),
+                        text.Text.Replace("\n", "\r\n"), "loaded TOC display");
+
+                    InvokeRuntime("ShowCurrentCdToc", host.Handle);
+                    AssertTocButtons(dialog, false);
+                    if (ReadRuntimeField("displayedCdTocEntries") != null ||
+                        !text.Text.Contains("No CD is inserted into this drive."))
+                        throw new Exception("Reopening without a disc must clear the old TOC.");
+                    dialog.Close();
+                    InvokeRuntime("ShowCurrentCdToc", host.Handle);
+                    AssertTocButtons((Form)ReadRuntimeField("cdTocWindow"), false);
+                }
+                finally
+                {
+                    Form dialog = (Form)ReadRuntimeField("cdTocWindow");
+                    if (dialog != null)
+                        dialog.Close();
+                    SetMenu(host.Handle, IntPtr.Zero);
+                    DestroyMenu(root);
+                }
+            }
+        }
+
+        private static void AssertTocButtons(Form dialog, bool hasToc)
+        {
+            if (dialog == null || !dialog.Visible)
+                throw new Exception("The TOC dialog did not open.");
+            int count = 0;
+            foreach (Control panel in dialog.Controls)
+            {
+                foreach (Control control in panel.Controls)
+                {
+                    Button button = control as Button;
+                    if (button == null)
+                        continue;
+                    count++;
+                    bool expected = button.Text == "Compare Two Logs..." || hasToc;
+                    if (button.Enabled != expected)
+                        throw new Exception("Incorrect availability for " + button.Text);
+                }
+            }
+            if (count != 4)
+                throw new Exception("Expected all four TOC actions.");
+        }
+
+        private static object ReadRuntimeField(string name)
+        {
+            return typeof(EnhancementRuntime).GetField(name,
+                BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+        }
+
+        private static void InvokeRuntime(string name, params object[] arguments)
+        {
+            typeof(EnhancementRuntime).GetMethod(name,
+                BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, arguments);
         }
 
         private static void AssertFullDiscRangeAudioBoundary()
@@ -188,6 +294,10 @@ namespace AudioDataPlugIn
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr CreateMenu();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetMenu(IntPtr window, IntPtr menu);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

@@ -771,8 +771,6 @@ namespace AudioDataPlugIn
 					Marshal.GetLastWin32Error() + ".");
 			}
 			uint tocMenuFlags = NativeMethods.MF_STRING;
-			if (!HasCurrentCdToc())
-				tocMenuFlags |= NativeMethods.MF_GRAYED;
 			if (!NativeMethods.AppendMenuW(
 				toolsMenu,
 				tocMenuFlags,
@@ -1067,7 +1065,8 @@ namespace AudioDataPlugIn
 				NativeMethods.MF_BYCOMMAND);
 			if (tocMenuState != uint.MaxValue)
 			{
-				bool tocEnabled = HasCurrentCdToc();
+				// Log-to-log comparison is available even without a loaded disc.
+				bool tocEnabled = true;
 				bool currentlyEnabled = (tocMenuState & 3) == 0;
 				if (currentlyEnabled != tocEnabled)
 				{

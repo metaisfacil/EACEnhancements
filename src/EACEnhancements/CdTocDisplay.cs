@@ -148,6 +148,9 @@ namespace AudioDataPlugIn
             "cannot be derived without completing a rip.";
         private static Form cdTocWindow;
         private static RichTextBox cdTocTextBox;
+        private static Button cdTocCopyButton;
+        private static Button cdTocCompareButton;
+        private static Button cdTocMusicBrainzButton;
         private static IList<CdTocEntry> displayedCdTocEntries;
         private static IntPtr cdTocOwnerWindow;
 
@@ -209,89 +212,8 @@ namespace AudioDataPlugIn
         {
             try
             {
-                IList<CdTocEntry> entries = ReadCurrentCdToc();
-                string toc = CdTocFormatter.Format(entries, LoadCurrentTocLabels(mainWindow));
-                displayedCdTocEntries = entries;
-                cdTocOwnerWindow = mainWindow;
-                if (cdTocWindow != null && !cdTocWindow.IsDisposed)
-                {
-                    cdTocTextBox.Text = toc;
-                    cdTocWindow.Show();
-                    cdTocWindow.Activate();
-                    cdTocTextBox.Select(0, 0);
-                    return;
-                }
-
-                cdTocTextBox = new RichTextBox();
-                cdTocTextBox.AcceptsTab = true;
-                cdTocTextBox.BackColor = SystemColors.Window;
-                cdTocTextBox.BorderStyle = BorderStyle.None;
-                cdTocTextBox.DetectUrls = false;
-                cdTocTextBox.Dock = DockStyle.Fill;
-                cdTocTextBox.Font = new Font("Consolas", 9.0F, FontStyle.Regular);
-                cdTocTextBox.ReadOnly = true;
-                cdTocTextBox.ScrollBars = RichTextBoxScrollBars.Both;
-                cdTocTextBox.WordWrap = false;
-                cdTocTextBox.Text = toc;
-
-                Button copyButton = new Button();
-                copyButton.AutoSize = true;
-                copyButton.Text = "Copy TOC";
-                copyButton.UseVisualStyleBackColor = true;
-                copyButton.Click += delegate { CopyDisplayedCdToc(); };
-
-                Button compareButton = new Button();
-                compareButton.AutoSize = true;
-                compareButton.Text = "Compare to Log...";
-                compareButton.UseVisualStyleBackColor = true;
-                compareButton.Click += delegate { CompareDisplayedCdTocToLog(); };
-
-                Button compareTwoButton = new Button();
-                compareTwoButton.AutoSize = true;
-                compareTwoButton.Text = "Compare Two Logs...";
-                compareTwoButton.UseVisualStyleBackColor = true;
-                compareTwoButton.Click += delegate { CompareTwoLogs(); };
-
-                Button musicBrainzButton = new Button();
-                musicBrainzButton.AutoSize = true;
-                musicBrainzButton.Text = "Add Disc ID to MusicBrainz...";
-                musicBrainzButton.UseVisualStyleBackColor = true;
-                musicBrainzButton.Click += delegate { SubmitDisplayedCdTocToMusicBrainz(); };
-
-                FlowLayoutPanel buttons = new FlowLayoutPanel();
-                buttons.AutoSize = true;
-                buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-                buttons.Dock = DockStyle.Bottom;
-                buttons.FlowDirection = FlowDirection.LeftToRight;
-                buttons.Padding = new Padding(8, 7, 8, 7);
-                buttons.WrapContents = true;
-                buttons.Controls.Add(copyButton);
-                buttons.Controls.Add(compareButton);
-                buttons.Controls.Add(compareTwoButton);
-                buttons.Controls.Add(musicBrainzButton);
-
-                cdTocWindow = new Form();
-                cdTocWindow.ClientSize = new Size(600, 420);
-                cdTocWindow.Controls.Add(cdTocTextBox);
-                cdTocWindow.Controls.Add(buttons);
-                cdTocWindow.MinimizeBox = false;
-                cdTocWindow.MinimumSize = new Size(420, 240);
-                cdTocWindow.ShowIcon = false;
-                cdTocWindow.StartPosition = FormStartPosition.CenterParent;
-                cdTocWindow.Text = "CD Table-of-Contents (TOC)";
-                cdTocWindow.FormClosed += delegate
-                {
-                    if (cdTocTextBox != null)
-                    {
-                        cdTocTextBox.Dispose();
-                        cdTocTextBox = null;
-                    }
-                    displayedCdTocEntries = null;
-                    cdTocOwnerWindow = IntPtr.Zero;
-                    cdTocWindow = null;
-                };
-                cdTocWindow.Show(new EacWindowOwner(mainWindow));
-                cdTocTextBox.Select(0, 0);
+                IList<CdTocEntry> entries = HasCurrentCdToc() ? ReadCurrentCdToc() : null;
+                ShowCdToc(mainWindow, entries);
             }
             catch (Exception error)
             {
@@ -303,6 +225,111 @@ namespace AudioDataPlugIn
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
+        }
+
+        internal static void ShowCdToc(IntPtr mainWindow, IList<CdTocEntry> entries)
+        {
+            bool hasToc = entries != null && entries.Count > 0;
+            string toc = hasToc
+                ? CdTocFormatter.Format(entries, LoadCurrentTocLabels(mainWindow))
+                : "No CD is inserted into this drive.";
+            displayedCdTocEntries = entries;
+            cdTocOwnerWindow = mainWindow;
+            if (cdTocWindow != null && !cdTocWindow.IsDisposed)
+            {
+                cdTocTextBox.Text = toc;
+                UpdateCdTocButtons(hasToc);
+                cdTocWindow.Show();
+                cdTocWindow.Activate();
+                cdTocTextBox.Select(0, 0);
+                return;
+            }
+
+            cdTocTextBox = new RichTextBox();
+            cdTocTextBox.AcceptsTab = true;
+            cdTocTextBox.BackColor = SystemColors.Window;
+            cdTocTextBox.BorderStyle = BorderStyle.None;
+            cdTocTextBox.DetectUrls = false;
+            cdTocTextBox.Dock = DockStyle.Fill;
+            cdTocTextBox.Font = new Font("Consolas", 9.0F, FontStyle.Regular);
+            cdTocTextBox.ReadOnly = true;
+            cdTocTextBox.ScrollBars = RichTextBoxScrollBars.Both;
+            cdTocTextBox.WordWrap = false;
+            cdTocTextBox.Text = toc;
+
+            Button copyButton = new Button();
+            copyButton.AutoSize = true;
+            copyButton.Text = "Copy TOC";
+            copyButton.UseVisualStyleBackColor = true;
+            copyButton.Click += delegate { CopyDisplayedCdToc(); };
+
+            Button compareButton = new Button();
+            compareButton.AutoSize = true;
+            compareButton.Text = "Compare to Log...";
+            compareButton.UseVisualStyleBackColor = true;
+            compareButton.Click += delegate { CompareDisplayedCdTocToLog(); };
+
+            Button compareTwoButton = new Button();
+            compareTwoButton.AutoSize = true;
+            compareTwoButton.Text = "Compare Two Logs...";
+            compareTwoButton.UseVisualStyleBackColor = true;
+            compareTwoButton.Click += delegate { CompareTwoLogs(); };
+
+            Button musicBrainzButton = new Button();
+            musicBrainzButton.AutoSize = true;
+            musicBrainzButton.Text = "Add Disc ID to MusicBrainz...";
+            musicBrainzButton.UseVisualStyleBackColor = true;
+            musicBrainzButton.Click += delegate { SubmitDisplayedCdTocToMusicBrainz(); };
+
+            cdTocCopyButton = copyButton;
+            cdTocCompareButton = compareButton;
+            cdTocMusicBrainzButton = musicBrainzButton;
+            UpdateCdTocButtons(hasToc);
+
+            FlowLayoutPanel buttons = new FlowLayoutPanel();
+            buttons.AutoSize = true;
+            buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttons.Dock = DockStyle.Bottom;
+            buttons.FlowDirection = FlowDirection.LeftToRight;
+            buttons.Padding = new Padding(8, 7, 8, 7);
+            buttons.WrapContents = true;
+            buttons.Controls.Add(copyButton);
+            buttons.Controls.Add(compareButton);
+            buttons.Controls.Add(compareTwoButton);
+            buttons.Controls.Add(musicBrainzButton);
+
+            cdTocWindow = new Form();
+            cdTocWindow.ClientSize = new Size(600, 420);
+            cdTocWindow.Controls.Add(cdTocTextBox);
+            cdTocWindow.Controls.Add(buttons);
+            cdTocWindow.MinimizeBox = false;
+            cdTocWindow.MinimumSize = new Size(420, 240);
+            cdTocWindow.ShowIcon = false;
+            cdTocWindow.StartPosition = FormStartPosition.CenterParent;
+            cdTocWindow.Text = "CD Table-of-Contents (TOC)";
+            cdTocWindow.FormClosed += delegate
+            {
+                if (cdTocTextBox != null)
+                {
+                    cdTocTextBox.Dispose();
+                    cdTocTextBox = null;
+                }
+                displayedCdTocEntries = null;
+                cdTocCopyButton = null;
+                cdTocCompareButton = null;
+                cdTocMusicBrainzButton = null;
+                cdTocOwnerWindow = IntPtr.Zero;
+                cdTocWindow = null;
+            };
+            cdTocWindow.Show(new EacWindowOwner(mainWindow));
+            cdTocTextBox.Select(0, 0);
+        }
+
+        private static void UpdateCdTocButtons(bool hasToc)
+        {
+            cdTocCopyButton.Enabled = hasToc;
+            cdTocCompareButton.Enabled = hasToc;
+            cdTocMusicBrainzButton.Enabled = hasToc;
         }
 
         private static void SubmitDisplayedCdTocToMusicBrainz()
