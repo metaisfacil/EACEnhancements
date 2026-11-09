@@ -790,6 +790,8 @@ namespace AudioDataPlugIn
 				DisplayCdTocCommand.ToString("X") + ": " +
 				DisplayCdTocMenuText + ".");
 		}
+		if (EnsureParseTracklistMenuItem(toolsMenu))
+			flag = true;
 		if (flag)
 		{
 			NativeMethods.DrawMenuBar(mainWindow);
@@ -813,6 +815,27 @@ namespace AudioDataPlugIn
 				Marshal.GetLastWin32Error() + ".");
 		Log("Installed Database > Transform Current CD Information command 0x" +
 			NormalizeSpacesTransformCommand.ToString("X") + ": " + NormalizeSpacesTransformMenuText + ".");
+		return true;
+	}
+
+	internal static bool EnsureParseTracklistMenuItem(IntPtr toolsMenu)
+	{
+		if (NativeMethods.GetMenuState(toolsMenu, ParseTracklistCommand,
+			NativeMethods.MF_BYCOMMAND) != uint.MaxValue)
+			return false;
+
+		int tocPosition = FindMenuCommandPosition(toolsMenu, DisplayCdTocCommand);
+		if (tocPosition < 0)
+			throw new InvalidOperationException("The Display CD TOC menu item was not found.");
+		uint flags = NativeMethods.MF_BYPOSITION | NativeMethods.MF_STRING;
+		if (!HasCurrentCdToc())
+			flags |= NativeMethods.MF_GRAYED;
+		if (!NativeMethods.InsertMenuW(toolsMenu, (uint)(tocPosition + 1), flags,
+			new UIntPtr(ParseTracklistCommand), ParseTracklistMenuText))
+			throw new InvalidOperationException("Could not add Parse Tracklist to the Tools menu: " +
+				Marshal.GetLastWin32Error() + ".");
+		Log("Installed Tools-menu command 0x" +
+			ParseTracklistCommand.ToString("X") + ": " + ParseTracklistMenuText + ".");
 		return true;
 	}
 
@@ -1060,6 +1083,22 @@ namespace AudioDataPlugIn
 					lastTocEnabled = state;
 					Log("Display CD TOC menu is now " +
 						(tocEnabled ? "enabled" : "disabled") + ".");
+				}
+			}
+			uint parseMenuState = NativeMethods.GetMenuState(
+				toolsMenu,
+				ParseTracklistCommand,
+				NativeMethods.MF_BYCOMMAND);
+			if (parseMenuState != uint.MaxValue)
+			{
+				bool parseEnabled = HasCurrentCdToc();
+				if (((parseMenuState & 3u) == 0) != parseEnabled)
+				{
+					NativeMethods.EnableMenuItem(
+						toolsMenu,
+						ParseTracklistCommand,
+						parseEnabled ? NativeMethods.MF_ENABLED : NativeMethods.MF_GRAYED);
+					NativeMethods.DrawMenuBar(mainWindow);
 				}
 			}
 		}
@@ -1360,6 +1399,13 @@ namespace AudioDataPlugIn
 				ShowCurrentCdToc(hwnd);
 				return IntPtr.Zero;
 			}
+			if (message == NativeMethods.WM_COMMAND &&
+				lParam == IntPtr.Zero &&
+				command == (int)ParseTracklistCommand)
+			{
+				ShowTracklistParser(hwnd);
+				return IntPtr.Zero;
+			}
 			if (message == 273 && command == 41746)
 			{
 				ShowOutputSettingsDialog();
@@ -1609,28 +1655,7 @@ namespace AudioDataPlugIn
 			item.Item = track;
 			item.SubItem = subItem;
 			item.Text = text;
-
-			NativeMethods.NMLVDISPINFO notification = new NativeMethods.NMLVDISPINFO();
-			notification.Header.WindowFrom = trackList;
-			notification.Header.IdFrom = new UIntPtr(TrackListControlId);
-			notification.Header.Code = NativeMethods.LVN_ENDLABELEDITW;
-			notification.Item = item;
-
-			IntPtr notificationPointer = Marshal.AllocHGlobal(
-				Marshal.SizeOf(typeof(NativeMethods.NMLVDISPINFO)));
-			try
-			{
-				Marshal.StructureToPtr(notification, notificationPointer, false);
-				NativeMethods.SendMessageW(
-					mainWindow,
-					NativeMethods.WM_NOTIFY,
-					new IntPtr(TrackListControlId),
-					notificationPointer);
-			}
-			finally
-			{
-				Marshal.FreeHGlobal(notificationPointer);
-			}
+			NotifyTrackTextEdited(mainWindow, trackList, item);
 
 			if (NativeMethods.SendMessageListViewItemW(
 				trackList,
@@ -1645,6 +1670,38 @@ namespace AudioDataPlugIn
 		finally
 		{
 			Marshal.FreeHGlobal(text);
+		}
+	}
+
+	// Commits through EAC's own label-edit handler, which stores the text in the disc
+	// metadata and marks it dirty. The handler dispatches on the subitem: 1 is the
+	// title and 2 is the artist. It ignores an empty title, and an empty artist resets
+	// the track to the disc-level value.
+	private static void NotifyTrackTextEdited(
+		IntPtr mainWindow,
+		IntPtr trackList,
+		NativeMethods.LVITEM item)
+	{
+		NativeMethods.NMLVDISPINFO notification = new NativeMethods.NMLVDISPINFO();
+		notification.Header.WindowFrom = trackList;
+		notification.Header.IdFrom = new UIntPtr(TrackListControlId);
+		notification.Header.Code = NativeMethods.LVN_ENDLABELEDITW;
+		notification.Item = item;
+
+		IntPtr notificationPointer = Marshal.AllocHGlobal(
+			Marshal.SizeOf(typeof(NativeMethods.NMLVDISPINFO)));
+		try
+		{
+			Marshal.StructureToPtr(notification, notificationPointer, false);
+			NativeMethods.SendMessageW(
+				mainWindow,
+				NativeMethods.WM_NOTIFY,
+				new IntPtr(TrackListControlId),
+				notificationPointer);
+		}
+		finally
+		{
+			Marshal.FreeHGlobal(notificationPointer);
 		}
 	}
 

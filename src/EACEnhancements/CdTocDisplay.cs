@@ -573,7 +573,25 @@ namespace AudioDataPlugIn
 
         private static CdTocLabels LoadCurrentTocLabels(IntPtr mainWindow)
         {
-            CdTocLabels fallback = new CdTocLabels();
+            CdTocLabels labels = new CdTocLabels();
+            Dictionary<int, string> strings = FindCurrentLanguageStrings(mainWindow);
+            if (strings == null)
+                return labels;
+
+            string value;
+            if (strings.TryGetValue(1289, out value)) labels.Title = value;
+            if (strings.TryGetValue(1290, out value)) labels.Track = value;
+            if (strings.TryGetValue(1291, out value)) labels.Start = value;
+            if (strings.TryGetValue(1292, out value)) labels.Length = value;
+            if (strings.TryGetValue(1293, out value)) labels.StartSector = value;
+            if (strings.TryGetValue(1294, out value)) labels.EndSector = value;
+            return labels;
+        }
+
+        // Identifies EAC's active language file by its Tools menu caption. Returns null
+        // if it can't be determined.
+        private static Dictionary<int, string> FindCurrentLanguageStrings(IntPtr mainWindow)
+        {
             try
             {
                 string toolsCaption = GetToolsMenuCaption(mainWindow);
@@ -581,37 +599,27 @@ namespace AudioDataPlugIn
                     AppDomain.CurrentDomain.BaseDirectory,
                     "Languages");
                 if (!Directory.Exists(languageDirectory))
-                    return fallback;
+                    return null;
 
                 foreach (string path in Directory.GetFiles(languageDirectory, "*.txt"))
                 {
                     Dictionary<int, string> strings = ReadLanguageStrings(path);
                     string candidateTools;
-                    if (!strings.TryGetValue(240000, out candidateTools) ||
-                        !String.Equals(
+                    if (strings.TryGetValue(240000, out candidateTools) &&
+                        String.Equals(
                             NormalizeMenuCaption(candidateTools),
                             NormalizeMenuCaption(toolsCaption),
                             StringComparison.OrdinalIgnoreCase))
                     {
-                        continue;
+                        return strings;
                     }
-
-                    string value;
-                    CdTocLabels labels = new CdTocLabels();
-                    if (strings.TryGetValue(1289, out value)) labels.Title = value;
-                    if (strings.TryGetValue(1290, out value)) labels.Track = value;
-                    if (strings.TryGetValue(1291, out value)) labels.Start = value;
-                    if (strings.TryGetValue(1292, out value)) labels.Length = value;
-                    if (strings.TryGetValue(1293, out value)) labels.StartSector = value;
-                    if (strings.TryGetValue(1294, out value)) labels.EndSector = value;
-                    return labels;
                 }
             }
             catch (Exception error)
             {
-                Log("Could not load EAC's localized TOC captions: " + error.Message);
+                Log("Could not load EAC's localized strings: " + error.Message);
             }
-            return fallback;
+            return null;
         }
 
         private static string GetToolsMenuCaption(IntPtr mainWindow)

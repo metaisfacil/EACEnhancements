@@ -126,6 +126,7 @@ namespace AudioDataPlugIn
         private const uint StartFullDiscSecondPassCommand = 0xA31F;
         private const uint RefreshAdditionalWorkflowMenuCommand = 0xA320;
         private const uint NormalizeSpacesTransformCommand = 0xA328;
+        private const uint ParseTracklistCommand = 0xA329;
         private const uint CompressedCopyRangeCommand = 0x0304;
         private const uint WorkflowDestinationCommand = 0xA313;
         private const uint StartPreparedWorkflowCommand = 0xA314;
@@ -147,6 +148,8 @@ namespace AudioDataPlugIn
             "Normalize &Spaces (EAC Enhancements)";
         private const string DisplayCdTocMenuText =
             "Display CD TOC... (EAC Enhancements)";
+        private const string ParseTracklistMenuText =
+            "Parse Tracklist... (EAC Enhancements)";
         internal const string WorkflowButtonTooltipText = "Test & Copy + Cue (100% Log)";
         private const string OutputSettingsMenuText = "EAC Enhancements &Options...";
         private const string OutputTemplateIniName = "EACEnhancements.ini";

@@ -21,6 +21,7 @@ namespace AudioDataPlugIn
 	private const string WorkflowSettingsSection = "Workflows";
 	private const string ExtractionSettingsSection = "Extraction";
 	private const string DiagnosticsSettingsSection = "Diagnostics";
+	private const string TrackParserSettingsSection = "TrackParser";
 	private const string InternalSettingsSection = "Internal";
 	private static readonly IDictionary<string, string> IniKeySections =
 		new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -33,6 +34,13 @@ namespace AudioDataPlugIn
 			{ AdditionalWorkflowsIniKey, WorkflowSettingsSection },
 			{ IncreaseExternalCompressorArgumentsLimitIniKey, ExtractionSettingsSection },
 			{ "EnableLogging", DiagnosticsSettingsSection },
+			{ "HasTrackNumbers", TrackParserSettingsSection },
+			{ "HasVinylNumbers", TrackParserSettingsSection },
+			{ "HasTrackArtists", TrackParserSettingsSection },
+			{ "UseCustomDelimiter", TrackParserSettingsSection },
+			{ "CustomDelimiter", TrackParserSettingsSection },
+			{ "UseTrackArtists", TrackParserSettingsSection },
+			{ "UseTrackNames", TrackParserSettingsSection },
 			{ "WorkflowOnlyFolderTemplates", InternalSettingsSection }
 		};
 

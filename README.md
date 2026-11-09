@@ -18,6 +18,7 @@ Exact Audio Copy that adds a number of quality-of-life features:
 - Album-level CD label, barcode, and catalog-number fields for external compressor tags
 - Copy/compare CD TOC against pre-existing log files to determine dupes
 - Submit the current CD's disc ID to MusicBrainz from the TOC dialog
+- Paste a tracklist to fill in track titles and artists, using MusicBrainz's parser
 - External compressor argument templates up to 1,000 characters
 
 Exact Audio Copy 1.6 and 1.8 are supported. No patches or launcher needed.
@@ -149,6 +150,22 @@ for the external compressor. The example provided below is for FLAC:
 -T "LABEL=%label%" -T "BARCODE=%barcode%" -T "CATALOGNUMBER=%catalognumber%"
 ```
 
+## Parsing a tracklist
+
+**Tools > Parse Tracklist... (EAC Enhancements)** fills in the current CD's track
+titles and artists from pasted text. It uses the same parser and options as the
+track parser in the MusicBrainz release editor, and remembers your options.
+
+The CD is treated the way MusicBrainz treats a medium with a disc ID:
+
+- Lines apply to tracks in order, and lines beyond the CD's last track are ignored.
+- A track with no line is reset. Its title returns to EAC's default, such as
+  `Track04`, and its artist returns to the CD's value.
+- A line with no artist leaves that track's artist alone.
+
+EAC takes track numbers and lengths from the disc, so any in the text are ignored.
+If nothing in the text can be parsed, an error is shown and the CD is left unchanged.
+
 ## Extended compressor arguments
 
 EAC normally limits **Compression Options > External Compression > Additional
@@ -191,3 +208,6 @@ access is granted.
 
 - The various CD TOC comparison routines (parsing, shift calculation, etc.) are
 based almost entirely on Anakunda's [Similar CD Detector](https://greasyfork.org/en/scripts/455108-red-similar-cd-detector).
+- The tracklist parser is a port of the track parser from
+[MusicBrainz Server](https://github.com/metabrainz/musicbrainz-server), licensed under
+the GPL version 2 or later.
