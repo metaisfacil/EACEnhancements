@@ -42,6 +42,7 @@ namespace AudioDataPlugIn
                 "ShowRipErrorAlert=1\r\n" +
                 "ShowAdditionalWorkflows=1\r\n" +
                 "IncreaseExternalCompressorArgumentsLimit=0\r\n" +
+                "UseUtf8CueSheets=0\r\n" +
                 "EnableLogging=1\r\n" +
                 "WorkflowOnlyFolderTemplates=1\r\n" +
                 "; keep this legacy note\r\n" +
@@ -62,6 +63,7 @@ namespace AudioDataPlugIn
             AssertValue(path, "Workflows", "ShowRipErrorAlert", "0");
             AssertValue(path, "Workflows", "ShowAdditionalWorkflows", "1");
             AssertValue(path, "Extraction", "IncreaseExternalCompressorArgumentsLimit", "0");
+            AssertValue(path, "Extraction", "UseUtf8CueSheets", "0");
             AssertValue(path, "Diagnostics", "EnableLogging", "1");
             AssertValue(path, "Internal", "WorkflowOnlyFolderTemplates", "1");
             AssertValue(path, "OutputTemplate", "Custom", "keep");

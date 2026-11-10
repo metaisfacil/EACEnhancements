@@ -45,6 +45,7 @@ namespace AudioDataPlugIn
                     contents,
                     "IncreaseExternalCompressorArgumentsLimit=1");
                 AssertContains(contents, "EnableLogging=0");
+                AssertContains(contents, "UseUtf8CueSheets=1");
                 AssertContains(contents,
                     "ShowAdditionalWorkflows=0");
                 if (!EnhancementRuntime.MigrateSettingsFile(iniPath))

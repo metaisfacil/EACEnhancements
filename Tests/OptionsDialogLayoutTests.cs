@@ -17,6 +17,7 @@ namespace AudioDataPlugIn
                 true,
                 false,
                 true,
+                false,
                 false);
             using (OutputTemplateDialog dialog = new OutputTemplateDialog(settings, IntPtr.Zero))
             {
@@ -56,6 +57,13 @@ namespace AudioDataPlugIn
                 }
                 dialog.Show();
                 Application.DoEvents();
+                CheckBox utf8CueSheets = FindCheckBox(dialog,
+                    "Save cue sheets as UTF-8 (preserve Unicode characters)");
+                if (utf8CueSheets == null || utf8CueSheets.Checked)
+                    throw new Exception("The UTF-8 CUE option did not load its disabled setting.");
+                if (utf8CueSheets.Bottom > loggingOption.Top || utf8CueSheets.Left < 0 ||
+                    utf8CueSheets.Right > layout.ClientSize.Width)
+                    throw new Exception("The UTF-8 CUE option overlaps or exceeds the dialog layout.");
                 Button save = FindButton(dialog, "Save");
                 Button cancel = FindButton(dialog, "Cancel");
                 Button setupCheck = FindButton(dialog, "Check Rip Configuration...");
@@ -78,10 +86,13 @@ namespace AudioDataPlugIn
                 if (updateTop != saveTop)
                     throw new Exception("The update-check button is not aligned with the bottom row.");
                 additionalWorkflows.Checked = true;
+                utf8CueSheets.Checked = true;
                 save.PerformClick();
                 if (dialog.Settings == null ||
                     !dialog.Settings.ShowAdditionalWorkflows)
                     throw new Exception("The additional-workflows choice was not saved by the dialog.");
+                if (!dialog.Settings.UseUtf8CueSheets)
+                    throw new Exception("The UTF-8 CUE choice was not saved by the dialog.");
                 dialog.Close();
             }
 

@@ -26,6 +26,8 @@ internal sealed class OutputTemplateSettings
 
 	internal bool ShowAdditionalWorkflows { get; private set; }
 
+	internal bool UseUtf8CueSheets { get; private set; }
+
 	internal OutputTemplateSettings(
 		string rootFolder,
 		string folderTemplate,
@@ -34,7 +36,8 @@ internal sealed class OutputTemplateSettings
 		bool createWorkflowFolders,
 		bool enableLogging,
 		bool increaseExternalCompressorArgumentsLimit,
-		bool showAdditionalWorkflows)
+		bool showAdditionalWorkflows,
+		bool useUtf8CueSheets)
 	{
 		RootFolder = rootFolder;
 		FolderTemplate = folderTemplate;
@@ -46,6 +49,7 @@ internal sealed class OutputTemplateSettings
 			increaseExternalCompressorArgumentsLimit;
 		ShowAdditionalWorkflows =
 			showAdditionalWorkflows;
+		UseUtf8CueSheets = useUtf8CueSheets;
 	}
 }
 
@@ -81,6 +85,8 @@ internal sealed class OutputTemplateDialog : Form
 
 	private readonly CheckBox additionalWorkflowsCheckBox;
 
+	private readonly CheckBox utf8CueSheetsCheckBox;
+
 	private readonly ToolTip createWorkflowFoldersToolTip;
 
 	private readonly Button updateCheckButton;
@@ -100,7 +106,7 @@ internal sealed class OutputTemplateDialog : Form
 		base.ShowInTaskbar = false;
 		Font = SystemFonts.MessageBoxFont;
 		base.AutoScaleMode = AutoScaleMode.Font;
-		base.ClientSize = new Size(680, 444);
+		base.ClientSize = new Size(680, 474);
 		base.Padding = new Padding(16);
 
 		TableLayoutPanel layout = new TableLayoutPanel
@@ -109,7 +115,7 @@ internal sealed class OutputTemplateDialog : Form
 			Margin = Padding.Empty,
 			Padding = Padding.Empty,
 			ColumnCount = 3,
-			RowCount = 12
+			RowCount = 13
 		};
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 97F));
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -118,6 +124,7 @@ internal sealed class OutputTemplateDialog : Form
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 		layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
@@ -248,6 +255,18 @@ internal sealed class OutputTemplateDialog : Form
 			increaseExternalCompressorArgumentsLimitCheckBox,
 			2);
 
+		utf8CueSheetsCheckBox = new CheckBox
+		{
+			AutoSize = true,
+			Anchor = AnchorStyles.Left,
+			Margin = Padding.Empty,
+			Text = "Save cue sheets as UTF-8 (preserve Unicode characters)",
+			Checked = settings.UseUtf8CueSheets,
+			UseVisualStyleBackColor = true
+		};
+		layout.Controls.Add(utf8CueSheetsCheckBox, 1, 8);
+		layout.SetColumnSpan(utf8CueSheetsCheckBox, 2);
+
 		loggingCheckBox = new CheckBox
 		{
 			AutoSize = true,
@@ -257,7 +276,7 @@ internal sealed class OutputTemplateDialog : Form
 			Checked = settings.EnableLogging,
 			UseVisualStyleBackColor = true
 		};
-		layout.Controls.Add(loggingCheckBox, 1, 8);
+		layout.Controls.Add(loggingCheckBox, 1, 9);
 		layout.SetColumnSpan(loggingCheckBox, 2);
 
 		additionalWorkflowsCheckBox = new CheckBox
@@ -269,7 +288,7 @@ internal sealed class OutputTemplateDialog : Form
 			Checked = settings.ShowAdditionalWorkflows,
 			UseVisualStyleBackColor = true
 		};
-		layout.Controls.Add(additionalWorkflowsCheckBox, 1, 9);
+		layout.Controls.Add(additionalWorkflowsCheckBox, 1, 10);
 		layout.SetColumnSpan(additionalWorkflowsCheckBox, 2);
 
 		Button setupCheckButton = new Button
@@ -326,7 +345,7 @@ internal sealed class OutputTemplateDialog : Form
 		bottomRow.Controls.Add(updateCheckButton, 1, 0);
 		bottomRow.Controls.Add(saveButton, 3, 0);
 		bottomRow.Controls.Add(cancelButton, 4, 0);
-		layout.Controls.Add(bottomRow, 0, 11);
+		layout.Controls.Add(bottomRow, 0, 12);
 		layout.SetColumnSpan(bottomRow, 3);
 
 		base.Controls.Add(layout);
@@ -477,7 +496,8 @@ internal sealed class OutputTemplateDialog : Form
 				createWorkflowFoldersCheckBox.Checked,
 				loggingCheckBox.Checked,
 				increaseExternalCompressorArgumentsLimitCheckBox.Checked,
-				additionalWorkflowsCheckBox.Checked);
+				additionalWorkflowsCheckBox.Checked,
+				utf8CueSheetsCheckBox.Checked);
 			base.DialogResult = DialogResult.OK;
 		}
 		catch (Exception ex)

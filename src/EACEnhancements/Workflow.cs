@@ -2254,7 +2254,8 @@ namespace AudioDataPlugIn
 							settings.CreateWorkflowFolders,
 							settings.EnableLogging,
 							settings.IncreaseExternalCompressorArgumentsLimit,
-							settings.ShowAdditionalWorkflows);
+							settings.ShowAdditionalWorkflows,
+							settings.UseUtf8CueSheets);
 						SaveOutputTemplateSettings(selectedSettings, true);
 						if (settings.CreateWorkflowFolders)
 						{

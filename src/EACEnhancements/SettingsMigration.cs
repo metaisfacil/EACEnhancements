@@ -114,6 +114,7 @@ namespace AudioDataPlugIn
                 "CreateWorkflowFolders", "ShowWorkflowSetupAlert",
                 "ShowRipErrorAlert", AdditionalWorkflowsIniKey,
                 IncreaseExternalCompressorArgumentsLimitIniKey,
+                UseUtf8CueSheetsIniKey,
                 "EnableLogging", "WorkflowOnlyFolderTemplates"
             };
             foreach (string key in booleanKeys)

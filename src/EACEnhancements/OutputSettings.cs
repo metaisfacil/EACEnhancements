@@ -33,6 +33,7 @@ namespace AudioDataPlugIn
 			{ "ShowRipErrorAlert", WorkflowSettingsSection },
 			{ AdditionalWorkflowsIniKey, WorkflowSettingsSection },
 			{ IncreaseExternalCompressorArgumentsLimitIniKey, ExtractionSettingsSection },
+			{ UseUtf8CueSheetsIniKey, ExtractionSettingsSection },
 			{ "EnableLogging", DiagnosticsSettingsSection },
 			{ "HasTrackNumbers", TrackParserSettingsSection },
 			{ "HasVinylNumbers", TrackParserSettingsSection },
@@ -233,6 +234,7 @@ namespace AudioDataPlugIn
 				writer.WriteLine(AdditionalWorkflowsIniKey + "=0");
 				writer.WriteLine();
 				writer.WriteLine("[" + ExtractionSettingsSection + "]");
+				writer.WriteLine(UseUtf8CueSheetsIniKey + "=1");
 				writer.WriteLine(
 					IncreaseExternalCompressorArgumentsLimitIniKey +
 					"=1");
@@ -351,7 +353,8 @@ namespace AudioDataPlugIn
 			createWorkflowFolders,
 			enableLogging,
 			increaseExternalCompressorArgumentsLimit,
-			showAdditionalWorkflows);
+			showAdditionalWorkflows,
+			IsUtf8CueSheetsEnabled());
 	}
 
 	private static bool IsRipErrorAlertEnabled()
@@ -544,6 +547,10 @@ namespace AudioDataPlugIn
 					: "0") ||
 			!WriteIniValue(
 				text4,
+				UseUtf8CueSheetsIniKey,
+				settings.UseUtf8CueSheets ? "1" : "0") ||
+			!WriteIniValue(
+				text4,
 				"EnableLogging",
 				settings.EnableLogging ? "1" : "0") ||
 			!WriteIniValue(
@@ -595,6 +602,7 @@ namespace AudioDataPlugIn
 			", createWorkflowFolders=" + settings.CreateWorkflowFolders +
 			", extendedCompressorArguments=" +
 			settings.IncreaseExternalCompressorArgumentsLimit +
+			", utf8CueSheets=" + settings.UseUtf8CueSheets +
 			", logging=" + settings.EnableLogging +
 			", additionalWorkflows=" + settings.ShowAdditionalWorkflows + ".");
 	}

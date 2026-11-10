@@ -374,6 +374,14 @@ namespace AudioDataPlugIn
                 InstallCommandCompletionHook();
                 try
                 {
+                    InstallCueSheetEncodingHooks();
+                }
+                catch (Exception error)
+                {
+                    Log("UTF-8 CUE sheet hook installation failed: " + error);
+                }
+                try
+                {
                     InstallAlbumMetadataTokenLexerHook();
                 }
                 catch (Exception error)

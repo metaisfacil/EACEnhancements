@@ -20,6 +20,7 @@ Exact Audio Copy that adds a number of quality-of-life features:
 - Submit the current CD's disc ID to MusicBrainz from the TOC dialog
 - Paste a tracklist to fill in track titles and artists, using MusicBrainz's parser
 - External compressor argument templates up to 1,000 characters
+- UTF-8 cue sheets that preserve Unicode metadata and filenames
 
 Exact Audio Copy 1.6 and 1.8 are supported. No patches or launcher needed.
 
@@ -134,6 +135,15 @@ Unknown Artist - Unknown Title [FLAC]
 
 When enabled, an alert appears after a rip only if EAC reported a problem. The
 alert identifies affected track numbers when the error is track-specific.
+
+## Cue-sheet encoding
+
+**Save cue sheets as UTF-8 (preserve Unicode characters)** is enabled by
+default. Generated cue sheets use UTF-8 with a byte-order mark, preserving
+characters outside the Windows ANSI code page in titles, artists, composers,
+genres, and audio filenames. This applies to both image and separate-track
+cue sheets, including those created by the automated workflows. EAC still
+generates the track layout, flags, gaps, and index times.
 
 ## New metadata fields
 
