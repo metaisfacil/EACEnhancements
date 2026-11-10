@@ -21,6 +21,7 @@ namespace AudioDataPlugIn
         private const int AlbumMetadataStorePayloadLimit = 8192;
         private const int MetadataStoreSavePatchLength = 8;
         private const int MetadataStoreLoadPatchLength = 5;
+        private const int MetadataRecordResetPatchLength = 6;
         // UpdateTrackList passes these fixed native records to the local
         // metadata database in EAC 1.8 and 1.6 respectively. Other callers
         // use scratch records and must not change the main-window sidecar.
@@ -33,6 +34,8 @@ namespace AudioDataPlugIn
             { 0x55, 0x89, 0xE5, 0x57, 0x83, 0x7D, 0x0C, 0x00 };
         private static readonly byte[] ExpectedMetadataStoreLoadPrologue =
             { 0x55, 0x89, 0xE5, 0x6A, 0x5D };
+        private static readonly byte[] ExpectedMetadataRecordResetPrologue =
+            { 0x55, 0x89, 0xE5, 0x83, 0xEC, 0x04 };
         private static readonly Regex AlbumMetadataStorePayloadAtEnd =
             new Regex(
                 @"(?:\r\n|\r|\n)?EACEnhancements/1:([A-Za-z0-9_-]+)$",
@@ -41,12 +44,15 @@ namespace AudioDataPlugIn
         private static IntPtr metadataStoreSaveTrampoline;
         private static IntPtr metadataStoreFindTrampoline;
         private static IntPtr metadataStoreNextTrampoline;
+        private static IntPtr metadataRecordResetTrampoline;
         private static MetadataStoreSaveDelegate originalMetadataStoreSave;
         private static MetadataStoreFindDelegate originalMetadataStoreFind;
         private static MetadataStoreNextDelegate originalMetadataStoreNext;
+        private static MetadataRecordResetDelegate originalMetadataRecordReset;
         private static MetadataStoreSaveDelegate hookedMetadataStoreSave;
         private static MetadataStoreFindDelegate hookedMetadataStoreFind;
         private static MetadataStoreNextDelegate hookedMetadataStoreNext;
+        private static MetadataRecordResetDelegate hookedMetadataRecordReset;
         private static volatile bool albumMetadataStoreLoadPending;
         private static IntPtr currentAlbumMetadataStoreRecord;
         private static int currentAlbumMetadataStoreCddbId;
@@ -77,22 +83,28 @@ namespace AudioDataPlugIn
             IntPtr metadata,
             IntPtr cddbId);
 
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate void MetadataRecordResetDelegate(IntPtr metadata);
+
         private static void InstallAlbumMetadataStoreHooks()
         {
             uint saveVa;
             uint findVa;
             uint nextVa;
+            uint resetVa;
             if (layout.Name == "EAC 1.8")
             {
                 saveVa = 0x00487650;
                 findVa = 0x00486010;
                 nextVa = 0x00486160;
+                resetVa = 0x004857D0;
             }
             else if (layout.Name == "EAC 1.6")
             {
                 saveVa = 0x004840A0;
                 findVa = 0x00482A60;
                 nextVa = 0x00482BB0;
+                resetVa = 0x00482220;
             }
             else
             {
@@ -116,6 +128,10 @@ namespace AudioDataPlugIn
                 nextVa,
                 ExpectedMetadataStoreLoadPrologue,
                 "metadata database next");
+            RequireBytes(
+                resetVa,
+                ExpectedMetadataRecordResetPrologue,
+                "metadata record reset");
 
             metadataStoreSaveTrampoline = CreateAlbumMetadataStoreTrampoline(
                 saveVa,
@@ -126,6 +142,9 @@ namespace AudioDataPlugIn
             metadataStoreNextTrampoline = CreateAlbumMetadataStoreTrampoline(
                 nextVa,
                 ExpectedMetadataStoreLoadPrologue);
+            metadataRecordResetTrampoline = CreateAlbumMetadataStoreTrampoline(
+                resetVa,
+                ExpectedMetadataRecordResetPrologue);
 
             originalMetadataStoreSave =
                 (MetadataStoreSaveDelegate)Marshal.GetDelegateForFunctionPointer(
@@ -139,13 +158,19 @@ namespace AudioDataPlugIn
                 (MetadataStoreNextDelegate)Marshal.GetDelegateForFunctionPointer(
                     metadataStoreNextTrampoline,
                     typeof(MetadataStoreNextDelegate));
+            originalMetadataRecordReset =
+                (MetadataRecordResetDelegate)Marshal.GetDelegateForFunctionPointer(
+                    metadataRecordResetTrampoline,
+                    typeof(MetadataRecordResetDelegate));
             hookedMetadataStoreSave = HookedMetadataStoreSave;
             hookedMetadataStoreFind = HookedMetadataStoreFind;
             hookedMetadataStoreNext = HookedMetadataStoreNext;
+            hookedMetadataRecordReset = HookedMetadataRecordReset;
 
             bool savePatched = false;
             bool findPatched = false;
             bool nextPatched = false;
+            bool resetPatched = false;
             try
             {
                 WriteJumpPatch(
@@ -166,10 +191,24 @@ namespace AudioDataPlugIn
                         hookedMetadataStoreNext)),
                     MetadataStoreLoadPatchLength);
                 nextPatched = true;
+                WriteJumpPatch(
+                    resetVa,
+                    Pointer32(Marshal.GetFunctionPointerForDelegate(
+                        hookedMetadataRecordReset)),
+                    MetadataRecordResetPatchLength);
+                resetPatched = true;
             }
             catch (Exception installationError)
             {
                 bool rollbackSucceeded = true;
+                if (resetPatched)
+                {
+                    rollbackSucceeded =
+                        TryRestoreAlbumMetadataStoreHook(
+                        resetVa,
+                        ExpectedMetadataRecordResetPrologue,
+                        "reset") && rollbackSucceeded;
+                }
                 if (nextPatched)
                 {
                     rollbackSucceeded =
@@ -206,7 +245,8 @@ namespace AudioDataPlugIn
                 "Album metadata persistence hooks active at save=0x" +
                 saveVa.ToString("X8") + ", find=0x" +
                 findVa.ToString("X8") + ", next=0x" +
-                nextVa.ToString("X8") + ".");
+                nextVa.ToString("X8") + ", reset=0x" +
+                resetVa.ToString("X8") + ".");
         }
 
         private static bool TryRestoreAlbumMetadataStoreHook(
@@ -393,6 +433,17 @@ namespace AudioDataPlugIn
                 LoadAlbumMetadataStorePayload(metadata);
             }
             return result;
+        }
+
+        // EAC resets the UI record before every local-database lookup into
+        // it. An edit still waiting on the save timer must be saved first, or
+        // the lookup's own pre-save would write the blank record over the
+        // previous disc's entry.
+        private static void HookedMetadataRecordReset(IntPtr metadata)
+        {
+            if (IsAlbumMetadataStoreUiRecord(metadata))
+                PersistPendingAlbumMetadataStoreChanges();
+            originalMetadataRecordReset(metadata);
         }
 
         private static bool IsAlbumMetadataStoreUiRecord(IntPtr metadata)
