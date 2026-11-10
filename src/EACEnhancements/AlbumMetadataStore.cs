@@ -354,8 +354,25 @@ namespace AudioDataPlugIn
                 SetAlbumMetadataStoreContext(metadata, cddbId);
                 if (result != 0)
                     LoadAlbumMetadataStorePayload(metadata);
+                else
+                    ApplyMissingAlbumMetadataStoreEntry();
             }
             return result;
+        }
+
+        // EAC resets the UI record before looking it up, so a miss leaves the
+        // disc at EAC's defaults. Its CD Title default is a non-empty
+        // placeholder, so the empty-title reset never fires for such a disc
+        // and the previous disc's values would otherwise remain.
+        internal static void ApplyMissingAlbumMetadataStoreEntry()
+        {
+            ApplyStoredAlbumMetadataValues(
+                String.Empty,
+                String.Empty,
+                String.Empty);
+            Log(
+                "No EAC local metadata entry for this disc; album metadata " +
+                "cleared.");
         }
 
         private static uint HookedMetadataStoreNext(

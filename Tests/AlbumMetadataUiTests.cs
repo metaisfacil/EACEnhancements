@@ -167,6 +167,11 @@ namespace AudioDataPlugIn
                     label,
                     barcode,
                     catalogNumber);
+                AssertDatabaseMissClearsPreviousDisc(
+                    title,
+                    label,
+                    barcode,
+                    catalogNumber);
                 AssertLabelsDoNotOverlap(
                     host.Handle,
                     label,
@@ -287,6 +292,46 @@ namespace AudioDataPlugIn
                 catalogNumber,
                 String.Empty,
                 "cleared catalog number");
+            NativeMethods.SendMessageStringW(
+                title,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                "Loaded Album");
+        }
+
+        private static void AssertDatabaseMissClearsPreviousDisc(
+            IntPtr title,
+            IntPtr label,
+            IntPtr barcode,
+            IntPtr catalogNumber)
+        {
+            EnhancementRuntime.ApplyStoredAlbumMetadataValues(
+                "Previous Label",
+                "4988002000000",
+                "PREV-1");
+            NativeMethods.SendMessageStringW(
+                title,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                "Previous Album");
+            Application.DoEvents();
+            AssertWindowText(label, "Previous Label", "previous label");
+
+            // A disc missing from EAC's database goes straight to EAC's
+            // placeholder title without ever showing an empty title.
+            EnhancementRuntime.ApplyMissingAlbumMetadataStoreEntry();
+            NativeMethods.SendMessageStringW(
+                title,
+                NativeMethods.WM_SETTEXT,
+                IntPtr.Zero,
+                "Unknown Title");
+            Application.DoEvents();
+            AssertWindowText(label, String.Empty, "label after a miss");
+            AssertWindowText(barcode, String.Empty, "barcode after a miss");
+            AssertWindowText(
+                catalogNumber,
+                String.Empty,
+                "catalog number after a miss");
             NativeMethods.SendMessageStringW(
                 title,
                 NativeMethods.WM_SETTEXT,
